@@ -13,7 +13,10 @@ import { PublicKey } from "@solana/web3.js";
 // ──────────────────────────────────────────────────────────────────
 
 // The exact chain-id string every canister call and verdict domain uses.
-export const CHAIN_ID = "solana-devnet";
+// Env-driven for the mainnet cutover (deploy/mainnet.toml fills at F6): set
+// NEXT_PUBLIC_CHAIN_ID="solana-mainnet" together with the mainnet RPC, mint
+// and program ids below — the whole chain layer follows with no code change.
+export const CHAIN_ID = process.env.NEXT_PUBLIC_CHAIN_ID || "solana-devnet";
 
 export const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC || "https://api.devnet.solana.com";
 

@@ -123,6 +123,7 @@
   gap: 5px;
   padding: 0 12px 10px;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
 .tabs::-webkit-scrollbar {
@@ -290,6 +291,14 @@
   font-size: 10px;
   color: var(--text-3);
   font-variant-numeric: tabular-nums;
+}
+
+/* Phone: the filter chips get a taller, easier tap target inside the scrolling strip. The panel
+   itself already caps at calc(100vw - 32px), so it never pushes the screen sideways. */
+@media (max-width: 600px) {
+  .tab {
+    height: 32px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

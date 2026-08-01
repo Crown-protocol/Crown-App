@@ -81,3 +81,17 @@
 .demoBtn:hover {
   color: var(--text-1);
 }
+
+/* ---- phone: tighter card, smaller title ---- */
+@media (max-width: 480px) {
+  .wrap {
+    padding: 16px;
+    min-height: calc(100vh - 88px);
+  }
+  .card {
+    padding: 28px 20px 24px;
+  }
+  .title {
+    font-size: 22px;
+  }
+}

@@ -1,6 +1,7 @@
-import { PublicKey, TransactionInstruction } from "@solana/web3.js";
-import { CHAIN_ID, FACTORY_TWO_OUTCOME, FACTORY_STREAM } from "./config";
-import { i64le, u16le, u64le } from "./solana";
+import { PublicKey, Transaction, TransactionInstruction, SystemProgram } from "@solana/web3.js";
+import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, createAssociatedTokenAccountIdempotentInstruction } from "@solana/spl-token";
+import { CHAIN_ID, FACTORY_TWO_OUTCOME, FACTORY_STREAM, USDC_MINT } from "./config";
+import { i64le, u16le, u64le, usdcAta } from "./solana";
 
 // ──────────────────────────────────────────────────────────────────
 // Crown-Factory primitives: crown-salt, escrow PDA derivation, account
@@ -52,6 +53,57 @@ export async function twoOutcomeSalt(b: TwoOutcomeBirth): Promise<Buffer> {
 // Escrow PDA: ["escrow", salt] under the shape's factory program.
 export function escrowPda(salt: Buffer, factory: PublicKey = FACTORY_TWO_OUTCOME): PublicKey {
   return PublicKey.findProgramAddressSync([Buffer.from("escrow"), salt], factory)[0];
+}
+
+// Anchor discriminator sha256("global:create_escrow")[..8] — derivation checked by
+// scripts/verify-chain.mjs; hand-encoded like the splitter's donate (no IDL on purpose).
+const CREATE_ESCROW_DISC = Buffer.from("fdd7a574246c4450", "hex");
+
+/**
+ * The whole create-escrow transaction for the two-outcome factory, account order pinned from
+ * Crown-Factory/shapes/two-outcome/solana `CreateEscrow` (Anchor derives the metas in struct
+ * order): donor(signer,w) · recipient · mint · escrow PDA(w) · donor_usdc(w) · escrow_usdc(w) ·
+ * token · associated-token · system. Args after the discriminator mirror the instruction:
+ * gross u64 · deadline i64 · resolver 32 · fee_bps u16 · fee_wallet 32 · nonce u64.
+ * The donor's own ATA is created idempotently first, so an empty wallet fails with an honest
+ * "not enough USDC", not AccountNotFound. escrow_usdc is `init` in the program — the factory
+ * itself creates it, we only pass the derived address.
+ */
+export async function buildCreateEscrowTx(b: TwoOutcomeBirth): Promise<{ tx: Transaction; escrow: PublicKey; salt: Buffer }> {
+  if (b.gross <= 0n) throw new Error("Escrow must hold more than zero.");
+  const salt = await twoOutcomeSalt(b);
+  const escrow = escrowPda(salt);
+  const donorAta = usdcAta(b.donor);
+  const escrowAta = usdcAta(escrow, true); // PDA owner — off-curve
+
+  const ix = new TransactionInstruction({
+    programId: FACTORY_TWO_OUTCOME,
+    data: Buffer.concat([
+      CREATE_ESCROW_DISC,
+      u64le(b.gross),
+      i64le(b.deadline),
+      b.resolver.toBuffer(),
+      u16le(b.feeBps),
+      b.feeWallet.toBuffer(),
+      u64le(b.nonce),
+    ]),
+    keys: [
+      { pubkey: b.donor, isSigner: true, isWritable: true },
+      { pubkey: b.streamer, isSigner: false, isWritable: false },
+      { pubkey: USDC_MINT, isSigner: false, isWritable: false },
+      { pubkey: escrow, isSigner: false, isWritable: true },
+      { pubkey: donorAta, isSigner: false, isWritable: true },
+      { pubkey: escrowAta, isSigner: false, isWritable: true },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    ],
+  });
+
+  const tx = new Transaction();
+  tx.add(createAssociatedTokenAccountIdempotentInstruction(b.donor, donorAta, b.donor, USDC_MINT));
+  tx.add(ix);
+  return { tx, escrow, salt };
 }
 
 // Escrow account layout, identical for every shape (factory-spec §2.1):

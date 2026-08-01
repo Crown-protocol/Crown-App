@@ -18,4 +18,8 @@ export async function register() {
 
   const { startBackupLoop } = await import("./lib/server/backup");
   startBackupLoop();
+
+  // Deadlines and the monthly digest — the two notifications nobody can trigger by clicking.
+  const { startTelegramScheduler } = await import("./lib/server/telegram-scheduler");
+  startTelegramScheduler();
 }

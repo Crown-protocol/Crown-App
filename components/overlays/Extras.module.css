@@ -1,0 +1,530 @@
+/* Batch-2 overlay widgets (Extras.tsx): ticker, QR, session pill, record, train. Same card
+   language as Overlays.module.css — rgba(20,19,24,.92), 1px var(--line-strong), var(--r-3) — on a
+   transparent OBS page. The ticker is the one full-bleed element: no padding, no rounding. */
+
+.stage {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  padding: 40px;
+  pointer-events: none;
+}
+.stageTopLeft {
+  justify-content: flex-start;
+  align-items: flex-start;
+}
+.stageTopRight {
+  justify-content: flex-end;
+  align-items: flex-start;
+}
+.stageBottomRight {
+  justify-content: flex-end;
+  align-items: flex-end;
+}
+.stageLeft {
+  justify-content: flex-start;
+  align-items: flex-start;
+}
+.stripStage {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+
+/* shared entrances */
+@keyframes riseIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes dropIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---- Ticker: full-width 36px strip, no rounding ---- */
+.ticker {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  background: rgba(20, 19, 24, 0.92);
+  border-top: 1px solid var(--line-strong);
+  animation: tickerIn 400ms var(--ease) both;
+}
+@keyframes tickerIn {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+.tickerViewport {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  /* entries dissolve at both ends instead of clipping */
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%);
+}
+.tickerTrack {
+  display: flex;
+  align-items: center;
+  width: max-content;
+  will-change: transform;
+}
+.tickerGroup {
+  display: flex;
+  align-items: center;
+}
+.tickerEntry {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  white-space: nowrap;
+}
+/* the newest live entry lights up behind an accent-soft pill fading over 1.2s */
+.tickerEntryNew {
+  animation: entryFlash 1.2s var(--ease) both;
+}
+@keyframes entryFlash {
+  from {
+    background: var(--accent-soft);
+  }
+  to {
+    background: transparent;
+  }
+}
+.tickerName {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.tickerAmt {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.tickerDot {
+  flex: none;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin: 0 2px;
+}
+.tickerCap {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0 10px 0 8px;
+  padding: 3px 12px;
+  background: var(--bg-2);
+  border-left: 2px solid var(--accent);
+  border-radius: var(--r-pill);
+  font-size: 13px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.tickerCap b {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+/* ---- QR: a calm corner card; only the sweep + microline ever move ---- */
+.qr {
+  width: 160px;
+  padding: 14px 15px 10px;
+  background: rgba(20, 19, 24, 0.92);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-3);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: riseIn 300ms var(--ease) both;
+}
+.qrHead {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-1);
+  align-self: flex-start;
+}
+.qrRule {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  height: 2px;
+  margin: 5px 0 10px;
+  background: var(--accent);
+  border-radius: 1px;
+}
+/* one-shot left-to-right light band across the underline per donation */
+.qrSweep {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 50%;
+  background: linear-gradient(90deg, transparent, rgba(241, 239, 247, 0.9), transparent);
+  animation: qrSweep 600ms var(--ease) both;
+}
+@keyframes qrSweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+.qrImg {
+  display: block;
+  width: 130px;
+  height: 130px;
+}
+.qrHandle {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+/* fixed-height slot so the 3s microline never resizes the card */
+.qrMicroSlot {
+  height: 18px;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+}
+.qrMicro {
+  font-size: 13px;
+  color: var(--text-3);
+  white-space: nowrap;
+  animation: microIn 200ms var(--ease) both;
+}
+.qrMicro b {
+  color: var(--text-1);
+  font-weight: 700;
+}
+@keyframes microIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ---- Session: one 40px pill, still at rest ---- */
+.session {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  padding: 0 16px;
+  background: rgba(20, 19, 24, 0.92);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-pill);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  animation: dropIn 300ms var(--ease) both;
+}
+.sessionDot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.sessionDotBlink {
+  animation: dotBlink 500ms var(--ease);
+}
+@keyframes dotBlink {
+  0% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.4;
+  }
+}
+.sessionAmt {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-1);
+  line-height: 1;
+}
+.sessionMeta {
+  font-size: 13px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+/* odometer: fixed 1em windows; the strip slides to the current digit */
+.odo {
+  display: inline-flex;
+  line-height: 1;
+}
+.odoStatic {
+  display: block;
+  height: 1em;
+  line-height: 1;
+}
+.odoCol {
+  display: block;
+  height: 1em;
+  overflow: hidden;
+}
+.odoStrip {
+  display: block;
+  transition: transform 450ms var(--ease);
+}
+.odoStrip > span {
+  display: block;
+  height: 1em;
+  line-height: 1;
+}
+
+/* ---- Record: compact card, idle-static, coronation on break ---- */
+.record {
+  position: relative;
+  min-width: 210px;
+  max-width: 320px;
+  padding: 14px 16px;
+  background: rgba(20, 19, 24, 0.92);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-3);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+.recordGlow {
+  position: absolute;
+  inset: -1px;
+  border-radius: var(--r-3);
+  box-shadow: 0 0 20px rgba(192, 183, 250, 0.4);
+  pointer-events: none;
+  animation: glowFade 1.4s var(--ease) both;
+}
+@keyframes glowFade {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+.recordHead {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.recordHolder {
+  display: grid;
+  margin-top: 10px;
+  perspective: 400px;
+}
+.recordLine {
+  grid-area: 1 / 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.recordLine :global(.mono) {
+  flex: none;
+}
+.recordCrown {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--accent);
+}
+.recordName {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lineOut {
+  animation: flipOut 250ms var(--ease) both;
+}
+.lineIn {
+  animation: flipIn 300ms var(--ease) 80ms both;
+}
+@keyframes flipOut {
+  from {
+    transform: rotateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: rotateX(90deg);
+    opacity: 0;
+  }
+}
+@keyframes flipIn {
+  from {
+    transform: rotateX(-90deg);
+    opacity: 0;
+  }
+  to {
+    transform: rotateX(0);
+    opacity: 1;
+  }
+}
+/* inline-block so the accent underline redraws to exactly the amount's width */
+.recordAmtWrap {
+  display: inline-block;
+  margin-top: 8px;
+}
+.recordAmt {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text-1);
+}
+.recordRule {
+  display: block;
+  height: 2px;
+  margin-top: 4px;
+  background: var(--accent);
+  border-radius: 1px;
+}
+.ruleDraw {
+  animation: ruleDraw 400ms var(--ease) both;
+}
+@keyframes ruleDraw {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+.recordFoot {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+/* ---- Train: absent by default; its appearance is an event ---- */
+.train {
+  position: relative;
+  min-width: 150px;
+  padding: 12px 16px;
+  background: rgba(20, 19, 24, 0.92);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-3);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  /* `backwards`, not `both`: a forwards-filling opacity keyframe would override the fade-out below */
+  animation: trainIn 300ms var(--ease) backwards;
+  transition: opacity 500ms var(--ease);
+}
+@keyframes trainIn {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.trainDying {
+  opacity: 0;
+}
+/* ×5+: the single gradient moment — a 1px gradient ring masked out of an overlay, so the card
+   background stays the standard dark and nothing else turns gradient */
+.trainMax::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: var(--r-3);
+  padding: 1px;
+  background: var(--accent-grad);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+.trainHead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.trainLabel {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.trainMult {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text-1);
+  animation: multPop 250ms var(--ease);
+}
+@keyframes multPop {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.25);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.trainTotal {
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.trainFuse {
+  margin-top: 10px;
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: var(--bg-3);
+  overflow: hidden;
+}
+.trainFuseFill {
+  display: block;
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  animation-name: fuseDrain;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+@keyframes fuseDrain {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}

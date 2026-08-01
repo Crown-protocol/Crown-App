@@ -104,8 +104,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     (handle: string): Streamer | undefined => {
       const key = handle.replace(/^@/, "").toLowerCase();
       if (profile && profile.address && profile.handle.toLowerCase() === key) {
-        const { handle: h, name, bio, address, socials, tiers, donatePresets, avatarUrl, avatarEnabled } = profile;
-        return { handle: h, name, bio, address, socials, tiers, donatePresets, avatarUrl, avatarEnabled };
+        const { handle: h, name, address, socials, tiers, donatePresets, avatarUrl, avatarEnabled } = profile;
+        return { handle: h, name, address, socials, tiers, donatePresets, avatarUrl, avatarEnabled };
       }
       return serverPages[key] ?? MOCK_STREAMERS[key];
     },
@@ -206,6 +206,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             source: (["task", "roulette", "fundraiser", "auction"].includes(d.source) ? d.source : "direct") as Donation["source"],
             date: when.toISOString().slice(0, 10),
             time: mins < 1 ? "just now" : mins < 60 ? `${mins} min ago` : mins < 1440 ? `${Math.floor(mins / 60)} h ago` : `${Math.floor(mins / 1440)} d ago`,
+            // On-chain extras so the Donations tab can show exact time + the tx on the explorer.
+            at: d.blockTime ? d.blockTime * 1000 : undefined,
+            sig: d.signature,
+            payer: d.payer,
           };
         });
         if (rows.length) setFeed(rows);

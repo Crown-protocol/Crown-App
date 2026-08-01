@@ -6,6 +6,7 @@ import type { PageWidget, Profile, RouletteDraft } from "./types";
 import { isFreshScope } from "./freshScope";
 import { DEFAULT_DESIGN } from "./pagebuilder";
 import { MOCK_ROUND, MOCK_ROULETTE_HISTORY, type GameGenre, type RouletteRound, type RouletteSuggestion } from "./roulette-mock";
+import { sendOp } from "./gameSync";
 
 export const RL_HEADLINE_MAX = 140;
 export const RL_DESCRIPTION_MAX = 300;
@@ -90,6 +91,8 @@ export function addSuggestion(handle: string, title: string, genre: GameGenre, a
   try {
     localStorage.setItem(`${ROUND_KEY}:${handle}`, JSON.stringify(local));
   } catch {}
+  // Share it as a DELTA: two viewers backing the same title must sum, not overwrite.
+  sendOp(handle, "crown-roulette-round", { type: "suggest", title, genre, dPool: amount, dBackers: 1 });
   return readRound(handle);
 }
 
@@ -106,6 +109,12 @@ export interface RoundMeta {
   // existing suggestion is a donation in both modes.
   mode?: "donate" | "rank";
   minTier?: string;
+  // Elimination format: instead of one spin picking the winner, the wheel spins repeatedly and each
+  // spin KNOCKS OUT whatever it lands on. The last one standing wins. Money protects here — a
+  // well-backed suggestion is less likely to be eliminated (see eliminationWeights), so viewers still
+  // donate for what they want to see, just from the other side.
+  format?: "single" | "elimination";
+  eliminated?: string[]; // suggestion ids knocked out so far, in the order they went
 }
 
 const META_KEY = "crown-roulette-meta";
@@ -116,23 +125,34 @@ export function readRoundMeta(handle: string): RoundMeta | null {
     if (!raw) return null;
     const meta = JSON.parse(raw);
     return typeof meta?.startedAt === "number"
-      ? { startedAt: meta.startedAt, winner: meta.winner ?? null, mode: meta.mode, minTier: meta.minTier }
+      ? {
+          startedAt: meta.startedAt,
+          winner: meta.winner ?? null,
+          mode: meta.mode,
+          minTier: meta.minTier,
+          format: meta.format,
+          eliminated: Array.isArray(meta.eliminated) ? meta.eliminated : [],
+        }
       : null;
   } catch {
     return null;
   }
 }
 
-function writeMeta(handle: string, meta: RoundMeta) {
+function writeMeta(handle: string, meta: RoundMeta, share = true) {
   try {
     localStorage.setItem(`${META_KEY}:${handle}`, JSON.stringify(meta));
   } catch {}
+  // Authoritative writes (init/spin verdict/new round) overwrite the shared copy. ensureRound's
+  // first-sight default passes share=false — a fresh viewer's local clock must never reset the
+  // round for everyone; the next poll adopts the real shared meta if one exists.
+  if (share) sendOp(handle, "crown-roulette-meta", { type: "replace", value: meta });
 }
 
 // Open a round with its mode — called when the session is created. Classic sessions never call
 // this and fall through to ensureRound's default (donate).
-export function initRound(handle: string, opts: { mode: "donate" | "rank"; minTier?: string }): RoundMeta {
-  const fresh: RoundMeta = { startedAt: Date.now(), winner: null, mode: opts.mode, minTier: opts.minTier };
+export function initRound(handle: string, opts: { mode: "donate" | "rank"; minTier?: string; format?: "single" | "elimination" }): RoundMeta {
+  const fresh: RoundMeta = { startedAt: Date.now(), winner: null, mode: opts.mode, minTier: opts.minTier, format: opts.format, eliminated: [] };
   writeMeta(handle, fresh);
   return fresh;
 }
@@ -142,7 +162,7 @@ export function ensureRound(handle: string): RoundMeta {
   const meta = readRoundMeta(handle);
   if (meta) return meta;
   const fresh: RoundMeta = { startedAt: Date.now(), winner: null };
-  writeMeta(handle, fresh);
+  writeMeta(handle, fresh, false);
   return fresh;
 }
 
@@ -158,10 +178,48 @@ export function newRound(handle: string): RoundMeta {
   try {
     localStorage.removeItem(`${ROUND_KEY}:${handle}`);
   } catch {}
+  sendOp(handle, "crown-roulette-round", { type: "replace", value: [] });
   const prev = readRoundMeta(handle);
-  const fresh: RoundMeta = { startedAt: Date.now(), winner: null, mode: prev?.mode, minTier: prev?.minTier };
+  const fresh: RoundMeta = { startedAt: Date.now(), winner: null, mode: prev?.mode, minTier: prev?.minTier, format: prev?.format, eliminated: [] };
   writeMeta(handle, fresh);
   return fresh;
+}
+
+// ---- elimination format ----
+
+// Who is still on the wheel: everything that hasn't been knocked out yet.
+export function survivors(round: RouletteSuggestion[], meta: RoundMeta | null): RouletteSuggestion[] {
+  const out = new Set(meta?.eliminated ?? []);
+  return round.filter((s) => !out.has(s.id));
+}
+
+// Elimination odds. Money PROTECTS: the more a suggestion has behind it, the less likely this spin
+// knocks it out. Two deliberate choices:
+//   • Inverted against the largest pool, so the best-backed entry is the safest.
+//   • Compared on the SQUARE ROOT of each pool, not the raw dollars. Raw pools made one big backer a
+//     near-guarantee ($1000 vs $100 won ~99.7% of simulated rounds) — the wheel stopped being a wheel.
+//     The root keeps the favourite clearly ahead while leaving the underdogs a real chance.
+// Every survivor keeps a non-zero weight (+1), so nothing is ever unspinnable.
+export function eliminationWeights(alive: RouletteSuggestion[]): number[] {
+  if (alive.length === 0) return [];
+  const scale = (pool: number) => Math.sqrt(Math.max(0, pool));
+  const max = Math.max(...alive.map((s) => scale(s.pool)));
+  return alive.map((s) => max - scale(s.pool) + 1);
+}
+
+// Knock one out. Returns the updated meta; when a single survivor is left it also becomes the winner,
+// so the caller doesn't need a separate "is it over?" branch.
+export function eliminate(handle: string, id: string, round: RouletteSuggestion[]): RoundMeta {
+  const meta = ensureRound(handle);
+  const eliminated = [...(meta.eliminated ?? []), id];
+  const alive = round.filter((s) => !eliminated.includes(s.id));
+  const next: RoundMeta = {
+    ...meta,
+    eliminated,
+    winner: alive.length === 1 ? { id: alive[0].id, title: alive[0].title } : meta.winner,
+  };
+  writeMeta(handle, next);
+  return next;
 }
 
 // ---- played history (mock) ----

@@ -151,3 +151,29 @@
   color: var(--text-1);
   white-space: nowrap;
 }
+
+/* Phone: the three-up stat grid stacks (a scoped override of the global .stat-grid, which
+   otherwise stays two-up and orphans the third tile), rows get tighter, and a long backer name
+   ellipsizes instead of shoving the amount off-screen. */
+@media (max-width: 600px) {
+  .col :global(.stat-grid) {
+    grid-template-columns: 1fr;
+  }
+  .row {
+    padding: 14px;
+    gap: 12px;
+  }
+  .amount {
+    font-size: 16px;
+  }
+  .backer {
+    gap: 10px;
+  }
+  .backerName {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

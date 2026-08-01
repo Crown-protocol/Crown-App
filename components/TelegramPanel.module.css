@@ -114,3 +114,14 @@
 .disconnect:hover {
   color: var(--text-1);
 }
+
+/* ---- phone: let the action row wrap, break the deep-link cleanly ---- */
+@media (max-width: 480px) {
+  .actions {
+    flex-wrap: wrap;
+  }
+  .waitNote,
+  .waitNote a {
+    overflow-wrap: anywhere;
+  }
+}

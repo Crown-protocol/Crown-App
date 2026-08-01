@@ -7,8 +7,10 @@ import { readStatus, raisedTotal, withFundraiserDefaults } from "@/lib/data/fund
 import { readTasks } from "@/lib/data/tasks";
 import { readLots, readAuctionMeta, auctionTotals, lotSum } from "@/lib/data/auction";
 import { firstActiveScope } from "@/lib/data/gameSessions";
+import { pullScope } from "@/lib/data/gameSync";
 import type { GameId } from "@/lib/data/games";
 import type { Profile } from "@/lib/data/types";
+import { usd } from "@/lib/money";
 import styles from "./HomeLive.module.css";
 
 interface Live {
@@ -32,34 +34,50 @@ export function HomeLive({ profile, onOpen }: { profile: Profile; onOpen: (g: Ga
     const frScope = firstActiveScope(handle, "fundraiser");
     const tkScope = firstActiveScope(handle, "task");
     const auScope = firstActiveScope(handle, "auction");
-    const round = readRound(rlScope);
-    const meta = readRoundMeta(rlScope);
-    const roulette = round.length > 0 && !meta?.winner ? { pot: round.reduce((s, r) => s + r.pool, 0), count: round.length } : null;
 
-    const st = readStatus(frScope);
-    const fr = withFundraiserDefaults(profile);
-    const fundraiser =
-      st.state === "collecting" || st.state === "delivering"
-        ? { pledge: fr.pledge, goal: fr.goal, raised: raisedTotal(frScope), state: st.state }
+    const load = () => {
+      const round = readRound(rlScope);
+      const meta = readRoundMeta(rlScope);
+      const roulette = round.length > 0 && !meta?.winner ? { pot: round.reduce((s, r) => s + r.pool, 0), count: round.length } : null;
+
+      const st = readStatus(frScope);
+      const fr = withFundraiserDefaults(profile);
+      const fundraiser =
+        st.state === "collecting" || st.state === "delivering"
+          ? { pledge: fr.pledge, goal: fr.goal, raised: raisedTotal(frScope), state: st.state }
+          : null;
+
+      const open = readTasks(tkScope).filter((t) => t.state === "pending" || t.state === "active");
+      const tasks = open.length
+        ? {
+            active: open.filter((t) => t.state === "active").length,
+            pending: open.filter((t) => t.state === "pending").length,
+            texts: open.slice(0, 2).map((t) => t.text),
+          }
         : null;
 
-    const open = readTasks(tkScope).filter((t) => t.state === "pending" || t.state === "active");
-    const tasks = open.length
-      ? {
-          active: open.filter((t) => t.state === "active").length,
-          pending: open.filter((t) => t.state === "pending").length,
-          texts: open.slice(0, 2).map((t) => t.text),
-        }
-      : null;
+      const am = readAuctionMeta(auScope);
+      const at = auctionTotals(readLots(auScope));
+      const auction =
+        am && am.state !== "settled" && am.state !== "refunded" && am.state !== "cancelled" && (at.accepted > 0 || at.pending > 0)
+          ? { state: am.state, top: at.top ? lotSum(at.top) : 0, pending: at.pending, lots: at.accepted, topText: at.top?.text ?? "" }
+          : null;
 
-    const am = readAuctionMeta(auScope);
-    const at = auctionTotals(readLots(auScope));
-    const auction =
-      am && am.state !== "settled" && am.state !== "refunded" && am.state !== "cancelled" && (at.accepted > 0 || at.pending > 0)
-        ? { state: am.state, top: at.top ? lotSum(at.top) : 0, pending: at.pending, lots: at.accepted, topText: at.top?.text ?? "" }
-        : null;
+      setLive({ roulette, fundraiser, tasks, auction });
+    };
 
-    setLive({ roulette, fundraiser, tasks, auction });
+    // The dashboard is where the streamer LANDS — pull the shared game state so viewers' tasks,
+    // backings and bids from other browsers show here too, not only after opening a game tab.
+    load();
+    let dead = false;
+    const scopes = [...new Set([rlScope, frScope, tkScope, auScope])];
+    const sync = () => Promise.all(scopes.map((s) => pullScope(s))).then(() => !dead && load());
+    void sync();
+    const t = setInterval(() => void sync(), 5000);
+    return () => {
+      dead = true;
+      clearInterval(t);
+    };
   }, [handle, profile]);
 
   if (!live) return null;
@@ -80,7 +98,7 @@ export function HomeLive({ profile, onOpen }: { profile: Profile; onOpen: (g: Ga
               </span>
             </div>
             <div className={styles.stat}>
-              <b className="num">{live.roulette.pot} $</b> in the pot · {live.roulette.count} suggestions
+              <b className="num">{usd(live.roulette.pot)}</b> in the pot · {live.roulette.count} suggestions
             </div>
             <div className={styles.spacer} />
             <button type="button" className="btn-outline" style={{ alignSelf: "flex-start" }} onClick={() => onOpen("roulette")}>
@@ -104,7 +122,7 @@ export function HomeLive({ profile, onOpen }: { profile: Profile; onOpen: (g: Ga
               <div className={styles.barFill} style={{ width: `${Math.min(100, Math.round((live.fundraiser.raised / live.fundraiser.goal) * 100))}%` }} />
             </div>
             <div className={styles.stat}>
-              <b className="num">{live.fundraiser.raised} $</b> of {live.fundraiser.goal} $ ·{" "}
+              <b className="num">{usd(live.fundraiser.raised)}</b> of {usd(live.fundraiser.goal)} ·{" "}
               {Math.min(100, Math.round((live.fundraiser.raised / live.fundraiser.goal) * 100))}%
             </div>
             <div className={styles.spacer} />
@@ -157,7 +175,7 @@ export function HomeLive({ profile, onOpen }: { profile: Profile; onOpen: (g: Ga
               </span>
             </div>
             <div className={styles.stat}>
-              <b className="num">{live.auction.top} $</b> leading lot · {live.auction.lots} in play
+              <b className="num">{usd(live.auction.top)}</b> leading lot · {live.auction.lots} in play
             </div>
             {live.auction.topText && (
               <div className={styles.tlist}>

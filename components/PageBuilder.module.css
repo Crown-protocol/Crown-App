@@ -101,6 +101,10 @@
   .builder {
     grid-template-columns: 1fr;
   }
+  /* once stacked the preview sits at the foot of the column — sticky just makes it hover oddly. */
+  .previewCol {
+    position: static;
+  }
 }
 
 .editor {
@@ -318,6 +322,21 @@
   border-color: rgba(235, 233, 244, 0.32);
   box-shadow: var(--ring-neutral);
 }
+/* An amount below the game's Rules minimum — viewers would be refused, so flag it in error red. */
+.presetChipBad {
+  border-color: rgba(229, 114, 107, 0.55);
+  background: var(--error-soft);
+}
+.presetChipBad .presetDollar,
+.presetChipBad input {
+  color: var(--error);
+}
+.presetWarn {
+  margin: 10px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--error);
+}
 .presetRemove {
   display: inline-flex;
   align-items: center;
@@ -505,10 +524,179 @@
   box-shadow: var(--ring-neutral);
 }
 
+/* colour picker + hex, one row */
+.pickRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+/* the native colour input, chrome stripped down to a rounded swatch */
+.colorPick {
+  width: 44px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-1);
+  background: transparent;
+  cursor: pointer;
+}
+.colorPick::-webkit-color-swatch-wrapper { padding: 3px; }
+.colorPick::-webkit-color-swatch { border: none; border-radius: 5px; }
+.colorPick::-moz-color-swatch { border: none; border-radius: 5px; }
+
+/* gradient: pick both stops, a live bar between them */
+.gradientStops {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.stopField {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.gradientBar {
+  flex: 1;
+  height: 28px;
+  border-radius: var(--r-1);
+  border: 1px solid var(--line);
+}
+
+/* gradient tuning sliders: angle / center / blend */
+.sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.slider {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.slider > span {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.slider > span em {
+  font-style: normal;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+.slider input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: var(--bg-3);
+  cursor: pointer;
+}
+.slider input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-0);
+  cursor: pointer;
+}
+.slider input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-0);
+  cursor: pointer;
+}
+
+/* one tile style for every mode — colours, gradients and photos all look the same */
+.tileGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: 10px;
+}
+.tile {
+  position: relative;
+  aspect-ratio: 4 / 5;
+  border-radius: var(--r-2);
+  border: 2px solid transparent;
+  background-color: var(--bg-1);
+  background-size: cover;
+  background-position: center;
+  cursor: pointer;
+  transition: border-color var(--dur-2, .15s) var(--ease, ease), transform var(--dur-2, .15s) var(--ease, ease);
+}
+.tile:hover { transform: translateY(-1px); }
+.tileOn { border-color: var(--accent); }
+/* a caption at the foot of each tile — readable over any colour, gradient or photo */
+.tileLabel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 12px 8px 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+  text-align: center;
+  background: linear-gradient(to top, rgba(10, 9, 14, 0.78), transparent);
+  border-radius: 0 0 calc(var(--r-2) - 2px) calc(var(--r-2) - 2px);
+  pointer-events: none;
+}
+/* remove button on an uploaded photo tile */
+.tileRemove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(10, 9, 14, 0.72);
+  color: var(--text-1);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+.tileRemove:hover { background: var(--err, #E5726B); color: #fff; }
+.tileUpload {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px dashed var(--line-strong);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.tileUpload:hover { color: var(--text-1); border-color: var(--accent); }
+/* "Phone photo" / "Desktop photo" heading above a split gallery */
+.subHead {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-top: 4px;
+}
+
 /* ---- preview column ---- */
+/* The preview rides along as you scroll the editor — so picking a desktop photo at the foot of the
+   Design tab still shows you what it does. It has to stick BELOW the space topbar (position:sticky,
+   64px, opaque): a bare `top: 20px` parked the column underneath it, swallowing the Phone/Desktop
+   toggle whole and shaving the top off the frame. */
 .previewCol {
   position: sticky;
-  top: 20px;
+  top: calc(64px + 20px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -542,4 +730,249 @@
 .deviceOn {
   background: var(--chart-grad);
   color: var(--chart-grad-ink);
+}
+
+/* ---- socials config row: platform picker + url field ----
+   The url field carries a width:100% input whose intrinsic min-content refuses to shrink, so a
+   fixed "130px 1fr" (inline before) forced the whole social-row wider than a phone. minmax(0,1fr)
+   + min-width:0 let it shrink; on a narrow screen the two controls stack full-width. */
+.socialFields {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr);
+  gap: 10px;
+}
+.socialFields > * {
+  min-width: 0;
+}
+.socialFields input {
+  min-width: 0;
+}
+@media (max-width: 560px) {
+  .socialFields {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- phone polish (desktop untouched) ---- */
+@media (max-width: 640px) {
+  /* comfortable tap targets for the two segmented controls */
+  .tabs button {
+    height: 40px;
+  }
+  .deviceSeg button {
+    height: 42px;
+  }
+  /* the widget reorder arrows were ~13px tall — give each a real hit area */
+  .widgetStepper button {
+    padding: 5px 8px;
+    font-size: 11px;
+  }
+  /* the full URL must never push the page sideways — cap it and ellipsize */
+  .linkChip {
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .linkChip span {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* ── Shared game editor (GamePageEditor): the page's own order, in sections ──────────────────
+   Each section is a titled card that says what it controls in one line, so a maker never has to
+   click a chevron to find out what a row is. The pay form is NOT hidden behind one — it's the
+   point of the page. Only genuinely optional extras (social links) collapse. */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  padding: 16px 18px;
+}
+.sectionHead {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sectionTitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.sectionTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-1);
+  margin: 0;
+}
+.subField {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* An optional block: name + count on the left (click to expand), show-toggle on the right. */
+.extraRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: space-between;
+  background: var(--bg-0);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  padding: 0 14px;
+  height: 48px;
+}
+.extraName {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.extraName:hover {
+  color: var(--text-1);
+}
+
+/* ── Widgets: one shape for every switchable block on the page ────────────────────────────────
+   The pay form and the social icons used to be built two different ways, so they read as
+   unrelated things. Now both are a card with the same header — name, a summary of what's
+   configured, an expand chevron, and the show/hide switch — with their own settings inside.
+   A future widget drops in with this same shell and needs no new styles. */
+.widgetCard {
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  overflow: hidden;
+}
+.widgetHead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  height: 56px;
+}
+.widgetName {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.widgetName:hover {
+  color: var(--text-1);
+}
+/* What this widget is currently set to, so the card says something while collapsed. */
+.widgetMeta {
+  color: var(--text-3);
+  font-size: 13px;
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Label above a group of controls inside an expanded widget. */
+.widgetFieldHead {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+/* A switched-off widget has no settings to open — its name row stops behaving like a button. */
+.widgetName:disabled {
+  cursor: default;
+  color: var(--text-3);
+}
+
+/* ── Confirm bar ──────────────────────────────────────────────────────────────────────────────
+   Page edits stage until confirmed, so the bar appears the moment something is unsaved and rides
+   the bottom of the editor column. Same shape as the Settings tab's, deliberately — one gesture
+   to learn for "nothing is live until you say so". */
+/* A quiet floating bar pinned to the bottom-centre of the screen — small and unobtrusive, so it
+   confirms without shouting. The confirm button is neutral (no accent), not a hero CTA. */
+.saveBar {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 8px 7px 16px;
+  border-radius: var(--r-pill);
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-float);
+  animation: pbSaveBarIn 0.25s var(--ease) both;
+}
+@keyframes pbSaveBarIn {
+  from { opacity: 0; transform: translate(-50%, 10px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+/* Compact, neutral confirm — no gradient/accent, just a subtle bordered chip. */
+.saveConfirm {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line-strong);
+  background: var(--bg-2);
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease);
+}
+.saveConfirm:hover:not(:disabled) {
+  border-color: rgba(235, 233, 244, 0.32);
+}
+.saveConfirm:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.saveBarNote {
+  font-size: 13.5px;
+  color: var(--text-2);
+}
+.discard {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--text-3);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.discard:hover {
+  color: var(--text-1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .saveBar { animation: none; }
 }

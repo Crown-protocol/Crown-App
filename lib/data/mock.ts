@@ -21,7 +21,6 @@ export const MOCK_STREAMERS: Record<string, Streamer> = {
   nova: {
     handle: "nova",
     name: "Nova",
-    bio: "Painting digital art live — from sketch to final piece.",
     address: "3JF3sEqM796hk5WFqA6EtmEwJQ9quALszsfJyvXNQKy3",
     socials: [
       { kind: "youtube", url: "https://youtube.com/@nova" },
@@ -33,7 +32,6 @@ export const MOCK_STREAMERS: Record<string, Streamer> = {
   glitch: {
     handle: "glitch",
     name: "Glitch",
-    bio: "Speedruns and retro platformers, no editing.",
     address: "4Ss5JMkXAD9Z7cktFEdrqeMuT6jGMF1pVozTyPHZ6zT4",
     socials: [
       { kind: "twitch", url: "https://twitch.tv/glitch" },
@@ -45,7 +43,6 @@ export const MOCK_STREAMERS: Record<string, Streamer> = {
   miradev: {
     handle: "miradev",
     name: "Mira",
-    bio: "Live coding: side projects, game dev, Q&A.",
     address: "5bV6jUfhDHCQVA1WfKBUnXUsboJgoKgkzkKcxr3joew5",
     socials: [
       { kind: "youtube", url: "https://youtube.com/@miradev" },
@@ -57,7 +54,6 @@ export const MOCK_STREAMERS: Record<string, Streamer> = {
   volk: {
     handle: "volk",
     name: "Wolf",
-    bio: "Tactical shooters at night. I queue straight from ranked.",
     address: "6k78AbasGMFFrhG95Pj6jQbqkVt7FQMhVgemxJovWKR6",
     socials: [
       { kind: "twitch", url: "https://twitch.tv/volk" },
@@ -69,7 +65,6 @@ export const MOCK_STREAMERS: Record<string, Streamer> = {
   sonya: {
     handle: "sonya",
     name: "Sonya",
-    bio: "Music, karaoke, and cozy home concerts.",
     address: "7tj9biW3KRJ7EEWmVUGigHiouCTXhV2dzcyvwma7Cyu7",
     socials: [
       { kind: "youtube", url: "https://youtube.com/@sonya" },
@@ -81,7 +76,6 @@ export const MOCK_STREAMERS: Record<string, Streamer> = {
   raidkeeper: {
     handle: "raidkeeper",
     name: "Keeper",
-    bio: "MMO raids, guides, and patch breakdowns.",
     address: "93MB2qRDNVLxbmmPuYpLdAqn3u2x9ZhaVZK5wELHueP8",
     socials: [
       { kind: "twitch", url: "https://twitch.tv/raidkeeper" },
@@ -93,7 +87,6 @@ export const MOCK_STREAMERS: Record<string, Streamer> = {
   pixelira: {
     handle: "pixelira",
     name: "Pixie",
-    bio: "Pixel art and chill lo-fi vibes.",
     address: "AByCTxLPRZPoyK22KdMxa3xkCbcNbeNWzVeEvh6UcJs9",
     socials: [
       { kind: "instagram", url: "https://instagram.com/pixelira" },

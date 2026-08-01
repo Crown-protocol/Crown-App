@@ -10,7 +10,10 @@ export const dynamic = "force-dynamic";
 // profiles table; ?streamer= takes a base58 address directly.
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const limit = Number(searchParams.get("limit") ?? 40);
+  // Guard against NaN/Infinity: `?limit=abc` → Number("abc") is NaN, and `?? 40` doesn't catch NaN,
+  // so it would reach the SQL LIMIT bind and throw ("only finite numbers…") → a 500 on a public GET.
+  const rawLimit = Number(searchParams.get("limit"));
+  const limit = Number.isFinite(rawLimit) ? rawLimit : 40;
   let streamer = searchParams.get("streamer") ?? undefined;
 
   const handle = searchParams.get("handle");

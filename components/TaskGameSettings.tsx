@@ -1,6 +1,10 @@
 "use client";
 
 import type { Profile, TaskGameConfig } from "@/lib/data/types";
+import { NumberInput } from "@/components/NumberInput";
+import { HelpTip } from "@/components/HelpTip";
+import { RulesSummary, hoursText } from "@/components/RulesSummary";
+import { usd } from "@/lib/money";
 
 export const DEFAULT_TASK_CONFIG: TaskGameConfig = {
   minAmount: 10,
@@ -9,7 +13,9 @@ export const DEFAULT_TASK_CONFIG: TaskGameConfig = {
   maxActiveTasks: 5,
 };
 
-const DEADLINE_OPTIONS = [
+// Exported so the session starter (GameSessions) offers exactly the same picks — one list, so the
+// standing rules and a single run's rules can never drift into different vocabularies.
+export const DEADLINE_OPTIONS = [
   { hours: 6, label: "6 hours" },
   { hours: 12, label: "12 hours" },
   { hours: 24, label: "24 hours" },
@@ -30,26 +36,37 @@ export function TaskGameSettings({ profile, onSave }: { profile: Profile; onSave
 
   return (
     <div className="game-settings">
-      <div className="card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <h2>Rules</h2>
+      <section className="card" aria-labelledby="task-money-h">
+        <h2 id="task-money-h">Money</h2>
 
         <div className="field">
-          <label htmlFor="task-min">Minimum task amount</label>
+          <label htmlFor="task-min">
+            Minimum task amount
+            <HelpTip text="Viewers can't submit a task for less than this." />
+          </label>
           <div className="affix has-pre">
             <span className="affix-pre">$</span>
-            <input
-              id="task-min"
-              type="number"
-              min={1}
-              value={cfg.minAmount}
-              onChange={(e) => patch({ minAmount: Math.max(1, Math.round(+e.target.value) || 1) })}
-            />
+            <NumberInput id="task-min" min={1} value={cfg.minAmount} onCommit={(n) => patch({ minAmount: n })} />
           </div>
-          <div className="footnote">Viewers can't submit a task for less than this.</div>
         </div>
 
         <div className="field">
-          <label htmlFor="task-deadline">Longest deadline a viewer may pick</label>
+          <label htmlFor="task-max">
+            Max active tasks
+            <HelpTip text="New tasks pause once this many are in progress, so the queue stays doable." />
+          </label>
+          <NumberInput id="task-max" min={1} max={50} value={cfg.maxActiveTasks} onCommit={(n) => patch({ maxActiveTasks: n })} />
+        </div>
+      </section>
+
+      <section className="card" aria-labelledby="task-timing-h">
+        <h2 id="task-timing-h">Timing</h2>
+
+        <div className="field">
+          <label htmlFor="task-deadline">
+            Longest deadline a viewer may pick
+            <HelpTip text="Miss the deadline and the viewer is refunded automatically." />
+          </label>
           <select id="task-deadline" value={cfg.deadlineHours} onChange={(e) => patch({ deadlineHours: +e.target.value })}>
             {DEADLINE_OPTIONS.map((o) => (
               <option key={o.hours} value={o.hours}>
@@ -57,38 +74,25 @@ export function TaskGameSettings({ profile, onSave }: { profile: Profile; onSave
               </option>
             ))}
           </select>
-          <div className="footnote">Miss it and the viewer can claim a refund. Shown on the task page up front.</div>
         </div>
 
-        <div className="field">
-          <label htmlFor="task-max">Max active tasks</label>
-          <input
-            id="task-max"
-            type="number"
-            min={1}
-            max={50}
-            value={cfg.maxActiveTasks}
-            onChange={(e) => patch({ maxActiveTasks: Math.max(1, Math.round(+e.target.value) || 1) })}
-          />
-          <div className="footnote">New tasks pause once this many are in progress, so the queue stays doable.</div>
+        <div className="toggle-row">
+          <label className={`toggle${cfg.requireApproval ? " on" : ""}`}>
+            <span className="track">
+              <span className="knob" />
+            </span>
+            <input type="checkbox" hidden checked={cfg.requireApproval} onChange={(e) => patch({ requireApproval: e.target.checked })} />
+            Require your approval before the clock starts
+          </label>
+          <HelpTip text="Off: paying starts the timer right away. On: you confirm the task first, then it starts." />
         </div>
+      </section>
 
-        <label className={`toggle${cfg.requireApproval ? " on" : ""}`}>
-          <span className="track">
-            <span className="knob" />
-          </span>
-          <input type="checkbox" hidden checked={cfg.requireApproval} onChange={(e) => patch({ requireApproval: e.target.checked })} />
-          Require your approval before the clock starts
-        </label>
-        <div className="footnote">
-          Off: paying starts the timer right away. On: you confirm the task first, then it starts.
-        </div>
-      </div>
-
-      <div className="notice">
-        <b>Fixed by the contract, not a setting here:</b> once the deadline passes, anyone can trigger the refund to the
-        viewer. That's the one promise the front end gets to make.
-      </div>
+      <RulesSummary>
+        A viewer pays from {usd(cfg.minAmount)} and picks a deadline of up to {hoursText(cfg.deadlineHours)}.{" "}
+        {cfg.requireApproval ? "You accept the task first, then the clock starts." : "The clock starts the moment they pay."}{" "}
+        Up to {cfg.maxActiveTasks} {cfg.maxActiveTasks === 1 ? "task runs" : "tasks run"} at once. Miss the deadline and they get their money back.
+      </RulesSummary>
     </div>
   );
 }

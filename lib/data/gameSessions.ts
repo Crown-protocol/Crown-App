@@ -15,6 +15,7 @@ import { markFresh } from "./freshScope";
 import { readAuctionMeta } from "./auction";
 import { readRoundMeta } from "./roulette";
 import { readStatus } from "./fundraiser";
+import { sendOp, pullScope } from "./gameSync";
 
 export interface GameSession {
   id: string;
@@ -49,6 +50,26 @@ function writeSessions(handle: string, gameId: GameId, list: GameSession[]) {
   try {
     localStorage.setItem(key(handle, gameId), JSON.stringify(list));
   } catch {}
+  // Share the registry so a viewer's browser can resolve ?s=<id> to the right scope — see
+  // sessionsScope/pullSessions.
+  //
+  // MERGE, never replace. This list comes from localStorage, and Log out wipes that store: a
+  // cabinet that hadn't pulled the registry back yet would send a list of one and delete every
+  // other session from the server — for the streamer and every viewer at once. Merging by id keeps
+  // whatever the server already knows and still records this session's own changes.
+  sendOp(sessionsScope(handle, gameId), "crown-game-sessions", { type: "mergeById", list });
+}
+
+// The registry's gamestate scope. The localStorage key is `crown-game-sessions:<handle>:<gameId>`
+// and the sync layer stores every key as `<k>:<scope>` — so scope is exactly "<handle>:<gameId>".
+function sessionsScope(handle: string, gameId: GameId): string {
+  return `${handle}:${gameId}`;
+}
+
+// Pull the shared registry into this browser before resolving a public link — a viewer opening
+// ?s=<id> has never seen the streamer's sessions, and without this the id resolves to nothing.
+export async function pullSessions(handle: string, gameId: GameId): Promise<void> {
+  await pullScope(sessionsScope(handle, gameId));
 }
 
 const GAME_NOUN: Record<GameId, string> = { task: "Tasks", roulette: "Round", fundraiser: "Fundraiser", auction: "Auction" };
@@ -67,7 +88,15 @@ export function createSession(handle: string, gameId: GameId, name?: string): Ga
     scope,
     createdAt: Date.now(),
   };
-  if (legacyTaken) markFresh(scope);
+  if (legacyTaken) {
+    markFresh(scope);
+    // The fresh marker is per-browser — publish the empty starting state too, so a VIEWER's
+    // browser (which has no marker) also sees a session that starts empty, not the demo seeds.
+    if (gameId === "task") sendOp(scope, "crown-tasks", { type: "replace", value: [] });
+    if (gameId === "roulette") sendOp(scope, "crown-roulette-round", { type: "replace", value: [] });
+    if (gameId === "auction") sendOp(scope, "crown-auction-lots", { type: "replace", value: [] });
+    if (gameId === "fundraiser") sendOp(scope, "crown-fundraiser-collected", { type: "replace", value: 0 });
+  }
   writeSessions(handle, gameId, [session, ...list]);
   setCurrentSession(handle, gameId, id);
   return session;

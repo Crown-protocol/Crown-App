@@ -95,7 +95,7 @@
 }
 .customAmount {
   width: 110px;
-  height: 40px;
+  height: 44px;
   padding: 0 12px;
   border-radius: var(--r-pill);
   border: 1px solid var(--line);
@@ -184,6 +184,15 @@
   }
   .sums {
     font-size: 17px;
+  }
+  /* comfortable tap targets, and the icon row wraps rather than pushing the page sideways */
+  .socials {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .socials a {
+    width: 44px;
+    height: 44px;
   }
   .footer {
     margin-top: 18px;

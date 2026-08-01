@@ -1,0 +1,161 @@
+/* Telegram tab in the admin panel. Same furniture as the rest of the panel (.panel/.stat/.otable
+   come from globals) — this file only covers what's specific to the scenario list. */
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-end;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 260px;
+}
+.field > span {
+  font-size: 14px;
+  color: var(--text-3);
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 14px;
+  color: var(--text-2);
+  cursor: pointer;
+  padding-bottom: 12px;
+}
+.checkbox input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* ---- collapsible category header ---- */
+.groupHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.groupHead:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-neutral);
+  border-radius: 6px;
+}
+.groupTitle {
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.groupCount {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.chev {
+  color: var(--text-3);
+  flex: none;
+  transition: transform 0.15s ease;
+}
+.chevOpen {
+  transform: rotate(90deg);
+}
+
+/* ---- scenario rows ---- */
+.list {
+  display: flex;
+  flex-direction: column;
+  margin-top: 18px;
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+}
+.row:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.rowMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.rowTop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.rowLabel {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* When it fires in production — the answer to "why didn't I get this?" */
+.when {
+  font-size: 14px;
+  color: var(--text-2);
+}
+
+/* What the test will actually deliver, so the admin knows before pressing. */
+.sample {
+  font-size: 13px;
+  color: var(--text-3);
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  padding: 8px 10px;
+  overflow-wrap: anywhere;
+}
+
+/* Where it comes from in the code — for whoever has to fix it. */
+.source {
+  font-size: 12px;
+  color: var(--text-3);
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
+.okNote {
+  font-size: 13px;
+  color: var(--text-2);
+  background: var(--accent-soft);
+  border-radius: var(--r-2);
+  padding: 8px 10px;
+}
+
+@media (max-width: 640px) {
+  .row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .field {
+    min-width: 0;
+  }
+}

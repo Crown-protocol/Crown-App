@@ -6,6 +6,7 @@
 import type { PageWidget, Profile, TaskDraft } from "./types";
 import { isFreshScope } from "./freshScope";
 import { DEFAULT_DESIGN } from "./pagebuilder";
+import { sendOp } from "./gameSync";
 
 export const TASK_HEADLINE_MAX = 140;
 export const TASK_DESCRIPTION_MAX = 300;
@@ -51,6 +52,7 @@ export interface GameTask {
   state: TaskState;
   when: string; // human-readable "2h ago", like the donations feed
   durationHours?: number; // the DONOR's deadline pick (game-spec: duration is the donor's knob)
+  escrow?: string; // base58 escrow address when the task was born on-chain (task_id ≡ escrow)
 }
 
 // Seed queue — a realistic mix so the tab shows every state: awaiting approval, running,
@@ -89,7 +91,7 @@ function writeTasks(handle: string, list: GameTask[]) {
 // for the streamer to accept, or straight into the running queue with the clock already going.
 export function addTask(
   handle: string,
-  input: { from: string; amount: number; text: string; requireApproval: boolean; durationHours?: number }
+  input: { from: string; amount: number; text: string; requireApproval: boolean; durationHours?: number; escrow?: string }
 ): GameTask[] {
   const task: GameTask = {
     id: `t-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -99,9 +101,13 @@ export function addTask(
     state: input.requireApproval ? "pending" : "active",
     when: "just now",
     durationHours: input.durationHours,
+    ...(input.escrow ? { escrow: input.escrow } : {}),
   };
   const next = [task, ...readTasks(handle)];
   writeTasks(handle, next);
+  // Share it: append commutes with other viewers' tasks; `seed` initialises the
+  // server copy with the demo rows on the very first real action in a scope.
+  sendOp(handle, "crown-tasks", { type: "append", item: task as unknown as { id: string } & Record<string, unknown>, seed: next });
   return next;
 }
 
@@ -115,6 +121,8 @@ export function activeCount(list: GameTask[]): number {
 export function removeTask(handle: string, id: string): GameTask[] {
   const next = readTasks(handle).filter((t) => t.id !== id);
   writeTasks(handle, next);
+  // The streamer is the queue's single authority — their removals/state moves overwrite.
+  sendOp(handle, "crown-tasks", { type: "replace", value: next });
   return next;
 }
 
@@ -122,6 +130,7 @@ export function removeTask(handle: string, id: string): GameTask[] {
 export function setTaskState(handle: string, id: string, state: TaskState): GameTask[] {
   const next = readTasks(handle).map((t) => (t.id === id ? { ...t, state } : t));
   writeTasks(handle, next);
+  sendOp(handle, "crown-tasks", { type: "replace", value: next });
   return next;
 }
 

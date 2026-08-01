@@ -3,10 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { BarList, StatTile } from "@/components/ops";
+import { usd } from "@/lib/money";
 import { RouletteWheel } from "@/components/RouletteWheel";
-import { DEFAULT_ROULETTE_CONFIG } from "@/components/RouletteGameSettings";
-import { readRound, ensureRound, setRoundWinner, newRound, readRoundMeta, appendHistory, type RoundMeta } from "@/lib/data/roulette";
-import { pickWeighted, type RouletteSuggestion } from "@/lib/data/roulette-mock";
+import { rouletteRules } from "@/lib/data/gameConfig";
+import { readRound, ensureRound, setRoundWinner, newRound, readRoundMeta, appendHistory, survivors, eliminationWeights, eliminate, type RoundMeta } from "@/lib/data/roulette";
+import { useGameSync } from "@/lib/data/gameSync";
+import { pickWeighted, roundRand, type RouletteSuggestion } from "@/lib/data/roulette-mock";
 import type { Profile } from "@/lib/data/types";
 
 function fmtLeft(ms: number): string {
@@ -21,13 +23,18 @@ function fmtLeft(ms: number): string {
 // the public page stay in step.
 export function RouletteOverview({ profile, scope, shareQuery = "" }: { profile: Profile; scope?: string; shareQuery?: string }) {
   const handle = scope ?? profile.handle;
-  const cfg = profile.rouletteConfig ?? DEFAULT_ROULETTE_CONFIG;
+  // Shared game state: pulls the server copy into localStorage; the 1s tick below re-reads it.
+  useGameSync(handle);
+  // This round's rules — the ones the session was opened with, not whatever the profile says today.
+  const cfg = rouletteRules(profile, handle);
 
   const [round, setRound] = useState<RouletteSuggestion[]>([]);
   const [meta, setMeta] = useState<RoundMeta | null>(null);
   const [now, setNow] = useState(0);
   const [spin, setSpin] = useState<{ id: string; nonce: number }>({ id: "", nonce: 0 });
-  const spunFor = useRef<number | null>(null);
+  // Which spin we've already fired. Single rounds key on the round clock; elimination rounds add
+  // the knock-out count, because one round legitimately spins many times.
+  const spunFor = useRef<string | null>(null);
   const recordedFor = useRef<number | null>(null);
 
   useEffect(() => {
@@ -52,8 +59,8 @@ export function RouletteOverview({ profile, scope, shareQuery = "" }: { profile:
       spunFor.current = null;
       return;
     }
-    if (m.winner && !meta.winner && spunFor.current !== m.startedAt) {
-      spunFor.current = m.startedAt;
+    if (m.winner && !meta.winner && spunFor.current !== String(m.startedAt)) {
+      spunFor.current = String(m.startedAt);
       setSpin((s) => ({ id: m.winner!.id, nonce: s.nonce + 1 }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -71,7 +78,7 @@ export function RouletteOverview({ profile, scope, shareQuery = "" }: { profile:
   // Время вышло — the wheel spins itself, same as on the public page.
   useEffect(() => {
     if (!now || !meta || meta.winner || !expired) return;
-    if (spunFor.current === meta.startedAt) return;
+    if (spunFor.current === String(meta.startedAt)) return;
     if (!round.length) {
       setMeta(newRound(handle));
       return;
@@ -80,11 +87,34 @@ export function RouletteOverview({ profile, scope, shareQuery = "" }: { profile:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [now, meta, expired]);
 
+  // Elimination rounds spin many times, so the once-per-round guard is keyed on how many are already
+  // out — otherwise the second knock-out would be refused as "already spun".
+  const elimination = (cfg.format ?? "single") === "elimination";
+  const alive = elimination ? survivors(round, meta) : round;
+
   function spinNow() {
-    if (!meta || meta.winner || !round.length || spunFor.current === meta.startedAt) return;
-    const w = pickWeighted(readRound(handle), Math.random());
+    if (!meta || meta.winner) return;
+    const list = readRound(handle);
+    if (!list.length) return;
+
+    if (elimination) {
+      const left = survivors(list, meta);
+      if (left.length < 2) return; // nothing to knock out
+      const key = `${meta.startedAt}:${(meta.eliminated ?? []).length}`;
+      if (spunFor.current === key) return;
+      // Money PROTECTS: weights are inverted pools, so the best-backed entry is the least likely to go.
+      const victim = pickWeighted(left, roundRand(meta.startedAt + (meta.eliminated ?? []).length), eliminationWeights(left));
+      if (!victim) return;
+      spunFor.current = key;
+      setSpin((s) => ({ id: victim.id, nonce: s.nonce + 1 }));
+      return;
+    }
+
+    if (spunFor.current === String(meta.startedAt)) return;
+    // Seeded by the round clock — the cabinet and every viewer land the same winner.
+    const w = pickWeighted(list, roundRand(meta.startedAt));
     if (!w) return;
-    spunFor.current = meta.startedAt;
+    spunFor.current = String(meta.startedAt);
     setSpin((s) => ({ id: w.id, nonce: s.nonce + 1 }));
   }
 
@@ -92,6 +122,29 @@ export function RouletteOverview({ profile, scope, shareQuery = "" }: { profile:
     const list = readRound(handle);
     const w = list.find((s) => s.id === id);
     if (!w) return;
+
+    if (elimination) {
+      // The wheel landed on the one that's OUT. eliminate() promotes the last survivor to winner, so
+      // the history block below runs on the final spin exactly as it does for a single-spin round.
+      const next = eliminate(handle, w.id, list);
+      setMeta(next);
+      if (!next.winner) return; // more spins to come
+      const champ = list.find((s) => s.id === next.winner!.id);
+      if (champ && meta && recordedFor.current !== meta.startedAt) {
+        recordedFor.current = meta.startedAt;
+        appendHistory(profile.handle, {
+          id: `r-${meta.startedAt}`,
+          date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+          winner: champ.title,
+          genre: champ.genre,
+          pot: list.reduce((sum, s) => sum + s.pool, 0),
+          entries: list.length,
+          playedMinutes: cfg.playMinutes,
+        });
+      }
+      return;
+    }
+
     setMeta(setRoundWinner(handle, { id: w.id, title: w.title }));
     // Record the finished round exactly once, so the History tab shows real rounds — not just the seed.
     if (meta && recordedFor.current !== meta.startedAt) {
@@ -183,13 +236,13 @@ export function RouletteOverview({ profile, scope, shareQuery = "" }: { profile:
           </div>
 
           <div className="stat-grid">
-            <StatTile k="Pot" v={`${total} $`} />
+            <StatTile k="Pot" v={usd(total)} />
             <StatTile k="Closes in" v={meta?.winner ? "Closed" : fmtLeft(msLeft)} />
             <StatTile k="Suggestions" v={String(round.length)} />
           </div>
 
           {round.length > 0 && (
-            <BarList unit="money" bars={round.map((r) => ({ label: `${r.title} · ${r.genre}`, value: r.pool, display: `${r.pool} $` }))} />
+            <BarList unit="money" bars={round.map((r) => ({ label: `${r.title} · ${r.genre}`, value: r.pool, display: usd(r.pool) }))} />
           )}
         </>
       )}

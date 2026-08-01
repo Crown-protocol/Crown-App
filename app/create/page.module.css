@@ -407,3 +407,44 @@
   color: var(--text-1);
   border-color: var(--accent);
 }
+
+/* ---- step 2 fields: platform select + url input. minmax(0,…) lets the input shrink instead of
+   forcing the row wider than a phone (the .social-row middle track is 1fr and can't otherwise
+   contain a fixed 130px + a non-shrinking input). Stacks on phones. ---- */
+.socialFields {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr);
+  gap: 10px;
+}
+
+/* ---- phones: reclaim side room, stack the social fields, and give the text nav buttons and the
+   avatar delete a real tap target ---- */
+@media (max-width: 480px) {
+  .main {
+    padding: 24px 16px 48px;
+  }
+  .socialFields {
+    grid-template-columns: 1fr;
+  }
+  /* Guarantee the app's 44px comfortable tap target on phones — at 12px padding these came out to
+     43px (1px under the bar the rest of the app holds). min-height + centering pins it exactly. */
+  .back {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 8px;
+    margin-left: -8px;
+  }
+  .skip {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 8px;
+  }
+  .avatarRemove {
+    width: 34px;
+    height: 34px;
+    top: -6px;
+    right: -6px;
+  }
+}

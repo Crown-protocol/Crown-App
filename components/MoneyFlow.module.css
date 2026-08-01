@@ -215,6 +215,22 @@
   }
 }
 
+/* tighten the stacked cards on small phones so the column isn't all padding */
+@media (max-width: 480px) {
+  .flow {
+    margin-top: 28px;
+  }
+  .node {
+    padding: 20px 18px;
+  }
+  .value {
+    font-size: 30px;
+  }
+  .foot {
+    margin-top: 22px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .spark { display: none; }
 }

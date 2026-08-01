@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CrownMark, GameIcon } from "@/components/icons";
-import { CrownFill } from "@/components/CrownFill";
+import { FundraiserFill } from "@/components/FundraiserFill";
 import { OVERLAY_TIERS } from "@/lib/data/overlays";
 import type { GameId } from "@/lib/data/games";
 import styles from "./LiveOverlays.module.css";
@@ -161,7 +161,7 @@ export function LiveOverlays({
               </div>
             ) : (
               <div className={styles.fund}>
-                <CrownFill pct={pct / 100} size={52} />
+                <FundraiserFill pct={pct / 100} size={52} />
                 <div>
                   <div className={styles.fundPct}>{pct}%</div>
                   <div className={styles.fundNums}>

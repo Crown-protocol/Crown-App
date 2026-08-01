@@ -1,9 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useGameSync } from "@/lib/data/gameSync";
+import { useGameChain } from "@/lib/chain/useGameChain";
+import { auctionLotAction, auctionAction } from "@/lib/chain/gameFlows";
 import Link from "next/link";
 import { BarList, StatTile } from "@/components/ops";
-import { DEFAULT_AUCTION_CONFIG } from "@/components/AuctionGameSettings";
+import { usd } from "@/lib/money";
+import { auctionRules } from "@/lib/data/gameConfig";
 import {
   readLots,
   ensureAuction,
@@ -41,7 +45,14 @@ export function AuctionOverview({ profile, scope, shareQuery = "" }: { profile: 
   // scope = the session's storage key (defaults to the bare handle for pre-session data);
   // links and the history archive always use the real handle.
   const handle = scope ?? profile.handle;
-  const cfg = profile.auctionConfig ?? DEFAULT_AUCTION_CONFIG;
+  // Shared game state: pulls the server copy into localStorage; the 1s tick below re-reads it.
+  useGameSync(handle);
+  // A hook — must run every render in the same order, so it lives ABOVE the `if (!meta) return null`
+  // early return below (calling it after that return changed the hook order the moment a round
+  // loaded, which React treats as a crash).
+  const chain = useGameChain("auction");
+  // This auction's rules — the ones the session was opened with, not whatever the profile says today.
+  const cfg = auctionRules(profile, handle);
 
   const [lots, setLots] = useState<AuctionLot[]>([]);
   const [meta, setMeta] = useState<AuctionMeta | null>(null);
@@ -102,7 +113,14 @@ export function AuctionOverview({ profile, scope, shareQuery = "" }: { profile: 
     if (m.state === "cancelled") record("cancelled", m);
   }
 
+  // On-chain twins of the streamer's calls — only for canister-born auctions/lots.
+  function chainLot(l: { chainLot?: string } | undefined, action: "accept" | "return-lot") {
+    if (!l?.chainLot || !meta?.chainAuction || !chain.live || !chain.wallet) return;
+    void auctionLotAction(chain.wallet, meta.chainAuction, l.chainLot, action);
+  }
+
   function onCancel() {
+    if (meta?.chainAuction && chain.live && chain.wallet) void auctionAction(chain.wallet, meta.chainAuction, "cancel");
     const m = cancelAuction(handle);
     setMeta(m);
     record("cancelled", m);
@@ -133,16 +151,16 @@ export function AuctionOverview({ profile, scope, shareQuery = "" }: { profile: 
               {pending.map((l) => (
                 <div key={l.id} className="panel" style={{ display: "flex", flexDirection: "column", gap: 10, padding: 14 }}>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-                    <b className="num" style={{ fontSize: 20 }}>{lotSum(l)} $</b>
+                    <b className="num" style={{ fontSize: 20 }}>{usd(lotSum(l))}</b>
                     <span style={{ color: "var(--text-2)", fontSize: 14 }}>from {l.from}</span>
                     <span style={{ marginLeft: "auto", color: "var(--text-3)", fontSize: 13 }}>{l.when}</span>
                   </div>
                   <div style={{ fontSize: 15 }}>“{l.text}”</div>
                   <div style={{ display: "flex", gap: 10 }}>
-                    <button className="btn" type="button" onClick={() => setLots(setLotState(handle, l.id, "accepted"))}>
+                    <button className="btn" type="button" onClick={() => { chainLot(l, "accept"); setLots(setLotState(handle, l.id, "accepted")); }}>
                       Accept
                     </button>
-                    <button className="btn-outline" type="button" onClick={() => setLots(setLotState(handle, l.id, "returned"))}>
+                    <button className="btn-outline" type="button" onClick={() => { chainLot(l, "return-lot"); setLots(setLotState(handle, l.id, "returned")); }}>
                       Turn down
                     </button>
                   </div>
@@ -167,7 +185,7 @@ export function AuctionOverview({ profile, scope, shareQuery = "" }: { profile: 
             ) : (
               <>
                 <div className="stat-grid">
-                  <StatTile k="Leading lot" v={`${totals.top ? lotSum(totals.top) : 0} $`} />
+                  <StatTile k="Leading lot" v={usd(totals.top ? lotSum(totals.top) : 0)} />
                   <StatTile k="Bell in" v={fmtLeft(msLeft)} />
                   <StatTile k="Lots in play" v={String(board.length)} />
                 </div>
@@ -176,7 +194,7 @@ export function AuctionOverview({ profile, scope, shareQuery = "" }: { profile: 
                   bars={board.map((l) => ({
                     label: `“${l.text.length > 48 ? l.text.slice(0, 48) + "…" : l.text}” · ${l.entries.length} backer${l.entries.length > 1 ? "s" : ""}`,
                     value: lotSum(l),
-                    display: `${lotSum(l)} $`,
+                    display: usd(lotSum(l)),
                   }))}
                 />
               </>
@@ -206,7 +224,7 @@ export function AuctionOverview({ profile, scope, shareQuery = "" }: { profile: 
               <span className="dot" />
               Winning lot
             </span>
-            <b className="num" style={{ fontSize: 22 }}>{lotSum(winner)} $</b>
+            <b className="num" style={{ fontSize: 22 }}>{usd(lotSum(winner))}</b>
             <span style={{ color: "var(--text-2)" }}>
               · {winner.entries.length} backer{winner.entries.length > 1 ? "s" : ""} · every other lot has been refunded
             </span>
@@ -217,7 +235,7 @@ export function AuctionOverview({ profile, scope, shareQuery = "" }: { profile: 
             window and everyone is refunded.
           </div>
           <div style={{ display: "flex", gap: 10 }}>
-            <button className="btn" type="button" onClick={() => setMeta(markReady(handle))}>
+            <button className="btn" type="button" onClick={() => { if (meta?.chainAuction && chain.live && chain.wallet) void auctionAction(chain.wallet, meta.chainAuction, "ready"); setMeta(markReady(handle)); }}>
               Done — start the vote
             </button>
           </div>
@@ -265,11 +283,11 @@ export function AuctionOverview({ profile, scope, shareQuery = "" }: { profile: 
             </span>
             {winner && state === "settled" && (
               <span style={{ color: "var(--text-2)" }}>
-                <b className="num">{lotSum(winner)} $</b> is yours — every backer of the lot earned reputation for their share.
+                <b className="num">{usd(lotSum(winner))}</b> is yours — every backer of the lot earned reputation for their share.
               </span>
             )}
             {winner && state === "refunded" && (
-              <span style={{ color: "var(--text-2)" }}>The vote didn&apos;t confirm delivery — all {lotSum(winner)} $ went back.</span>
+              <span style={{ color: "var(--text-2)" }}>The vote didn&apos;t confirm delivery — all {usd(lotSum(winner))} went back.</span>
             )}
             {state === "cancelled" && <span style={{ color: "var(--text-2)" }}>Every lot was refunded in full.</span>}
           </div>

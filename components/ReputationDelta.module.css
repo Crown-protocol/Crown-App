@@ -52,3 +52,13 @@
   font-weight: 700;
   letter-spacing: 0.01em;
 }
+
+/* Phone: tighten the callout and let a long (streamer-defined) tier name wrap to its own line
+   instead of pushing the row sideways. */
+@media (max-width: 480px) {
+  .rep {
+    flex-wrap: wrap;
+    row-gap: 6px;
+    padding: 10px 13px;
+  }
+}

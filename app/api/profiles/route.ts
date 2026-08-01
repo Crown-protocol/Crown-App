@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listProfiles, upsertProfile, getProfileOwner } from "@/lib/server/store";
 import { verifySignedRequest } from "@/lib/server/auth";
+import { readSession } from "@/lib/server/session";
 import { allow } from "@/lib/server/ratelimit";
 import { isValidAddress } from "@/lib/chain/config";
 import { isDemoAddress } from "@/lib/data/session";
+import { MOCK_STREAMERS } from "@/lib/data/mock";
 import type { Profile } from "@/lib/data/types";
 
 export const runtime = "nodejs";
@@ -36,13 +38,24 @@ export async function POST(req: NextRequest) {
   if (!p?.handle?.trim() || !p?.name?.trim()) {
     return NextResponse.json({ error: "handle and name required" }, { status: 400 });
   }
+  // Built-in demo streamers (/@nova) resolve from code, not the DB. Letting anyone register the
+  // same handle would split the identity: the profile page would show the DB row while the game
+  // pages show the demo — two different people behind one link. Reserved outright.
+  if (MOCK_STREAMERS[p.handle.trim().replace(/^@/, "").toLowerCase()]) {
+    return NextResponse.json({ error: "this handle is reserved" }, { status: 409 });
+  }
   const demoPage = !p.address || isDemoAddress(p.address);
   if (!demoPage && !isValidAddress(p.address)) {
     return NextResponse.json({ error: "invalid payout address" }, { status: 400 });
   }
 
   const existingOwner = await getProfileOwner(p.handle);
-  const signer = await verifySignedRequest(req, "profile", p.handle, p);
+  // Two ways to prove you're the owner: a fresh wallet signature on this exact request, or the
+  // editing session cookie you got by signing once at sign-in (/api/session). The session exists so
+  // ordinary edits — renaming, moving a slider, picking a colour — don't each throw a wallet popup.
+  const signed = await verifySignedRequest(req, "profile", p.handle, p);
+  const sessionPubkey = readSession(req);
+  const signer = signed ?? (sessionPubkey ? { pubkey: sessionPubkey } : null);
 
   if (existingOwner) {
     // Owned page: only its owner may write, no matter what the payload claims.

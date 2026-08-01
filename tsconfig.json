@@ -44,7 +44,9 @@
     ".next-deploy/types/**/*.ts",
     ".next-test/types/**/*.ts",
     ".next-release/types/**/*.ts",
-    ".next-dev-qa/types/**/*.ts"
+    ".next-dev-qa/types/**/*.ts",
+    ".next-icfake/types/**/*.ts",
+    ".next-lab/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

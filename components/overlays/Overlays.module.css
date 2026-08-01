@@ -22,7 +22,12 @@
 }
 
 /* ---- Alerts ---- */
+/* Entrance and exit are two fixed-length animations; only the exit DELAY is driven by --hold (set
+   per event in JS). The dismiss setTimeout uses the same --hold value, so the fade-out always
+   finishes exactly when the card unmounts — the two clocks cannot drift. */
 .alert {
+  position: relative;
+  overflow: hidden; /* clips the shine sweep; the gradient strip is painted as a background layer */
   display: flex;
   align-items: center;
   gap: 16px;
@@ -34,7 +39,47 @@
   border-left: 4px solid var(--accent);
   border-radius: var(--r-3);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
-  animation: alertCycle 5s var(--ease) both;
+  animation:
+    alertIn 420ms var(--ease) both,
+    alertOut 260ms var(--ease) calc(var(--hold, 5000ms) - 260ms) forwards;
+}
+/* One-shot shine sweep at t+700ms. The band is 40% of the card wide; translateX is relative to the
+   band itself, so -160%→400% carries it fully across (-60%→160% of the card, per spec). */
+.alert::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 40%;
+  background: linear-gradient(105deg, transparent, rgba(241, 239, 247, 0.14), transparent);
+  transform: translateX(-160%);
+  animation: shineSweep 900ms var(--ease) 700ms both;
+  pointer-events: none;
+}
+/* $25–99: the flat accent strip upgrades to the gradient. The strip is a background layer painted
+   under the (transparent) 4px border area — border-image would ignore the corner radius. */
+.alertT1,
+.alertT2 {
+  border-left-color: transparent;
+  background:
+    var(--accent-grad) no-repeat left top / 4px 100% border-box,
+    rgba(20, 19, 24, 0.92);
+}
+.alertT1 {
+  animation:
+    alertInPop 420ms var(--ease) both,
+    alertOut 260ms var(--ease) calc(var(--hold, 5000ms) - 260ms) forwards;
+}
+/* $100+: the card itself grows, and the shine passes twice. */
+.alertT2 {
+  padding: 22px 30px;
+}
+.alertT2 .alertLine {
+  font-size: 24px;
+}
+.alertT2::after {
+  animation-iteration-count: 2;
 }
 .alert :global(.mono) {
   color: var(--text-1);
@@ -50,33 +95,98 @@
 .alertLine b {
   font-weight: 700;
 }
+/* Money reads WHITE (charter) — purple stays on the border strip only. The pop is delayed by the
+   600ms count-up, so it fires exactly as the number lands on its final value. */
 .alertAmt {
-  color: var(--accent);
+  display: inline-block;
+  color: var(--text-1);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  animation: amtPop 450ms cubic-bezier(0.34, 1.56, 0.64, 1) 600ms both;
 }
+/* The message settles in only after the card has landed (420ms slide). */
 .alertMsg {
   margin-top: 4px;
   font-size: 16px;
   color: var(--text-2);
   overflow-wrap: anywhere;
+  opacity: 0;
+  animation: msgIn 200ms var(--ease) 420ms forwards;
 }
-@keyframes alertCycle {
+/* '+N' queue chip — viewers see donations stacking behind the current one. */
+.alertQueue {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  padding: 1px 8px;
+  border-radius: var(--r-pill);
+  background: var(--bg-2);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 700;
+}
+@keyframes alertIn {
   0% {
     opacity: 0;
-    transform: translateY(-18px) scale(0.96);
+    transform: translateY(-24px);
   }
-  6% {
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+/* Mid-tier entrance: overshoots to 1.04 while landing, then settles flat. */
+@keyframes alertInPop {
+  0% {
+    opacity: 0;
+    transform: translateY(-24px) scale(0.98);
+  }
+  65% {
+    opacity: 1;
+    transform: translateY(0) scale(1.04);
+  }
+  100% {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
-  92% {
+}
+@keyframes alertOut {
+  0% {
     opacity: 1;
     transform: translateY(0) scale(1);
+    filter: blur(0);
   }
   100% {
     opacity: 0;
-    transform: translateY(-10px) scale(0.99);
+    transform: translateY(-10px) scale(0.98);
+    filter: blur(2px);
+  }
+}
+@keyframes shineSweep {
+  from {
+    transform: translateX(-160%);
+  }
+  to {
+    transform: translateX(400%);
+  }
+}
+@keyframes msgIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes amtPop {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.22);
+  }
+  100% {
+    transform: scale(1);
   }
 }
 
@@ -109,17 +219,159 @@
   color: var(--text-1);
   font-size: 19px;
 }
+/* Keyed remount per donation replays the pulse. */
+.goalRaised {
+  display: inline-block;
+  animation: raisedPulse 350ms var(--ease);
+}
+/* Wrapper so the crossing flash (box-shadow) and the rising chip aren't clipped by the track's
+   own overflow:hidden. */
+.goalTrackWrap {
+  position: relative;
+}
 .goalTrack {
+  position: relative;
   height: 14px;
   border-radius: var(--r-pill);
   background: var(--bg-3);
   overflow: hidden;
 }
+/* This widget's single gradient splash (charter: one accent). */
 .goalFill {
+  position: relative;
   height: 100%;
   border-radius: var(--r-pill);
-  background: var(--accent);
-  transition: width 0.6s var(--ease);
+  background: var(--accent-grad);
+  transition: width 800ms var(--ease);
+}
+/* Bright 6px leading-edge cap — the tip stays spottable over bright footage. Only rendered once
+   the fill is wide enough to contain it. */
+.goalFillCap::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.5);
+}
+/* 25/50/75% milestone notches. */
+.goalNotch {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(235, 233, 244, 0.16);
+}
+/* Crossing a notch flashes the whole track; keyed remount per crossing. */
+.goalTrackFlash {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r-pill);
+  pointer-events: none;
+  animation: trackFlash 1.2s var(--ease) forwards;
+}
+/* '+$25' rising off the fill tip; keyed remount per donation. */
+.goalChip {
+  position: absolute;
+  bottom: calc(100% + 2px);
+  transform: translateX(-50%);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-1);
+  white-space: nowrap;
+  pointer-events: none;
+  animation: chipRise 1s var(--ease) forwards;
+}
+/* 3s donor micro-credit under the track. The line is quiet (--text-3), the money reads white. */
+.goalCredit {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-3);
+}
+.goalCredit b {
+  color: var(--text-1);
+  font-weight: 700;
+}
+/* Goal-reached ceremony: the class stays on while >=100%, so each below→above crossing replays
+   the pop + the two staggered ripples exactly once. */
+.goalCeremony {
+  position: relative;
+  animation: goalCardPop 600ms var(--ease);
+}
+.goalCeremony::before,
+.goalCeremony::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r-3);
+  border: 1px solid rgba(192, 183, 250, 0.5);
+  pointer-events: none;
+  animation: ripple 900ms var(--ease) forwards;
+}
+.goalCeremony::after {
+  animation-delay: 200ms;
+}
+.goalCeremony .goalFill {
+  background: var(--accent-grad-hover);
+  animation: fillFlash 600ms var(--ease);
+}
+@keyframes raisedPulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.12);
+  }
+}
+@keyframes trackFlash {
+  from {
+    box-shadow: 0 0 16px rgba(192, 183, 250, 0.35);
+  }
+  to {
+    box-shadow: 0 0 16px rgba(192, 183, 250, 0);
+  }
+}
+@keyframes chipRise {
+  0% {
+    opacity: 1;
+    translate: 0 0;
+  }
+  100% {
+    opacity: 0;
+    translate: 0 -24px;
+  }
+}
+@keyframes goalCardPop {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.03);
+  }
+}
+@keyframes ripple {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.12);
+  }
+}
+@keyframes fillFlash {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  40% {
+    filter: brightness(1.3);
+  }
 }
 
 /* ---- Top donors ---- */
@@ -132,6 +384,9 @@
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
 }
 .topHead {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -139,11 +394,19 @@
   color: var(--text-3);
   margin-bottom: 10px;
 }
+/* Session total — money reads white, tabular. */
+.topSession {
+  margin-left: auto;
+  font-size: 13px;
+  letter-spacing: 0;
+  color: var(--text-1);
+}
 .topEmpty {
   font-size: 14px;
   color: var(--text-3);
 }
 .topRow {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -154,6 +417,7 @@
   border-top: none;
 }
 .topRank {
+  position: relative; /* paints above the .rowFlash overlay */
   width: 20px;
   height: 20px;
   flex: none;
@@ -169,7 +433,15 @@
   background: var(--accent-soft);
   color: var(--accent);
 }
+/* The leader's crown springs in on mount — it mounts exactly when the leader identity changes. */
+.topCrown {
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  animation: crownIn 400ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
 .topName {
+  position: relative;
   flex: 1;
   font-size: 15px;
   font-weight: 600;
@@ -179,13 +451,26 @@
   text-overflow: ellipsis;
 }
 .topAmt {
+  position: relative;
   font-size: 15px;
   font-weight: 700;
   color: var(--text-1);
 }
+@keyframes crownIn {
+  from {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
 
 /* ---- Rank-up (reuses the alert card look) ---- */
 .rank {
+  position: relative;
+  overflow: hidden; /* clips the one-shot shine */
   display: flex;
   align-items: center;
   gap: 16px;
@@ -199,6 +484,20 @@
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
   animation: alertCycle 5s var(--ease) both;
 }
+/* One diagonal shine after the badge lands (no loop). */
+.rank::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 40%;
+  background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  transform: translateX(-160%);
+  animation: shineSweep 900ms var(--ease) 700ms both;
+  pointer-events: none;
+}
+/* The crown visibly lands: 0.4→1.08→1, delayed 120ms behind the card's slide-in. */
 .rankBadge {
   flex: none;
   width: 46px;
@@ -208,17 +507,92 @@
   border-radius: 50%;
   background: var(--accent-soft);
   color: var(--accent);
+  animation: rankBadgeIn 550ms cubic-bezier(0.34, 1.56, 0.64, 1) 120ms both;
+}
+/* Top tier only: the badge ring pulses twice — the visible top of the ladder. */
+.rankBadgeTop {
+  animation:
+    rankBadgeIn 550ms cubic-bezier(0.34, 1.56, 0.64, 1) 120ms both,
+    rankRing 900ms ease-out 720ms 2;
 }
 .rankBadge svg {
   width: 26px;
   height: 26px;
 }
+/* The tier name wipes in as the badge settles. */
 .rankTier {
+  display: inline-block;
   color: var(--accent);
   font-weight: 700;
+  animation: tierWipe 300ms var(--ease) 500ms both;
+}
+/* Top tier: gradient text — lower tiers keep the flat accent. */
+.rankTierTop {
+  background: var(--accent-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+/* "$37 to Legend" — the popup sells the next rank; the dollar number reads white. */
+.rankNext {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--text-3);
+}
+.rankNext b {
+  color: var(--text-1);
+  font-weight: 700;
+}
+@keyframes alertCycle {
+  0% {
+    opacity: 0;
+    transform: translateY(-18px) scale(0.96);
+  }
+  6% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  92% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.99);
+  }
+}
+@keyframes rankBadgeIn {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@keyframes rankRing {
+  from {
+    box-shadow: 0 0 0 0 rgba(192, 183, 250, 0.45);
+  }
+  to {
+    box-shadow: 0 0 0 12px rgba(192, 183, 250, 0);
+  }
+}
+@keyframes tierWipe {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
 }
 
-/* ---- Game widgets (roulette / task): a compact card ---- */
+/* ---- Game widgets (roulette / task / auction): a compact card ---- */
 .game {
   min-width: 260px;
   max-width: 520px;
@@ -245,18 +619,28 @@
   font-weight: 700;
 }
 .gameWinner {
-  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 20px;
   font-weight: 700;
   color: var(--text-1);
 }
+/* CrownMark in accent replaces the old gold trophy emoji (charter: no gold). */
+.winnerMark {
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+}
 .gameRow {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
   margin-top: 10px;
 }
 .gameName {
+  position: relative; /* row content paints above the .rowFlash overlay */
   width: 100px;
   flex: none;
   font-size: 14px;
@@ -267,24 +651,33 @@
   text-overflow: ellipsis;
 }
 .gameBar {
+  position: relative;
   flex: 1;
   height: 8px;
   border-radius: var(--r-pill);
   background: var(--bg-3);
   overflow: hidden;
 }
+/* The 1.5s poll snaps no more — widths glide between readings. */
 .gameBar > span {
   display: block;
   height: 100%;
   border-radius: var(--r-pill);
   background: var(--accent);
+  transition: width 600ms var(--ease);
 }
 .gamePct {
+  position: relative;
   width: 40px;
+  flex: none;
   text-align: right;
   font-size: 14px;
   font-weight: 700;
   color: var(--text-1);
+}
+/* Keyed remount pops the % label of the row that just grew. */
+.pctPop {
+  animation: pctPop 350ms var(--ease);
 }
 .gameText {
   margin-top: 10px;
@@ -297,9 +690,310 @@
   font-size: 13px;
   color: var(--text-3);
 }
+/* Shared row highlight: a grown/overtaking row flashes accent-soft and fades. Declared AFTER the
+   `> span` position rules so its absolute positioning wins. */
+.rowFlash {
+  position: absolute;
+  inset: -2px -6px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  pointer-events: none;
+  animation: flashFade 1.2s var(--ease) forwards;
+}
+@keyframes flashFade {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes pctPop {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
 
-/* ---- Fundraiser: the crown fill + numbers ---- */
+/* ---- Roulette: the real wheel left of the bars ---- */
+.gameRoulette {
+  min-width: 470px;
+}
+.rouSplit {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 12px;
+}
+.rouWheel {
+  flex: none;
+  width: 160px;
+}
+.rouRows {
+  flex: 1;
+  min-width: 0;
+}
+.rouRows .gameRow:first-child {
+  margin-top: 0;
+}
+/* Landing glow: `landed` flips off before each new spin, so the fade replays per verdict. */
+.rouWheelGlow {
+  animation: wheelGlow 1.6s var(--ease) forwards;
+}
+@keyframes wheelGlow {
+  from {
+    filter: drop-shadow(0 0 24px rgba(192, 183, 250, 0.45));
+  }
+  to {
+    filter: drop-shadow(0 0 24px rgba(192, 183, 250, 0));
+  }
+}
+
+/* ---- Task ---- */
+.taskCard {
+  position: relative;
+  overflow: hidden; /* the bottom hairline and the done-shine must respect the corner radius */
+}
+/* First task of the session slides up; a swapped task cross-fades with a small offset. */
+.taskIn {
+  animation: taskIn 400ms var(--ease) both;
+}
+.taskSwap {
+  animation: taskSwap 300ms var(--ease) both;
+}
+/* Active: accent left border + a shimmering gradient hairline along the bottom edge. */
+.taskActive {
+  border-left: 4px solid var(--accent);
+}
+.taskActive::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--grad-top), #f4f2fe, var(--grad-top));
+  background-size: 200% 100%;
+  animation: taskShimmer 1.8s linear infinite;
+  pointer-events: none;
+}
+/* mm:ss countdown — money-grade white tabular; flips to accent under 10 minutes. */
+.taskClock {
+  margin-left: auto;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.taskClock ~ .gamePot {
+  margin-left: 0;
+}
+.taskClockUrgent {
+  color: var(--accent);
+}
+/* 4px elapsed-time bar under the task text; 1s linear matches the ticking clock. */
+.taskBar {
+  margin-top: 10px;
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: var(--bg-3);
+  overflow: hidden;
+}
+.taskBar > span {
+  display: block;
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  transition: width 1s linear;
+}
+.taskPendingNote {
+  display: inline-block;
+  animation: pendingPulse 2.4s ease-in-out infinite;
+}
+/* Completion frame: swap in, hold var(--hold), then a 300ms fade before the card empties. */
+.taskDoneCard {
+  animation:
+    taskSwap 300ms var(--ease) both,
+    taskFadeOut 300ms var(--ease) var(--hold, 3500ms) forwards;
+}
+.taskDoneCard::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 40%;
+  background: linear-gradient(105deg, transparent, rgba(241, 239, 247, 0.14), transparent);
+  transform: translateX(-160%);
+  animation: shineSweep 900ms var(--ease) 400ms both;
+  pointer-events: none;
+}
+.taskDoneLine {
+  margin-top: 10px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+@keyframes taskIn {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes taskSwap {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes taskShimmer {
+  from {
+    background-position: 0% 0;
+  }
+  to {
+    background-position: 200% 0;
+  }
+}
+@keyframes pendingPulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes taskFadeOut {
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+/* ---- Auction ---- */
+.gameAuction {
+  min-width: 360px;
+}
+/* Leader's 2px accent tick — mounts (and so slides in) on every leadership change. */
+.leadTick {
+  position: absolute;
+  left: -10px;
+  top: 3px;
+  bottom: 3px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  animation: tickIn 250ms var(--ease) both;
+}
+/* '+$16 to lead' — the exact top-up that flips the board; the number reads white. */
+.aucGap {
+  position: relative;
+  flex: none;
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.aucGap b {
+  color: var(--text-1);
+  font-weight: 700;
+}
+/* The bell: rows collapse before the stamp. */
+.aucClosing .gameRow {
+  overflow: hidden;
+  animation: rowCollapse 300ms var(--ease) forwards;
+}
+/* SOLD card gets the single shine pass. */
+.aucSoldCard {
+  position: relative;
+  overflow: hidden;
+}
+.aucSoldCard::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 40%;
+  background: linear-gradient(105deg, transparent, rgba(241, 239, 247, 0.14), transparent);
+  transform: translateX(-160%);
+  animation: shineSweep 900ms var(--ease) 500ms both;
+  pointer-events: none;
+}
+.aucStamp {
+  position: relative;
+  display: inline-block;
+  margin-top: 12px;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--text-1);
+  animation: stampIn 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.aucStamp b {
+  font-weight: 800;
+}
+/* One gradient underline sweep beneath the stamp. */
+.aucUnderline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  height: 2px;
+  background: var(--accent-grad);
+  transform-origin: left center;
+  animation: underlineSweep 600ms var(--ease) 200ms both;
+}
+@keyframes rowCollapse {
+  from {
+    max-height: 32px;
+    opacity: 1;
+  }
+  to {
+    max-height: 0;
+    opacity: 0;
+    margin-top: 0;
+  }
+}
+@keyframes stampIn {
+  from {
+    opacity: 0;
+    transform: scale(1.4) rotate(-3deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+@keyframes tickIn {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+@keyframes underlineSweep {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* ---- Fundraiser: the campaign figure + numbers ---- */
 .fund {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 16px;
@@ -308,6 +1002,18 @@
   border: 1px solid var(--line-strong);
   border-radius: var(--r-3);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+.fundFigure {
+  flex: none;
+}
+/* Smooth level rise between 1.5s polls. FundraiserFill's own stylesheet is outside this widget's
+   zone, so the transition hooks onto the inline clip-path style it sets — the one stable handle. */
+.fundFigure [style*="clip-path"] {
+  transition: clip-path 900ms var(--ease);
+}
+/* Funded moment: one brightness flash with a single soft accent glow, then calm. */
+.fundFunded {
+  animation: fundedFlash 900ms var(--ease) both;
 }
 .fundBody {
   display: flex;
@@ -321,10 +1027,52 @@
   letter-spacing: -0.02em;
   color: var(--text-1);
 }
+/* Keyed remount pops the percent on each chip-in. */
+.fundPctPop {
+  animation: fundPop 350ms var(--ease);
+}
 .fundNums {
   font-size: 15px;
   color: var(--text-2);
 }
 .fundNums b {
   color: var(--text-1);
+}
+/* '+$20 anna_k' rising donor chip; keyed remount per chip-in. */
+.fundChip {
+  position: absolute;
+  left: 24px;
+  top: 6px;
+  font-size: 15px;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: chipRise 900ms var(--ease) forwards;
+}
+.fundChip b {
+  color: var(--text-1);
+  font-weight: 700;
+}
+.fundChipName {
+  color: var(--text-3);
+  font-size: 13px;
+}
+@keyframes fundPop {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.15);
+  }
+}
+@keyframes fundedFlash {
+  0% {
+    filter: brightness(1) drop-shadow(0 0 0 rgba(192, 183, 250, 0));
+  }
+  35% {
+    filter: brightness(1.35) drop-shadow(0 0 18px rgba(192, 183, 250, 0.45));
+  }
+  100% {
+    filter: brightness(1) drop-shadow(0 0 0 rgba(192, 183, 250, 0));
+  }
 }

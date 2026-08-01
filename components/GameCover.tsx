@@ -1,17 +1,14 @@
 import type { GameId } from "@/lib/data/games";
 import styles from "./GameCover.module.css";
 
-// Poster art for each mini-game — drawn here as SVG rather than shipped as image files:
-// it stays on the design tokens (one purple accent on a dark field), scales to any card size,
-// and costs no network request. Each game gets the motif its own page already uses, so the
-// catalog and the game read as the same thing.
-//
-// Composition: one big motif centred at y≈185 of a 300×400 poster — large enough to fill the
-// card, high enough that the caption's scrim (bottom ~90px) never covers it.
+// Poster art for each mini-game — SVG, not image files: stays on the design tokens (one purple
+// accent on a dark field), scales to any card size, no network request. Each poster is ONE bold,
+// clean motif centred high on a 300×400 card (caption scrim owns the bottom ~90px), lifted off the
+// field by a single accent glow. Neutrals separate by value, never by hue (design charter §II.1).
 const CX = 150;
-const CY = 185;
+const CY = 168;
 
-// 0° = top, growing clockwise (same convention as RouletteWheel).
+// 0° = top, clockwise (same convention as RouletteWheel).
 function slicePath(startDeg: number, endDeg: number, r: number): string {
   const pt = (deg: number) => {
     const a = ((deg - 90) * Math.PI) / 180;
@@ -23,45 +20,60 @@ function slicePath(startDeg: number, endDeg: number, r: number): string {
   return `M0 0 L${x1.toFixed(1)} ${y1.toFixed(1)} A${r} ${r} 0 ${large} 1 ${x2.toFixed(1)} ${y2.toFixed(1)} Z`;
 }
 
-// Neighbouring dark neutrals — slices separate by value, never by hue.
-const SLICE_FILLS = ["#2C2A3A", "#383450", "#232230", "#413B5E", "#2E2B3E"];
+const NEUTRAL = "#242233"; // the one secondary fill — everything non-accent
+const NEUTRAL_HI = "#2E2C40";
 
 function Defs({ id }: { id: string }) {
   return (
     <defs>
-      <linearGradient id={`bg-${id}`} x1="0" y1="0" x2="0.6" y2="1">
-        <stop offset="0%" stopColor="#252334" />
-        <stop offset="55%" stopColor="#1B1A21" />
-        <stop offset="100%" stopColor="#0F0E14" />
+      {/* deep field, a touch lighter at top so the motif has air above it */}
+      <linearGradient id={`bg-${id}`} x1="0.15" y1="0" x2="0.7" y2="1">
+        <stop offset="0%" stopColor="#232134" />
+        <stop offset="52%" stopColor="#17161F" />
+        <stop offset="100%" stopColor="#0C0B11" />
       </linearGradient>
-      {/* the single accent glow that lifts the motif off the dark field */}
-      <radialGradient id={`glow-${id}`} cx="50%" cy="46%" r="62%">
-        <stop offset="0%" stopColor="var(--grad-top)" stopOpacity="0.42" />
-        <stop offset="60%" stopColor="var(--grad-top)" stopOpacity="0.10" />
-        <stop offset="100%" stopColor="var(--grad-top)" stopOpacity="0" />
+      {/* the single accent glow that lifts the motif off the field */}
+      <radialGradient id={`glow-${id}`} cx="50%" cy="42%" r="58%">
+        <stop offset="0%" stopColor="#8B7CF6" stopOpacity="0.40" />
+        <stop offset="55%" stopColor="#8B7CF6" stopOpacity="0.09" />
+        <stop offset="100%" stopColor="#8B7CF6" stopOpacity="0" />
       </radialGradient>
-      {/* the house accent ramp — same purple→light as the buttons (top-lit) */}
-      <linearGradient id={`ramp-${id}`} x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stopColor="#9A8CFA" />
-        <stop offset="55%" stopColor="var(--grad-top)" />
-        <stop offset="100%" stopColor="#F4F2FE" />
+      {/* the house accent ramp — bright purple, top-lit (same family as the buttons) */}
+      <linearGradient id={`ramp-${id}`} x1="0" y1="0" x2="0.25" y2="1">
+        <stop offset="0%" stopColor="#C3B6FF" />
+        <stop offset="48%" stopColor="#8B7CF6" />
+        <stop offset="100%" stopColor="#6A57D6" />
       </linearGradient>
-      {/* a cool→warm radial for round motifs (wheel lead slice, bullseye) — light core, purple rim */}
-      <radialGradient id={`orb-${id}`} cx="42%" cy="34%" r="80%">
-        <stop offset="0%" stopColor="#EDEAFE" />
-        <stop offset="45%" stopColor="#9A8CFA" />
-        <stop offset="100%" stopColor="#6D5EE0" />
+      {/* light-cored orb for round hero shapes (wheel slice, bullseye) */}
+      <radialGradient id={`orb-${id}`} cx="40%" cy="32%" r="78%">
+        <stop offset="0%" stopColor="#F2EFFF" />
+        <stop offset="42%" stopColor="#A697FB" />
+        <stop offset="100%" stopColor="#6A57D6" />
       </radialGradient>
-      {/* soft drop shadow so the motif sits ABOVE the field, not painted on it */}
-      <filter id={`sh-${id}`} x="-40%" y="-40%" width="180%" height="180%">
-        <feDropShadow dx="0" dy="10" stdDeviation="14" floodColor="#000000" floodOpacity="0.45" />
+      {/* a clean top-left highlight sweeping the accent */}
+      <linearGradient id={`sheen-${id}`} x1="0" y1="0" x2="0.9" y2="1">
+        <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.42" />
+        <stop offset="42%" stopColor="#FFFFFF" stopOpacity="0" />
+      </linearGradient>
+      {/* soft halo behind the accent so it reads as glowing, not painted on */}
+      <filter id={`halo-${id}`} x="-60%" y="-60%" width="220%" height="220%">
+        <feGaussianBlur stdDeviation="12" />
       </filter>
-      {/* a faint sheen sweeping across the accent, top-left → bottom-right */}
-      <linearGradient id={`sheen-${id}`} x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.34" />
-        <stop offset="45%" stopColor="#FFFFFF" stopOpacity="0" />
-      </linearGradient>
+      {/* crisp drop shadow: the motif floats above the field */}
+      <filter id={`sh-${id}`} x="-40%" y="-40%" width="180%" height="180%">
+        <feDropShadow dx="0" dy="9" stdDeviation="13" floodColor="#000000" floodOpacity="0.5" />
+      </filter>
     </defs>
+  );
+}
+
+// A framed field with the accent glow — shared opening for every poster.
+function Field({ id }: { id: string }) {
+  return (
+    <>
+      <rect width="300" height="400" fill={`url(#bg-${id})`} />
+      <rect width="300" height="400" fill={`url(#glow-${id})`} />
+    </>
   );
 }
 
@@ -74,153 +86,164 @@ export function GameCover({ id }: { id: GameId }) {
   };
 
   if (id === "roulette") {
-    // Uneven slices — the wheel's whole point is that shares differ. The largest carries the accent
-    // orb; the rest stay neutral. A rim ring + accent halo and a layered hub give it real depth.
-    const slices = [
-      [0, 104],
-      [104, 172],
-      [172, 236],
-      [236, 292],
-      [292, 338],
-      [338, 360],
-    ] as const;
-    const R = 112;
+    // A clean six-segment wheel, rotated so a segment centres under the pointer. One segment carries
+    // the accent (the pick); the rest are one calm neutral, split by thin light dividers.
+    const R = 116;
+    const segs = [0, 1, 2, 3, 4, 5];
     return (
       <svg {...common}>
         <Defs id="rl" />
-        <rect width="300" height="400" fill="url(#bg-rl)" />
-        <rect width="300" height="400" fill="url(#glow-rl)" />
-        <g transform={`translate(${CX} ${CY})`} filter="url(#sh-rl)">
-          {slices.map(([a, b], i) => (
+        <Field id="rl" />
+        {/* halo under the wheel */}
+        <circle cx={CX} cy={CY} r={R * 0.7} fill="#8B7CF6" opacity="0.16" filter="url(#halo-rl)" />
+        <g transform={`translate(${CX} ${CY}) rotate(-30)`} filter="url(#sh-rl)">
+          {/* disc body */}
+          <circle r={R} fill={NEUTRAL} />
+          {segs.map((i) => (
             <path
               key={i}
-              d={slicePath(a, b, R)}
-              // the biggest share carries the accent — the rest stay neutral
-              fill={i === 0 ? "url(#orb-rl)" : SLICE_FILLS[i % SLICE_FILLS.length]}
-              stroke="#0F0E14"
-              strokeWidth="2.5"
+              d={slicePath(i * 60, i * 60 + 60, R)}
+              fill={i === 0 ? "url(#orb-rl)" : i % 2 === 0 ? NEUTRAL : NEUTRAL_HI}
+              stroke="#0E0D13"
+              strokeWidth="1.5"
             />
           ))}
-          {/* rim: hairline + soft accent halo just outside it */}
-          <circle r={R + 3} fill="none" stroke="rgba(235,233,244,.22)" strokeWidth="2.5" />
-          <circle r={R + 6} fill="none" stroke="var(--grad-top)" strokeWidth="2" opacity="0.30" />
-          {/* axle: layered hub */}
-          <circle r="17" fill="#141318" stroke="rgba(235,233,244,.22)" strokeWidth="2.5" />
-          <circle r="6" fill="var(--grad-top)" />
+          {/* sheen on the accent segment */}
+          <path d={slicePath(4, 56, R)} fill="url(#sheen-rl)" opacity="0.8" />
+          {/* rim: hairline + faint accent ring */}
+          <circle r={R} fill="none" stroke="rgba(235,233,244,.26)" strokeWidth="2" />
+          <circle r={R + 4} fill="none" stroke="#8B7CF6" strokeWidth="2" opacity="0.35" />
+          {/* hub */}
+          <circle r="19" fill="#100F16" stroke="rgba(235,233,244,.28)" strokeWidth="2" />
+          <circle r="7" fill="url(#orb-rl)" />
         </g>
-        {/* pointer — white, with a dark seam so it survives landing on the light slice */}
-        <path d={`M${CX} 84 L${CX - 12} 48 Q${CX} 42 ${CX + 12} 48 Z`} fill="#0F0E14" opacity="0.85" />
-        <path d={`M${CX} 79 L${CX - 9} 50 Q${CX} 45 ${CX + 9} 50 Z`} fill="var(--text-1)" />
+        {/* pointer — white, dark seam so it survives on the light segment */}
+        <path d={`M${CX} ${CY - R + 2} L${CX - 13} ${CY - R - 26} Q${CX} ${CY - R - 33} ${CX + 13} ${CY - R - 26} Z`} fill="#0E0D13" opacity="0.85" />
+        <path d={`M${CX} ${CY - R - 2} L${CX - 10} ${CY - R - 24} Q${CX} ${CY - R - 29} ${CX + 10} ${CY - R - 24} Z`} fill="#F1EFF7" />
       </svg>
     );
   }
 
   if (id === "fundraiser") {
-    // The crown vessel from the fundraiser page, filling bottom-up toward the goal line. A soft
-    // accent pool under it and a sheen on the fill make it a glowing trophy, not a flat icon.
-    const crown = "M6 41 L6 14 L16 24 L24 8 L32 24 L42 14 L42 41 Z";
-    const top = 8;
-    const bottom = 41;
-    const h = (bottom - top) * 0.64;
-    const S = 5;
+    // A big crown vessel filling bottom-up toward the goal line — a glowing trophy, not a flat icon.
+    const crown = "M4 44 L4 13 L17 25 L26 5 L35 25 L48 13 L48 44 Z";
+    const top = 5;
+    const bottom = 44;
+    const fill = (bottom - top) * 0.66; // filled height
+    const S = 4.3;
+    const ox = CX - (26 * S); // centre the 52-wide crown
+    const oy = CY - 24 * S;
+    const goalY = oy + top * S;
     return (
       <svg {...common}>
         <Defs id="fr" />
-        <rect width="300" height="400" fill="url(#bg-fr)" />
-        <rect width="300" height="400" fill="url(#glow-fr)" />
-        {/* the goal: a dashed line at the crown's tips, where the fill is headed */}
-        <line x1="46" y1={62.5 + top * S} x2="254" y2={62.5 + top * S} stroke="rgba(235,233,244,.28)" strokeWidth="2" strokeDasharray="6 7" />
-        <g transform={`translate(30 62.5) scale(${S})`} filter="url(#sh-fr)">
+        <Field id="fr" />
+        {/* accent pool the trophy sits in */}
+        <ellipse cx={CX} cy={oy + bottom * S + 10} rx="96" ry="20" fill="#8B7CF6" opacity="0.20" filter="url(#halo-fr)" />
+        {/* goal line at the crown's tips */}
+        <line x1={CX - 118} y1={goalY} x2={CX + 118} y2={goalY} stroke="rgba(235,233,244,.3)" strokeWidth="2" strokeDasharray="7 7" />
+        <text x={CX + 122} y={goalY + 4} fill="rgba(235,233,244,.4)" fontSize="13" fontFamily="system-ui, sans-serif" fontWeight="600">
+          goal
+        </text>
+        <g transform={`translate(${ox} ${oy}) scale(${S})`} filter="url(#sh-fr)">
           <clipPath id="crown-clip-fr">
             <path d={crown} />
           </clipPath>
-          {/* unfilled part reads as an empty vessel, not blank card */}
-          <path d={crown} fill="#181722" />
-          <rect x="0" y={bottom - h} width="48" height={h} clipPath="url(#crown-clip-fr)" fill="url(#ramp-fr)" />
-          {/* sheen across the filled portion */}
-          <rect x="0" y={bottom - h} width="26" height={h} clipPath="url(#crown-clip-fr)" fill="url(#sheen-fr)" />
-          <path d={crown} fill="none" stroke="rgba(235,233,244,.55)" strokeWidth="1.1" strokeLinejoin="round" />
+          {/* empty vessel */}
+          <path d={crown} fill="#191824" />
+          {/* fill */}
+          <rect x="0" y={bottom - fill} width="52" height={fill} clipPath="url(#crown-clip-fr)" fill="url(#ramp-fr)" />
+          {/* waterline highlight */}
+          <rect x="0" y={bottom - fill} width="52" height="1.4" clipPath="url(#crown-clip-fr)" fill="#EDEAFE" opacity="0.7" />
+          {/* sheen on the filled part */}
+          <rect x="0" y={bottom - fill} width="24" height={fill} clipPath="url(#crown-clip-fr)" fill="url(#sheen-fr)" />
+          {/* outline */}
+          <path d={crown} fill="none" stroke="rgba(235,233,244,.6)" strokeWidth="1.1" strokeLinejoin="round" />
         </g>
       </svg>
     );
   }
 
   if (id === "auction") {
-    // The lot board mid-bidding: bars climbing left to right, the leader carrying the accent —
-    // and the gavel's strike marks it as an auction, not a chart.
+    // Lot bars climbing left→right, the leader carrying the accent, a gavel mid-strike above it.
     const bars = [
-      { x: 46, h: 70 },
-      { x: 96, h: 104 },
-      { x: 146, h: 142 },
-      { x: 196, h: 192 },
+      { x: 44, h: 66 },
+      { x: 96, h: 100 },
+      { x: 148, h: 148 },
+      { x: 200, h: 200 },
     ];
-    const base = 292;
+    const base = 272;
+    const W = 40;
     return (
       <svg {...common}>
         <Defs id="au" />
-        <rect width="300" height="400" fill="url(#bg-au)" />
-        <rect width="300" height="400" fill="url(#glow-au)" />
-        {/* base line the lots stand on */}
-        <line x1="34" y1={base + 1} x2="266" y2={base + 1} stroke="rgba(235,233,244,.14)" strokeWidth="2" />
+        <Field id="au" />
+        {/* halo behind the leader */}
+        <circle cx={bars[3].x + W / 2} cy={base - bars[3].h + 40} r="60" fill="#8B7CF6" opacity="0.2" filter="url(#halo-au)" />
+        {/* baseline */}
+        <line x1="30" y1={base + 1} x2="270" y2={base + 1} stroke="rgba(235,233,244,.16)" strokeWidth="2" />
         <g filter="url(#sh-au)">
           {bars.map((b, i) => {
             const lead = i === bars.length - 1;
             return (
               <g key={i}>
-                <rect
-                  x={b.x}
-                  y={base - b.h}
-                  width="36"
-                  height={b.h}
-                  rx="8"
-                  // only the leading lot carries the accent — the rest stay neutral
-                  fill={lead ? "url(#ramp-au)" : SLICE_FILLS[i % SLICE_FILLS.length]}
-                />
-                {lead && <rect x={b.x} y={base - b.h} width="16" height={b.h} rx="8" fill="url(#sheen-au)" />}
+                <rect x={b.x} y={base - b.h} width={W} height={b.h} rx="9" fill={lead ? "url(#ramp-au)" : NEUTRAL} />
+                {lead && <rect x={b.x} y={base - b.h} width="17" height={b.h} rx="9" fill="url(#sheen-au)" />}
               </g>
             );
           })}
         </g>
-        {/* the gavel, mid-strike above the leader */}
-        <g transform="translate(214 58) rotate(35)" stroke="var(--text-1)" strokeWidth="10" strokeLinecap="round" fill="none" filter="url(#sh-au)">
-          <path d="M0 22 L46 22" />
-          <path d="M9 2 L9 42" />
-          <path d="M24 30 L24 78" strokeWidth="7" opacity="0.7" />
+        {/* gavel, mid-strike above the leading lot */}
+        <g transform={`translate(${bars[3].x + W / 2 - 6} ${base - bars[3].h - 30}) rotate(38)`} filter="url(#sh-au)">
+          {/* head */}
+          <rect x="-30" y="-13" width="60" height="26" rx="8" fill="#EFEDF7" />
+          <rect x="-30" y="-13" width="60" height="11" rx="8" fill="#FFFFFF" opacity="0.5" />
+          {/* bands */}
+          <rect x="-19" y="-13" width="4" height="26" fill="#C7C2D8" opacity="0.8" />
+          <rect x="15" y="-13" width="4" height="26" fill="#C7C2D8" opacity="0.8" />
+          {/* handle */}
+          <rect x="-5" y="12" width="10" height="52" rx="5" fill="#DDD9EA" />
+        </g>
+        {/* strike sparks on the leader's top */}
+        <g stroke="#C3B6FF" strokeWidth="3" strokeLinecap="round" opacity="0.9">
+          <path d={`M${bars[3].x - 4} ${base - bars[3].h - 6} l-9 -8`} />
+          <path d={`M${bars[3].x + W + 4} ${base - bars[3].h - 6} l9 -8`} />
+          <path d={`M${bars[3].x + W / 2} ${base - bars[3].h - 12} l0 -11`} />
         </g>
       </svg>
     );
   }
 
-  // task — a target: the dare a viewer sets, and the money riding on hitting it.
-  // Concentric rings step up in value toward a glowing accent bullseye; a slim dart, already
-  // landed, carries the stakes. Rings use a subtle gradient and a soft halo for depth.
+  // task — a target with a landed dart: the dare a viewer sets, and the money riding on the hit.
   const RINGS = [
-    { r: 112, w: 20, fill: "#332F49" },
-    { r: 84, w: 20, fill: "#433D63" },
-    { r: 56, w: 20, fill: "#564E82" },
+    { r: 116, w: 22, fill: NEUTRAL },
+    { r: 88, w: 22, fill: NEUTRAL_HI },
+    { r: 60, w: 22, fill: "#3A3552" },
   ];
   return (
     <svg {...common}>
       <Defs id="tk" />
-      <rect width="300" height="400" fill="url(#bg-tk)" />
-      <rect width="300" height="400" fill="url(#glow-tk)" />
+      <Field id="tk" />
+      <circle cx={CX} cy={CY} r="70" fill="#8B7CF6" opacity="0.18" filter="url(#halo-tk)" />
       <g transform={`translate(${CX} ${CY})`} filter="url(#sh-tk)">
         {RINGS.map((ring) => (
           <circle key={ring.r} r={ring.r} fill="none" stroke={ring.fill} strokeWidth={ring.w} />
         ))}
-        {/* the bullseye — a glowing accent orb, the money riding on the hit */}
-        <circle r="30" fill="url(#orb-tk)" />
-        <circle r="30" fill="url(#sheen-tk)" />
+        {/* faint separators between rings */}
+        {RINGS.map((ring) => (
+          <circle key={`s${ring.r}`} r={ring.r + ring.w / 2} fill="none" stroke="#0E0D13" strokeWidth="1.5" />
+        ))}
+        {/* bullseye — a glowing accent orb */}
+        <circle r="33" fill="url(#orb-tk)" />
+        <circle r="33" fill="url(#sheen-tk)" />
+        <circle r="33" fill="none" stroke="rgba(255,255,255,.35)" strokeWidth="1.5" />
       </g>
-      {/* the dart, already landed just off-centre in the bullseye */}
-      <g transform={`translate(${CX + 20} ${CY + 20}) rotate(-45)`} filter="url(#sh-tk)">
-        {/* tip */}
-        <path d="M0 0 L-6 13 L6 13 Z" fill="var(--text-1)" />
-        {/* shaft */}
-        <rect x="-2" y="13" width="4" height="70" rx="2" fill="#E8E5F2" />
-        {/* flights */}
-        <path d="M-2 74 L-13 88 L-2 90 Z" fill="var(--text-1)" opacity="0.9" />
-        <path d="M2 74 L13 88 L2 90 Z" fill="var(--text-2)" opacity="0.85" />
+      {/* the dart, landed just off-centre */}
+      <g transform={`translate(${CX + 26} ${CY + 26}) rotate(-42)`} filter="url(#sh-tk)">
+        <path d="M0 0 L-6 14 L6 14 Z" fill="#F1EFF7" />
+        <rect x="-2.5" y="14" width="5" height="74" rx="2.5" fill="#E8E5F2" />
+        <path d="M-2.5 78 L-15 94 L-2.5 96 Z" fill="#F1EFF7" opacity="0.95" />
+        <path d="M2.5 78 L15 94 L2.5 96 Z" fill="#A6A2B4" opacity="0.9" />
       </g>
     </svg>
   );

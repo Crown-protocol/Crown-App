@@ -1,0 +1,173 @@
+/* The Sessions tab. Two things live here: the starter — a real form where a run of the game gets
+   its own rules before anyone's money is on it — and the list of what's currently live.
+
+   The starter is deliberately quiet: full-size controls (the same ones Settings uses), groups
+   separated by a hairline rather than by a caption, and no explanatory chrome beyond one line at
+   the top and one sentence at the bottom. Design rule this follows (front.md §II.2): no small type,
+   no extra detail, one short hint per section — a wall of 11px captions over 11px fields reads as
+   clutter, not as care. */
+
+/* Padding stays the global .card's — a module class can't reliably outrank it (same specificity,
+   load order decides), so the extra air comes from the gaps, not from fighting over padding. */
+.starter {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.head h2 {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.head p {
+  font-size: 16px;
+  color: var(--text-2);
+  max-width: 56ch;
+}
+
+/* Knob groups. No captions — the hairline between them is the whole grouping signal, and the
+   labels say what each field is. */
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.group + .group {
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 18px 20px;
+  align-items: end;
+}
+
+/* Everything in this form is body text. A knob you are about to bind money to is not a footnote,
+   so nothing here is set smaller than the value it controls. */
+.starter :global(.field) label,
+.blockLabel {
+  font-size: 16px;
+  color: var(--text-2);
+}
+.blockLabel {
+  display: block;
+  margin-bottom: 12px;
+}
+.starter :global(.toggle) {
+  font-size: 16px;
+}
+
+.toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.toggleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.hint {
+  font-size: 15px;
+  color: var(--text-3);
+}
+
+/* The deal, in one sentence. The shared RulesSummary carries an 11px "IN PRACTICE" caption, which
+   is right when it closes a page of rule cards and has to name itself — here it would be the only
+   scrap of tiny type left in the form, and the sentence is plainly the conclusion of what's above
+   it. So: no caption, and the sentence is set larger than the labels, not smaller. */
+.practice {
+  margin: 0;
+  padding: 18px 20px;
+  background: var(--bg-2);
+  border-radius: var(--r-3);
+  color: var(--text-1);
+  font-size: 17px;
+  line-height: 1.55;
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+.reset {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: color var(--dur-1) var(--ease);
+}
+.reset:hover {
+  color: var(--text-1);
+}
+.err {
+  font-size: 15px;
+  color: var(--error);
+  flex-basis: 100%;
+}
+
+/* ---- the live list ---- */
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.list h2 {
+  font-size: 18px;
+  font-weight: 600;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+}
+.rowMain {
+  min-width: 0;
+  flex: 1;
+}
+.rowName {
+  font-weight: 700;
+  font-size: 17px;
+}
+.rowSub {
+  font-size: 15px;
+  color: var(--text-3);
+}
+.rowTag {
+  margin-left: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.rowActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 700px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

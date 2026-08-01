@@ -79,6 +79,20 @@
     margin-top: 8px;
     padding: 14px;
   }
+  /* the round line (clock · pot) wraps instead of colliding on the narrowest phones */
+  .roundHead {
+    flex-wrap: wrap;
+    gap: 2px 12px;
+  }
+  /* comfortable tap targets, and the icon row wraps rather than pushing the page sideways */
+  .socials {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .socials a {
+    width: 44px;
+    height: 44px;
+  }
   .footer {
     margin-top: 18px;
   }
@@ -156,7 +170,21 @@
   color: var(--text-1);
 }
 
+/* The round deals itself out instead of appearing in one block — page.tsx sets each row's delay
+   from its position in the list. */
+@keyframes sugRise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 .suggestion {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 72px 36px;
   grid-template-areas:
@@ -167,14 +195,42 @@
   row-gap: 6px;
   padding: 10px 12px;
   border-radius: var(--r-2);
-  background: var(--bg-0);
+  /* a faint top sheen, so the row has a light source instead of reading as a flat swatch */
+  background: linear-gradient(180deg, rgba(235, 233, 244, 0.035), rgba(235, 233, 244, 0) 60%), var(--bg-0);
   border: 1px solid var(--line);
   cursor: pointer;
   text-align: left;
-  transition: border-color var(--dur-1) var(--ease);
+  /* `backwards`, not `both`: a forwards fill would pin transform/opacity to the last frame and
+     swallow both the hover scale and the dimmed-out state below. */
+  animation: sugRise 0.3s var(--ease) backwards;
+  transition:
+    transform var(--dur-2) var(--ease),
+    border-color var(--dur-2) var(--ease),
+    box-shadow var(--dur-2) var(--ease);
 }
-.suggestion:hover {
-  border-color: var(--line-strong);
+/* This row IS the button that backs a suggestion, so it answers the pointer properly: a touch
+   bigger, a touch brighter, floating above the round. Hover-capable pointers only — on a phone a
+   tap would otherwise leave the row stuck enlarged. */
+@media (hover: hover) {
+  .suggestion:hover:not(:disabled) {
+    transform: scale(1.022);
+    border-color: var(--line-strong);
+    box-shadow: 0 12px 26px -16px rgba(0, 0, 0, 0.8);
+    z-index: 1; /* the growing row overlaps its neighbours, never slides under them */
+  }
+}
+/* pressed = pushed in, like every other button here */
+.suggestion:active:not(:disabled) {
+  transform: scale(0.995);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .suggestion {
+    animation: none;
+  }
+  .suggestion:hover:not(:disabled) {
+    transform: none;
+  }
 }
 .sTitle {
   grid-area: title;
@@ -237,6 +293,10 @@
   display: flex;
   gap: 10px;
 }
+/* let the title field shrink so the genre select can't push it (and the card) past the screen */
+.suggestFields > :global(.field) {
+  min-width: 0;
+}
 .genreSelect {
   height: 48px;
   padding: 0 12px;
@@ -252,7 +312,7 @@
 }
 .customAmount {
   width: 110px;
-  height: 40px;
+  height: 44px;
   padding: 0 12px;
   border-radius: var(--r-pill);
   border: 1px solid var(--line);
@@ -310,4 +370,30 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+}
+
+/* Knocked out of an elimination round: dimmed and struck through, still readable so viewers can see
+   what already went — but visibly out of the running and not clickable. */
+.sOut {
+  opacity: 0.42;
+  cursor: default;
+  /* enters straight to its dimmed weight — a shared fade to full opacity would flash it bright
+     and then snap back the moment the animation ends */
+  animation-name: sugRiseOut;
+}
+@keyframes sugRiseOut {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 0.42;
+    transform: none;
+  }
+}
+.sOut .sTitle {
+  text-decoration: line-through;
+}
+.sOut .sFill {
+  background: var(--line-strong);
 }

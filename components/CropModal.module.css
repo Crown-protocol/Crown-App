@@ -74,6 +74,12 @@
   pointer-events: none;
   user-select: none;
   -webkit-user-drag: none;
+  /* The image is sized to its natural pixels (inline width/height) and positioned by a transform;
+     the crop math on confirm assumes exactly that. The global `img { max-width: 100% }` (a mobile
+     overflow guard) would clamp it to the 300px viewport, so what you SELECT and what gets CUT
+     diverge. Opt this one image out. */
+  max-width: none;
+  max-height: none;
 }
 .mask {
   position: absolute;
@@ -166,4 +172,35 @@
 .shapeOn:hover {
   background: var(--accent);
   color: #0f0e14;
+}
+
+/* ---- phones: comfortable touch targets, notch/home-indicator safe areas, and the shape picker
+   lifted clear of the confirm button so the two never collide on a narrow screen (they overlap
+   at the bottom edge below ~380px otherwise). Viewport stays 300px — its size is baked into the
+   crop math (VP), so do not resize it. ---- */
+@media (max-width: 640px) {
+  .header {
+    padding-top: max(0.75rem, env(safe-area-inset-top));
+  }
+  .close {
+    padding: 0.75rem;
+  }
+  .reupload {
+    padding: 0.6rem 0.7rem;
+  }
+  .zoomBtn {
+    width: 44px;
+    height: 44px;
+  }
+  .shapeBtn {
+    width: 44px;
+    height: 44px;
+  }
+  .shapes {
+    bottom: calc(6.5rem + env(safe-area-inset-bottom));
+  }
+  .confirm {
+    right: 1.25rem;
+    bottom: calc(1.5rem + env(safe-area-inset-bottom));
+  }
 }

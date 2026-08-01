@@ -1,0 +1,257 @@
+/* Docs — a plain-language guide to how Crown works. Two columns: a sticky table of contents and a
+   readable prose column. Same tokens as the rest of the site (one purple accent, no gold). */
+.wrap {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+.main {
+  flex: 1;
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 56px 24px 96px;
+}
+
+.head {
+  max-width: 720px;
+  margin-bottom: 40px;
+}
+.head h1 {
+  font-size: clamp(30px, 5vw, 44px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text-1);
+  margin: 0;
+}
+.head p {
+  margin: 12px 0 0;
+  font-size: 18px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 56px;
+  align-items: start;
+}
+@media (max-width: 860px) {
+  .layout {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+}
+
+/* sticky table of contents */
+.toc {
+  position: sticky;
+  top: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tocHead {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 10px;
+}
+.toc a {
+  font-size: 14px;
+  color: var(--text-2);
+  text-decoration: none;
+  padding: 5px 0;
+  transition: color var(--dur-1) var(--ease);
+}
+.toc a:hover {
+  color: var(--text-1);
+}
+@media (max-width: 860px) {
+  .toc {
+    position: static;
+    flex-flow: row wrap;
+    gap: 6px 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  .tocHead {
+    width: 100%;
+    margin-bottom: 2px;
+  }
+}
+
+/* prose column */
+.content {
+  max-width: 720px;
+}
+.content section {
+  scroll-margin-top: 24px;
+}
+.content section + section {
+  margin-top: 44px;
+}
+.content h2 {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-1);
+  margin: 0 0 4px;
+}
+.content h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-1);
+  margin: 22px 0 0;
+}
+.content p {
+  margin: 12px 0 0;
+  font-size: 16px;
+  line-height: 1.62;
+  color: var(--text-2);
+}
+.content a {
+  color: var(--accent);
+  overflow-wrap: anywhere;
+}
+.content ul {
+  margin: 12px 0 0;
+  padding-left: 20px;
+}
+.content li {
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--text-2);
+  margin-top: 7px;
+}
+.content b,
+.content strong {
+  color: var(--text-1);
+  font-weight: 600;
+}
+
+/* per-game detail block: header + rules + settings */
+.gameBlock {
+  margin-top: 32px;
+  padding-top: 28px;
+  border-top: 1px solid var(--line);
+  scroll-margin-top: 24px;
+}
+.gameHead {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.gameIcon {
+  color: var(--accent);
+  display: inline-flex;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+}
+.gameName {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--text-1);
+  text-decoration: none;
+  letter-spacing: -0.01em;
+}
+.gameName:hover {
+  color: var(--accent);
+}
+.gameTagline {
+  margin: 3px 0 0 !important;
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+  color: var(--text-3) !important;
+}
+
+/* rules — a numbered list */
+.ruleList {
+  margin: 12px 0 0;
+  padding-left: 22px;
+  list-style: decimal;
+}
+.ruleList li {
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--text-2);
+  margin-top: 9px;
+  padding-left: 4px;
+}
+
+/* settings — a definition list, value chip on the right of each term */
+.settings {
+  margin: 12px 0 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  overflow: hidden;
+  background: var(--bg-1);
+}
+.setting {
+  padding: 13px 16px;
+}
+.setting + .setting {
+  border-top: 1px solid var(--line);
+}
+.setting dt {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.settingVal {
+  flex: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 2px 10px;
+  border-radius: var(--r-pill);
+  white-space: nowrap;
+}
+.setting dd {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.settingsNote {
+  font-size: 12.5px !important;
+  color: var(--text-3) !important;
+  margin-top: 10px !important;
+}
+
+/* small callout for the non-custodial note */
+.callout {
+  margin-top: 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-2);
+  background: var(--bg-1);
+  padding: 16px 18px;
+}
+.callout p {
+  margin: 0;
+}
+.callout p + p {
+  margin-top: 8px;
+}
+
+.note {
+  margin-top: 48px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+  color: var(--text-3);
+}

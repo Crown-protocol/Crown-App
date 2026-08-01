@@ -1,19 +1,22 @@
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { TopNav } from "@/components/TopNav";
 import { GameIcon } from "@/components/icons";
-import { PlayMode } from "@/components/games/PlayMode";
-import { RuleLine } from "@/components/games/RuleLine";
+import { GameDemo } from "@/components/games/GameDemo";
 import { getGame } from "@/lib/data/games";
 import styles from "./page.module.css";
 
-// One template for every mini-game: hero → what it is → the rules (with the streamer's knobs marked
-// inline) → what you control → CTA, with the game's demo playing in a sticky panel alongside.
-// Everything a game needs is data in games.ts — this file never special-cases an id.
-// Only games with hasPage (games.ts) resolve here — see components/GamesList.tsx.
+// One template for every mini-game: hero → how it works (3 plain steps) → what you set (the real
+// knobs + their defaults) → CTA, with the game's own interactive demo in a sticky rail alongside.
+// Everything a game contributes is data in games.ts (steps/knobs); the demo is per-game (GameDemo).
 export default function GameDetailPage({ params }: { params: { id: string } }) {
   const game = getGame(params.id);
 
-  if (!game || !game.hasPage) {
+  // A made-up id (/games/nope) is a genuine 404 — real status, not a 200 stand-in page.
+  if (!game) notFound();
+
+  // A real game that simply has no detail page yet keeps its friendly "still being built" screen.
+  if (!game.hasPage) {
     return (
       <main className={styles.wrap}>
         <TopNav active="games" />
@@ -39,64 +42,44 @@ export default function GameDetailPage({ params }: { params: { id: string } }) {
           <span className={styles.icon} aria-hidden>
             <GameIcon id={game.id} width={30} height={30} />
           </span>
-          <div className={styles.heroCopy}>
-            <div className={styles.head}>
-              <h1>{game.title}</h1>
-            </div>
-            <p className={styles.tagline}>{game.tagline}</p>
-          </div>
+          <h1>{game.title}</h1>
         </div>
+        <p className={styles.tagline}>{game.tagline}</p>
 
         <div className={styles.cols}>
-          <div className={styles.left}>
-            {game.pitch && game.pitch.length > 0 && (
-              <section className={styles.pitch}>
-                {game.pitch.map((p) => (
-                  <div className={styles.pitchCard} key={p.label}>
-                    <div className={styles.pitchLabel}>{p.label}</div>
-                    <div className={styles.pitchValue}>{p.value}</div>
-                  </div>
-                ))}
-              </section>
-            )}
-
-            {game.rules && game.rules.length > 0 && (
+          <div>
+            {game.steps && game.steps.length > 0 && (
               <section className={styles.section}>
-                <div className={styles.rulesHead}>
-                  <h2 className={styles.h2}>The rules</h2>
-                  <span className={styles.legend}>
-                    <span className={styles.legendChip} aria-hidden />
-                    you set this
-                  </span>
-                </div>
-                <ol className={styles.rules}>
-                  {game.rules.map((r, i) => (
-                    <li className={styles.rule} key={i}>
-                      <span className={styles.ruleNum}>{i + 1}</span>
-                      <span className={styles.ruleText}>
-                        <RuleLine text={r} />
-                      </span>
-                    </li>
-                  ))}
-                </ol>
-              </section>
-            )}
-
-            {game.controls && game.controls.length > 0 && (
-              <section className={styles.section}>
-                <h2 className={styles.h2}>What you control</h2>
-                <div className={styles.controls}>
-                  {game.controls.map((c) => (
-                    <div className={styles.control} key={c.label}>
-                      <div className={styles.controlTop}>
-                        <span className={styles.controlLabel}>{c.label}</span>
-                        <span className={styles.controlValue}>{c.example}</span>
+                <p className={styles.eyebrow}>How it works</p>
+                <div className={styles.steps}>
+                  {game.steps.map((s, i) => (
+                    <div className={styles.step} key={i}>
+                      <span className={styles.stepNum}>{i + 1}</span>
+                      <div>
+                        <div className={styles.stepLead}>{s.lead}</div>
+                        <div className={styles.stepSub}>{s.sub}</div>
                       </div>
-                      <p className={styles.controlHint}>{c.hint}</p>
                     </div>
                   ))}
                 </div>
-                <p className={styles.note}>Example values — every one of them is yours to change.</p>
+              </section>
+            )}
+
+            {game.knobs && game.knobs.length > 0 && (
+              <section className={styles.section}>
+                <p className={styles.eyebrow}>What you set</p>
+                <div className={styles.knobs}>
+                  {game.knobs.map((k) => (
+                    <div className={styles.knob} key={k.label}>
+                      <div className={styles.knobMain}>
+                        <div className={styles.knobLabel}>{k.label}</div>
+                        <div className={styles.knobHint}>{k.hint}</div>
+                      </div>
+                      <span className={styles.knobVal}>{k.value}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className={styles.knobsNote}>Default values — every one is yours to change in your space.</p>
               </section>
             )}
 
@@ -105,13 +88,13 @@ export default function GameDetailPage({ params }: { params: { id: string } }) {
                 Set it up on my page
               </Link>
               <span className="footnote">
-                {live ? "Enable it from your cabinet." : "Not live yet — you'll be able to enable it here once it ships."}
+                {live ? "Enable it from your space." : "Not live yet — you'll be able to enable it here once it ships."}
               </span>
             </div>
           </div>
 
-          <aside className={styles.right}>
-            <PlayMode id={game.id} title={game.title} />
+          <aside className={styles.rail}>
+            <GameDemo id={game.id} />
           </aside>
         </div>
       </div>

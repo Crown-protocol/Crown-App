@@ -3,8 +3,101 @@
   flex-direction: column;
   gap: 18px;
 }
+.helpRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
 .help {
   font-size: 14px;
+  color: var(--text-3);
+}
+/* The "?" that reveals the OBS how-to. Same round affordance as the wallet modal's help. */
+.helpQ {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--text-3);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease), background var(--dur-1) var(--ease);
+}
+.helpQ:hover,
+.helpQ[aria-expanded="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* The step-by-step OBS guide, revealed on demand (kept behind the "?" so the tab stays clean). */
+.guide {
+  margin-top: 2px;
+  padding: 18px 20px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  animation: guideIn 0.18s var(--ease) both;
+}
+@keyframes guideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.guideHead {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.guideHead span {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+.guideSteps {
+  margin: 12px 0 0;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.guideSteps li::marker {
+  color: var(--accent);
+  font-weight: 700;
+}
+.guideSteps b,
+.guideTip b,
+.guideNote b {
+  color: var(--text-1);
+  font-weight: 700;
+}
+.guideTip {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: var(--r-2);
+  background: var(--accent-soft);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.guideNote {
+  margin-top: 10px;
+  font-size: 12.5px;
+  line-height: 1.5;
   color: var(--text-3);
 }
 .help b {
@@ -22,6 +115,12 @@
 @media (max-width: 860px) {
   .body {
     grid-template-columns: 1fr;
+  }
+  /* Once the rail sits above the grid it must scroll with it — a sticky filter block would
+     otherwise hover over the widgets. */
+  .sidebar {
+    position: static;
+    top: auto;
   }
 }
 
@@ -106,10 +205,16 @@
   color: var(--text-2);
 }
 
+/* min 340px (was 280) — the live previews are the hero now and need the extra width to stay
+   legible; min(340px, 100%) keeps a phone-width column from overflowing */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 18px;
+  /* Compact cards, ~3 per row: narrower min so more fit and each square is denser. */
+  grid-template-columns: repeat(auto-fill, minmax(min(290px, 100%), 1fr));
+  gap: 14px;
+  /* Each card keeps its own content height instead of stretching to the tallest in its row — so
+     opening a QR grows only that card, not its row-mates (default `stretch` grew all three). */
+  align-items: start;
 }
 
 .card {
@@ -121,132 +226,34 @@
   overflow: hidden;
 }
 
-/* ---- mini preview (static hint of the overlay) ---- */
-.mini {
+/* ---- live preview: the real overlay, scaled from its 1920×1080 OBS canvas into a 16:9 box ---- */
+.preview {
   position: relative;
-  height: 130px;
-  display: flex;
-  padding: 14px;
-  background: radial-gradient(120% 120% at 50% 0%, var(--bg-2), var(--bg-0));
-  border-bottom: 1px solid var(--line);
-}
-.miniCenterTop {
-  justify-content: center;
-  align-items: flex-start;
-}
-.miniCenterBottom {
-  justify-content: center;
-  align-items: flex-end;
-}
-.miniLeft {
-  justify-content: flex-start;
-  align-items: flex-start;
-}
-.miniLine {
-  display: block;
-  height: 6px;
-  width: 70px;
-  border-radius: var(--r-pill);
-  background: rgba(235, 233, 244, 0.28);
-}
-.miniLineShort {
-  width: 42px;
-  background: rgba(235, 233, 244, 0.16);
-}
-
-.miniAlert {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 9px 12px;
-  background: rgba(20, 19, 24, 0.95);
-  border: 1px solid var(--line-strong);
-  border-left: 3px solid rgba(235, 233, 244, 0.35);
-  border-radius: var(--r-2);
-}
-.miniAvatar {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: var(--bg-3);
-  flex: none;
-}
-.miniAlertBody {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.miniGoal {
-  width: 100%;
-  padding: 10px 12px;
-  background: rgba(20, 19, 24, 0.95);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-2);
-}
-.miniGoalTop {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-.miniGoalNum {
-  width: 34px;
-  height: 6px;
-  border-radius: var(--r-pill);
-  background: rgba(235, 233, 244, 0.28);
-}
-.miniTrack {
-  height: 8px;
-  border-radius: var(--r-pill);
-  background: var(--bg-3);
+  aspect-ratio: 16 / 9;
   overflow: hidden;
-}
-.miniFill {
-  display: block;
-  height: 100%;
-  width: 62%;
-  border-radius: var(--r-pill);
-  background: var(--accent);
-}
-
-.miniTop {
-  min-width: 130px;
-  padding: 9px 11px;
-  background: rgba(20, 19, 24, 0.95);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-2);
-}
-.miniTopHead {
-  display: block;
-  width: 46px;
-  height: 5px;
-  border-radius: var(--r-pill);
-  background: rgba(235, 233, 244, 0.2);
-  margin-bottom: 8px;
-}
-.miniTopRow {
+  border-bottom: 1px solid var(--line);
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 4px 0;
+  justify-content: center;
+  padding: 12px;
+  /* dark gameplay-ish backdrop so the overlay card reads like it will over live footage */
+  background:
+    radial-gradient(80% 60% at 72% 18%, rgba(46, 45, 57, 0.5), transparent 62%),
+    radial-gradient(110% 80% at 18% 88%, rgba(40, 38, 50, 0.55), transparent 58%),
+    linear-gradient(180deg, #17161c 0%, #100f14 100%);
 }
-.miniRank {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--bg-3);
-  flex: none;
-}
-.miniTopRow:first-of-type .miniRank {
-  background: var(--bg-3);
-}
-.miniAmt {
-  width: 22px;
-  height: 6px;
-  border-radius: var(--r-pill);
-  background: rgba(235, 233, 244, 0.28);
-  margin-left: auto;
+/* The populated landing mockup, in its own OBS-style card (semi-transparent so the gameplay
+   backdrop reads through, exactly like the real overlay). Sized to fill the preview at a readable
+   scale — the widget IS the whole preview. */
+.previewCard {
+  width: 100%;
+  max-width: 260px;
+  padding: 12px 14px;
+  background: rgba(20, 19, 24, 0.92);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-2);
+  box-shadow: var(--shadow-float);
+  text-align: center;
 }
 
 /* ---- card body ---- */
@@ -254,17 +261,17 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 16px;
+  gap: 7px;
+  padding: 12px 13px 13px;
 }
 .cardTitle {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--text-1);
 }
 .cardDesc {
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: 12.5px;
+  line-height: 1.4;
   color: var(--text-3);
 }
 .urlRow {
@@ -283,6 +290,109 @@
   text-overflow: ellipsis;
   display: block;
 }
+/* ---- per-widget URL params (only the ones the overlay route parses) ---- */
+.paramRow {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+.paramField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+.paramLabel {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.paramInput {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  background: var(--bg-0);
+  border: 1px solid var(--line);
+  border-radius: var(--r-1);
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: 13px;
+}
+.paramInput::placeholder {
+  color: var(--text-3);
+}
+.paramInput:focus {
+  outline: none;
+  border-color: var(--line-strong);
+  box-shadow: var(--ring-accent);
+}
+
+/* ---- OBS size chip + demo-data toggle ---- */
+.metaRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.sizeChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--bg-0);
+  color: var(--text-3);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.sizeChip:hover {
+  border-color: var(--line-strong);
+  color: var(--text-2);
+}
+/* the dimensions are numbers — white 700 tabular, per the charter */
+.sizeChip b {
+  color: var(--text-1);
+  font-weight: 700;
+}
+.demoToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.demoToggle:hover {
+  border-color: var(--line-strong);
+  color: var(--text-2);
+}
+.demoToggle input {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.demoOn {
+  border-color: var(--line-strong);
+  color: var(--text-1);
+}
+
 .actions {
   display: flex;
   gap: 8px;
@@ -290,10 +400,10 @@
   margin-top: 4px;
 }
 .actions :global(.btn-outline) {
-  height: 36px;
-  padding: 0 12px;
+  height: 32px;
+  padding: 0 10px;
   gap: 6px;
-  font-size: 13px;
+  font-size: 12.5px;
 }
 .qrPop {
   margin-top: 8px;
@@ -314,4 +424,23 @@
   place-items: center;
   color: var(--text-3);
   font-size: 13px;
+}
+
+/* Phone: comfortable touch targets — the category rows, the "?" help button, the OBS/demo chips
+   and the per-card action buttons are all a bit small for a fingertip on desktop density. */
+@media (max-width: 600px) {
+  .catRow {
+    height: 44px;
+  }
+  .helpQ {
+    width: 40px;
+    height: 40px;
+  }
+  .sizeChip,
+  .demoToggle {
+    height: 32px;
+  }
+  .actions :global(.btn-outline) {
+    height: 40px;
+  }
 }

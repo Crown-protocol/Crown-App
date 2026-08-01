@@ -58,6 +58,13 @@
 .card.alwaysShow .caption {
   opacity: 1;
 }
+/* On touch there is no hover to reveal the caption — a poster with no title/description reads as
+   broken. Keep it visible on touch/phones (max-width covers a resized desktop check too). */
+@media (hover: none), (max-width: 640px) {
+  .caption {
+    opacity: 1;
+  }
+}
 
 .capHead {
   display: flex;

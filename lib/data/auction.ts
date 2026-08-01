@@ -10,6 +10,7 @@
 
 import type { AuctionDraft, PageWidget, Profile } from "./types";
 import { isFreshScope } from "./freshScope";
+import { sendOp } from "./gameSync";
 import { DEFAULT_DESIGN } from "./pagebuilder";
 
 export const AU_HEADLINE_MAX = 140;
@@ -64,6 +65,8 @@ export interface AuctionLot {
   state: LotState;
   entries: LotEntry[]; // the placer's own escrow first, then top-ups
   when: string;
+  chainLot?: string; // hex lot_id (sha256(auction_id ‖ text_hash)) when born on-chain
+  escrow?: string; // base58 escrow address of the placer's own entry
 }
 
 export function lotSum(lot: AuctionLot): number {
@@ -133,7 +136,7 @@ function writeLots(handle: string, list: AuctionLot[]) {
 }
 
 // A viewer places a new lot from the public page — lands private-to-the-streamer.
-export function addLot(handle: string, input: { from: string; amount: number; text: string }): AuctionLot[] {
+export function addLot(handle: string, input: { from: string; amount: number; text: string; chainLot?: string; escrow?: string }): AuctionLot[] {
   const from = input.from.trim() || "Anonymous";
   const lot: AuctionLot = {
     id: `l-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -142,20 +145,24 @@ export function addLot(handle: string, input: { from: string; amount: number; te
     state: "pending",
     entries: [{ name: from, amount: input.amount, when: "just now" }],
     when: "just now",
+    ...(input.chainLot ? { chainLot: input.chainLot } : {}),
+    ...(input.escrow ? { escrow: input.escrow } : {}),
   };
   const next = [lot, ...readLots(handle)];
   writeLots(handle, next);
+  // Share it: append commutes with other viewers' lots; `seed` initialises the
+  // server copy with the demo rows on the very first real action in a scope.
+  sendOp(handle, "crown-auction-lots", { type: "append", item: lot as unknown as { id: string } & Record<string, unknown>, seed: next });
   return next;
 }
 
 // Anyone joins an accepted lot with their own escrow — the lot climbs the board.
 export function topUpLot(handle: string, id: string, input: { name: string; amount: number }): AuctionLot[] {
-  const next = readLots(handle).map((l) =>
-    l.id === id && l.state === "accepted"
-      ? { ...l, entries: [...l.entries, { name: input.name.trim() || "Anonymous", amount: input.amount, when: "just now" }] }
-      : l
-  );
+  const entry = { name: input.name.trim() || "Anonymous", amount: input.amount, when: "just now" };
+  const next = readLots(handle).map((l) => (l.id === id && l.state === "accepted" ? { ...l, entries: [...l.entries, entry] } : l));
   writeLots(handle, next);
+  // Share it as an ENTRY append on that one lot — concurrent top-ups both count.
+  sendOp(handle, "crown-auction-lots", { type: "entry", id, entry });
   return next;
 }
 
@@ -163,6 +170,8 @@ export function topUpLot(handle: string, id: string, input: { name: string; amou
 export function setLotState(handle: string, id: string, state: LotState): AuctionLot[] {
   const next = readLots(handle).map((l) => (l.id === id ? { ...l, state } : l));
   writeLots(handle, next);
+  // The streamer is the book's single authority — accept/return overwrites.
+  sendOp(handle, "crown-auction-lots", { type: "replace", value: next });
   return next;
 }
 
@@ -195,6 +204,7 @@ export type AuctionState = "bidding" | "performing" | "voting" | "settled" | "re
 export interface AuctionMeta {
   startedAt: number; // epoch ms — the bidding clock's zero
   state: AuctionState;
+  chainAuction?: string; // hex auction id once created on the auction canister
   minBid?: number; // the opening price, fixed at creation (spec: КМ's handle, set once, forever)
   winnerId: string | null; // set at the final
   votes: { done: number; notDone: number; voters: string[] }; // weights in $ of reputation (mock: 1 voter = their stated weight)
@@ -216,18 +226,29 @@ export function readAuctionMeta(handle: string): AuctionMeta | null {
   }
 }
 
-function writeMeta(handle: string, meta: AuctionMeta) {
+function writeMeta(handle: string, meta: AuctionMeta, share = true) {
   try {
     localStorage.setItem(`${META_KEY}:${handle}`, JSON.stringify(meta));
   } catch {}
+  // Authoritative writes (init/bell/votes/new auction) overwrite the shared copy. ensureAuction's
+  // first-sight default passes share=false — a fresh viewer's local clock must never reset the
+  // bidding for everyone; the next poll adopts the real shared meta if one exists.
+  if (share) sendOp(handle, "crown-auction-meta", { type: "replace", value: meta });
 }
 
 export function ensureAuction(handle: string): AuctionMeta {
   const meta = readAuctionMeta(handle);
   if (meta) return meta;
   const fresh = FRESH_META();
-  writeMeta(handle, fresh);
+  writeMeta(handle, fresh, false);
   return fresh;
+}
+
+// Attach the canister-born auction id (kept on the synced meta, so every browser sees it).
+export function setAuctionChain(handle: string, chainAuction: string): AuctionMeta {
+  const next: AuctionMeta = { ...ensureAuction(handle), chainAuction };
+  writeMeta(handle, next);
+  return next;
 }
 
 // Open an auction with its price floor — called when the session is created. The floor is
@@ -299,6 +320,7 @@ export function newAuction(handle: string): AuctionMeta {
   try {
     localStorage.removeItem(`${LOTS_KEY}:${handle}`);
   } catch {}
+  sendOp(handle, "crown-auction-lots", { type: "replace", value: [] });
   const fresh = FRESH_META();
   writeMeta(handle, fresh);
   return fresh;

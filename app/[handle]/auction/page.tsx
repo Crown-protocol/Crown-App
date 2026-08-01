@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useProfile } from "@/lib/data/ProfileProvider";
+import { usePublicProfile } from "@/lib/data/usePublicProfile";
 import { useCrown } from "@/lib/data/DataProvider";
 import { Logo } from "@/components/Logo";
 import { ReputationDelta } from "@/components/ReputationDelta";
@@ -10,7 +10,7 @@ import { DonateTopBar } from "@/components/DonateTopBar";
 import { Mono } from "@/components/Mono";
 import { SocialIcon, SOCIAL_LABEL } from "@/components/icons";
 import { normalizeSocialLink } from "@/lib/data/social-links";
-import { DEFAULT_AUCTION_CONFIG } from "@/components/AuctionGameSettings";
+import { auctionRules } from "@/lib/data/gameConfig";
 import {
   withAuctionDefaults,
   readLots,
@@ -23,9 +23,14 @@ import {
   type AuctionLot,
   type AuctionMeta,
 } from "@/lib/data/auction";
-import { backgroundStyle } from "@/lib/data/pagebuilder";
-import { resolvePublicSession } from "@/lib/data/gameSessions";
+import { backgroundStyle, backgroundInk } from "@/lib/data/pagebuilder";
+import { useIsWide } from "@/lib/data/useIsWide";
+import { resolvePublicSession, pullSessions } from "@/lib/data/gameSessions";
+import { useGameSync } from "@/lib/data/gameSync";
+import { useGameChain } from "@/lib/chain/useGameChain";
+import { auctionPlaceEntry, auctionVote } from "@/lib/chain/gameFlows";
 import { GameTabs } from "@/components/games/GameTabs";
+import { usd } from "@/lib/money";
 import styles from "../roulette/page.module.css";
 import au from "./auction.module.css";
 
@@ -44,18 +49,33 @@ function fmtLeft(ms: number): string {
 // leading lot + $1 — outbid it or watch. Conditions stay private to the streamer until accepted;
 // when the bell rings the top lot wins and everyone else is refunded.
 export default function AuctionPage({ params }: { params: { handle: string } }) {
-  const { ready, profile } = useProfile();
-  const { getReputation } = useCrown();
   const handle = decodeURIComponent(params.handle).replace(/^@/, "");
+  // Resolve the content maker by handle from the Crown DB, so a viewer sees this page in any
+  // browser — not just the owner whose localStorage holds the profile.
+  const { profile: maker, status } = usePublicProfile(handle);
+  const { getReputation } = useCrown();
+  const isWide = useIsWide();
 
   // Session resolution: ?s=<id> picks one; a single live session resolves itself; several → the
   // picker; none → the gate. No sessions ever = legacy passthrough on the bare handle.
   const [pub, setPub] = useState<ReturnType<typeof resolvePublicSession> | null>(null);
   useEffect(() => {
     const sParam = new URLSearchParams(window.location.search).get("s");
-    setPub(resolvePublicSession(handle, "auction", sParam));
+    // Pull the shared session registry FIRST — a viewer's browser has never seen the streamer's
+    // sessions, and without it ?s=<id> resolves to nothing and falls back to the legacy scope.
+    let dead = false;
+    void pullSessions(handle, "auction").then(() => {
+      if (!dead) setPub(resolvePublicSession(handle, "auction", sParam));
+    });
+    return () => {
+      dead = true;
+    };
   }, [handle]);
   const scope = pub?.scope ?? null;
+
+  // Shared game state: pulls the server copy into localStorage; the 1.5s interval below
+  // already re-reads lots+meta from there, so other viewers' bids just show up.
+  useGameSync(scope);
 
   const [lots, setLots] = useState<AuctionLot[]>([]);
   const [meta, setMeta] = useState<AuctionMeta | null>(null);
@@ -64,8 +84,11 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
   const [name, setName] = useState("");
   const [send, setSend] = useState<SendState>("idle");
   const [inc, setInc] = useState("1"); // the outbid step — +$1 by default, any +$x they like
+  const [openBid, setOpenBid] = useState(""); // the opening bid on an empty board — blank = the maker's floor
   const [voted, setVoted] = useState(false);
   const [view, setView] = useState<"bid" | "board">("bid"); // the top toggle: place a bid vs. the standing lots
+  const [chainErr, setChainErr] = useState("");
+  const chain = useGameChain("auction");
 
   useEffect(() => {
     if (!scope) return;
@@ -81,9 +104,9 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
     return () => clearInterval(t);
   }, [scope]);
 
-  if (!ready) return <main className="page" />;
+  if (status === "loading") return <main className="page" />;
 
-  const mine = profile && profile.handle === handle ? profile : null;
+  const mine = maker;
   const auDraft = mine ? withAuctionDefaults(mine) : null;
 
   if (!mine || !auDraft) {
@@ -100,7 +123,9 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
     );
   }
 
-  const cfg = mine.auctionConfig ?? DEFAULT_AUCTION_CONFIG;
+  // The rules THIS session was opened with — a bidder must see the step and the windows the run
+  // is actually running under, not the maker's current profile defaults.
+  const cfg = auctionRules(mine, scope);
   if (!pub) return <main className="page" />;
   if (!pub.scope) {
     return (
@@ -120,7 +145,7 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
             </>
           ) : (
             <>
-              <p>Nothing is live. Start a session in the cabinet — Auction → Sessions — and this page switches on.</p>
+              <p>Nothing is live. Start a session in your space — Auction → Sessions — and this page switches on.</p>
               <Link className="btn" href={`/@${handle}`}>
                 To the content maker&apos;s page
               </Link>
@@ -143,14 +168,48 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
   // The pricing model: beat the leader by your own step (+$1 by default), or open at the price
   // the streamer fixed when this auction was created (legacy auctions fall back to settings).
   const minBid = meta.minBid ?? cfg.minBid;
-  const step = Math.max(1, Math.round(Number(inc)) || 1);
-  const bid = board.length ? topSum + step : minBid;
+  // The maker sets the SMALLEST allowed outbid step; a viewer may step up by more, never less.
+  const minStep = Math.max(1, Math.round(cfg.minIncrement ?? 1));
+  const step = Math.max(minStep, Math.round(Number(inc)) || minStep);
+  // Opening an empty board works the same way: the maker's price is a FLOOR, not a fixed ticket —
+  // a viewer who wants the lead from the first move can open above it. Blank = open at the floor.
+  const opening = Math.max(minBid, Math.round(Number(openBid)) || minBid);
+  const bid = board.length ? topSum + step : opening;
   const canSend = send === "idle" && bidding && text.trim().length > 0;
   const rep = getReputation(handle);
 
-  function submitLot() {
+  async function submitLot() {
     if (!canSend) return;
+    setChainErr("");
     setSend("sending");
+    // Chain path: the auction lives on its canister — escrow birth against the (auction, text)
+    // resolver, register_entry, then the synced book mirrors it.
+    if (chain.live && meta?.chainAuction) {
+      if (!chain.wallet) {
+        setChainErr("Connect your wallet — lots here are real escrow.");
+        setSend("idle");
+        return;
+      }
+      const res = await auctionPlaceEntry(chain.wallet, {
+        auctionHex: meta.chainAuction,
+        recipient: mine!.address,
+        dollars: bid,
+        deadlineHours: cfg.biddingHours + cfg.performHours + 168, // escrow must outlive the bell + delivery + the vote
+        text,
+        handle,
+      });
+      if (!res.ok) {
+        setChainErr(res.error);
+        setSend("idle");
+        return;
+      }
+      setLots(addLot(scope!, { from: name, amount: bid, text, chainLot: res.lotHex, escrow: res.escrow }));
+      setText("");
+      setSend("done");
+      setTimeout(() => setSend("idle"), 2400);
+      return;
+    }
+    // Mock path — the demo simulation, exactly as before.
     setTimeout(() => {
       setLots(addLot(scope!, { from: name, amount: bid, text }));
       setText("");
@@ -161,13 +220,15 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
 
   function vote(choice: "done" | "not_done") {
     // Mock: any visitor votes once with a flat weight — the real gate is reputation with
-    // this streamer, checked by the canister (game-spec §10).
+    // this streamer, checked by the canister (game-spec §10). When the canister is live the
+    // same click also casts the REAL ledger-weighted vote (dual-write; canister enforces).
+    if (chain.live && chain.wallet && meta?.chainAuction) void auctionVote(chain.wallet, meta.chainAuction, choice);
     setMeta(castVote(scope!, { name: name || `guest-${Date.now() % 10000}`, weight: 10, choice }));
     setVoted(true);
   }
 
   return (
-    <main className={styles.page} style={backgroundStyle(auDraft.design)}>
+    <main className={`${styles.page}${backgroundInk(auDraft.design) === "light" ? " on-light" : ""}`} style={backgroundStyle(auDraft.design, isWide)}>
       <DonateTopBar />
       <div className={styles.col}>
         <Link className={styles.who} href={`/@${handle}`} style={{ textDecoration: "none", color: "inherit" }} title={`@${mine.handle} — open profile`}>
@@ -205,7 +266,12 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
                 <div className={au.empty}>No lots on the board yet — yours would open it.</div>
               ) : (
                 board.map((l, i) => (
-                  <div key={l.id} className={`${au.lot}${i === 0 ? " " + au.lotLead : ""}`}>
+                  // The board resolves top-down: each rank enters a beat after the one above it.
+                  <div
+                    key={l.id}
+                    className={`${au.lot}${i === 0 ? " " + au.lotLead : ""}`}
+                    style={{ animationDelay: `${Math.min(i, 7) * 45}ms` }}
+                  >
                     <span className={au.rank}>#{i + 1}</span>
                     <span className={au.lotBody}>
                       <span className={au.lotText}>{l.text}</span>
@@ -214,7 +280,7 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
                       </span>
                     </span>
                     <span style={{ textAlign: "right" }}>
-                      <span className={`${au.lotSum} num`}>{lotSum(l)} $</span>
+                      <span className={`${au.lotSum} num`}>{usd(lotSum(l))}</span>
                       {winner?.id === l.id && (
                         <div>
                           <span className={`pill ${state === "settled" ? "ok" : "wait"}`} style={{ marginTop: 6 }}>
@@ -235,7 +301,7 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
             {/* The money on the line, stated big — the leading bid IS the headline number here. */}
             <div className={au.leadBar}>
               <div className={au.leadNum}>
-                <span className={`${au.leadAmt} num`}>{topSum} $</span>
+                <span className={`${au.leadAmt} num`}>{usd(topSum)}</span>
                 <span className={au.leadLabel}>top bid</span>
               </div>
               <div className={au.leadClock}>
@@ -264,24 +330,62 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
                   />
                 </div>
                 <ReputationDelta rep={rep} gain={bid} tiers={mine.tiers} />
-                <div style={{ display: "flex", gap: 10 }}>
-                  {board.length > 0 && (
+                <div className={au.bidRow} style={{ display: "flex", gap: 10 }}>
+                  {board.length > 0 ? (
                     <div className="field" style={{ flex: "0 0 104px" }} title="Your outbid step">
                       <div className="affix has-pre">
                         <span className="affix-pre">+$</span>
                         <input
                           type="number"
-                          min={1}
+                          min={minStep}
                           aria-label="Outbid step"
+                          placeholder={String(minStep)}
                           value={inc}
                           onChange={(e) => setInc(e.target.value)}
-                          style={{ paddingLeft: 38 }}
+                          onBlur={() => {
+                            // Snap a below-minimum entry up to the maker's floor, so the shown step
+                            // and the actual bid always agree.
+                            const n = Math.round(Number(inc));
+                            if (!n || n < minStep) setInc(String(minStep));
+                          }}
+                          style={{ paddingLeft: 38, height: 56 }}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    /* Empty board: the same knob, but on the whole bid instead of a step — the
+                       maker's price is the floor, and opening above it is allowed. */
+                    <div
+                      className="field"
+                      style={{ flex: "0 0 116px" }}
+                      title={`Your opening bid — ${mine.name}'s floor is ${usd(minBid)}`}
+                    >
+                      <div className="affix has-pre">
+                        <span className="affix-pre">$</span>
+                        <input
+                          type="number"
+                          min={minBid}
+                          aria-label="Opening bid"
+                          placeholder={String(minBid)}
+                          value={openBid}
+                          onChange={(e) => setOpenBid(e.target.value)}
+                          onBlur={() => {
+                            // Snap a below-floor entry up, so the shown amount and the actual bid agree.
+                            const n = Math.round(Number(openBid));
+                            if (!n || n < minBid) setOpenBid(String(minBid));
+                          }}
+                          style={{ height: 56 }}
                         />
                       </div>
                     </div>
                   )}
-                  <button type="button" className="btn" style={{ flex: 1 }} disabled={!canSend} onClick={submitLot}>
-                    {send === "sending" ? "Placing…" : send === "done" ? "In escrow ✓" : board.length ? `Outbid · ${bid} $` : `Open the bidding · ${bid} $`}
+                  {chainErr && (
+                  <div className="footnote" style={{ color: "var(--error)" }}>
+                    {chainErr}
+                  </div>
+                )}
+                <button type="button" className="btn" style={{ flex: 1 }} disabled={!canSend} onClick={() => void submitLot()}>
+                    {send === "sending" ? "Placing…" : send === "done" ? "In escrow ✓" : board.length ? `Outbid · ${usd(bid)}` : `Open the bidding · ${usd(bid)}`}
                   </button>
                 </div>
                 {send === "done" && (
@@ -293,7 +397,7 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
             {state === "performing" && winner && (
               <div className={styles.roundCard}>
                 <div className={styles.roundFoot}>
-                  Sold for <b className="num">{lotSum(winner)} $</b> — {mine.name} is delivering: “{winner.text}”. Reputation
+                  Sold for <b className="num">{usd(lotSum(winner))}</b> — {mine.name} is delivering: “{winner.text}”. Reputation
                   holders vote here once they hit Done.
                 </div>
               </div>
@@ -325,7 +429,7 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
               <div className={styles.roundCard}>
                 <div className={styles.roundFoot} style={{ textAlign: "center" }}>
                   {state === "settled" && winner
-                    ? `Delivered and confirmed — ${lotSum(winner)} $ went to ${mine.name}, backers earned reputation.`
+                    ? `Delivered and confirmed — ${usd(lotSum(winner))} went to ${mine.name}, backers earned reputation.`
                     : state === "refunded"
                       ? "The vote didn't confirm delivery — everyone was refunded in full."
                       : "The auction was cancelled — every lot was refunded in full."}
@@ -335,6 +439,14 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
           </div>
           )}
         </div>
+
+        {bidding && !auDraft.widgets.find((w) => w.kind === "donate")?.enabled && (
+          <div className={`card ${styles.roundCard}`}>
+            <div className="footnote" style={{ textAlign: "center" }}>
+              {mine.name} isn&apos;t taking bids right now.
+            </div>
+          </div>
+        )}
 
         {auDraft.widgets.find((w) => w.kind === "socials")?.enabled && (
           <div className={styles.socials}>

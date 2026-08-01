@@ -3,10 +3,10 @@
 import { useRef, useState, type ReactNode } from "react";
 
 export function money(n: number) {
-  return `${Math.round(n).toLocaleString("en-US")} $`;
+  return `$${Math.round(n).toLocaleString("en-US")}`;
 }
 export function shortMoney(n: number) {
-  return n >= 1000 ? `${Math.round(n / 1000)}k $` : `${n} $`;
+  return n >= 1000 ? `$${Math.round(n / 1000)}k` : `$${n}`;
 }
 
 // A handful of evenly spaced labels from a longer series — what a chart's x-axis shows
