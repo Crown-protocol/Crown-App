@@ -12,6 +12,16 @@ export function isDemoAddress(address: string): boolean {
   return !address || address === DEMO_ADDRESS;
 }
 
+// The platform owner's wallet. The one, and only, address that may reach the ops/admin panel from
+// the UI. EXACT base58 compare (case-sensitive) — same rule as walletOwns. This is a UX gate, not
+// a security boundary: the real /admin authorisation is enforced server-side; hiding the entry just
+// keeps every other visitor from ever seeing it.
+export const OWNER_ADDRESS = "CiGwBL4C16a2LU17jXcVAeuioFLyPeF9BdNWQxqQV8Ue" as const;
+
+export function isOwnerAddress(address: string | null | undefined): boolean {
+  return !!address && address === OWNER_ADDRESS;
+}
+
 // Does this wallet own this page? EXACT compare — base58 is case-sensitive
 // (lowercasing corrupts Solana addresses; that was fine for hex, fatal here).
 export function walletOwns(walletAddress: string | undefined, pageAddress: string): boolean {
@@ -26,6 +36,16 @@ export function walletOwns(walletAddress: string | undefined, pageAddress: strin
 
 const KEY = "crown-demo-session";
 
+// The `storage` event only fires in OTHER tabs, never the one that made the change — so a component
+// in this same tab (e.g. the header) wouldn't hear a start/end. Dispatch our own event too, so any
+// in-tab listener (useSignedIn) re-reads immediately when you sign in or log out.
+export const DEMO_SESSION_EVENT = "crown-demo-session-change";
+function announceDemoChange() {
+  try {
+    window.dispatchEvent(new Event(DEMO_SESSION_EVENT));
+  } catch {}
+}
+
 export function readDemoSession(): boolean {
   try {
     return localStorage.getItem(KEY) === "1";
@@ -38,10 +58,12 @@ export function startDemoSession() {
   try {
     localStorage.setItem(KEY, "1");
   } catch {}
+  announceDemoChange();
 }
 
 export function endDemoSession() {
   try {
     localStorage.removeItem(KEY);
   } catch {}
+  announceDemoChange();
 }

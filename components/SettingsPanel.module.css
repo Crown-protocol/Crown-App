@@ -1,0 +1,305 @@
+/* Settings — one calm column of cards, each with a title + ONE quiet line. The page-identity
+   card leads (who you are + your live link), money follows, the destructive stuff sits last. */
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.title {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.sub {
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+/* ── Your page: avatar + name + the live link with its actions ── */
+.identity {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.avatarWrap {
+  position: relative;
+  flex: none;
+}
+/* The avatar IS the button: click to pick a new photo; a quiet camera overlay appears on hover
+   so it reads as editable without a caption. */
+.avatar {
+  width: 72px;
+  height: 72px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--bg-2) center/cover no-repeat;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text-2);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: border-color var(--dur-1) var(--ease);
+}
+.avatar:hover {
+  border-color: var(--line-strong);
+}
+.avatarHint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(12, 11, 16, 0.55);
+  color: var(--text-1);
+  opacity: 0;
+  transition: opacity var(--dur-1) var(--ease);
+}
+.avatar:hover .avatarHint,
+.avatar:focus-visible .avatarHint {
+  opacity: 1;
+}
+/* remove: a tiny ✕ badge on the avatar's corner, only when there is a photo to remove */
+.avatarX {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-1);
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+.avatarX:hover {
+  color: var(--text-1);
+  border-color: var(--text-3);
+}
+.identityFields {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* the live link row: the address IS the artifact — copy, open, QR sit right on it */
+.linkRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--r-2);
+  background: var(--bg-0);
+  border: 1px solid var(--line);
+  min-width: 0;
+}
+.linkText {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.linkBtn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: var(--r-1);
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+.linkBtn:hover {
+  color: var(--text-1);
+  border-color: var(--line-strong);
+}
+
+.qrBox {
+  align-self: flex-start;
+  padding: 12px;
+  border-radius: var(--r-2);
+  background: var(--bg-0);
+  border: 1px solid var(--line);
+}
+
+/* ── Payouts ── */
+.addrRow {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+.addrRow input {
+  flex: 1;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+.addrState {
+  font-size: 13px;
+}
+.addrOk {
+  color: var(--text-3);
+}
+.addrBad {
+  color: var(--error);
+}
+.loginRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-3);
+  min-width: 0;
+}
+.loginAddr {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inlineAct {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  flex: none;
+}
+.inlineAct:hover {
+  text-decoration: underline;
+}
+
+/* ── bottom: session + danger in one calm card ── */
+.rowSplit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.danger {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--error);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.danger:hover {
+  text-decoration: underline;
+}
+.divider {
+  height: 1px;
+  background: var(--line);
+  margin: 2px 0;
+}
+
+/* ── the confirm bar: appears only when something differs from the saved page ── */
+/* Quiet floating confirm bar, bottom-centre of the screen — matches the game builder's. */
+.saveBar {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 8px 7px 16px;
+  border-radius: var(--r-pill);
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-float);
+  animation: saveBarIn 0.25s var(--ease) both;
+}
+@keyframes saveBarIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+/* Compact, neutral confirm — no gradient/accent. */
+.saveConfirm {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line-strong);
+  background: var(--bg-2);
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease);
+}
+.saveConfirm:hover:not(:disabled) {
+  border-color: rgba(235, 233, 244, 0.32);
+}
+.saveConfirm:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.saveBarNote {
+  font-size: 13.5px;
+  color: var(--text-2);
+}
+.discard {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--text-3);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.discard:hover {
+  color: var(--text-1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .saveBar {
+    animation: none;
+  }
+}

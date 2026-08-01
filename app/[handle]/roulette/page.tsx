@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useProfile } from "@/lib/data/ProfileProvider";
+import { usePublicProfile } from "@/lib/data/usePublicProfile";
 import { useCrown } from "@/lib/data/DataProvider";
 import { Logo } from "@/components/Logo";
 import { ReputationDelta } from "@/components/ReputationDelta";
@@ -10,14 +10,18 @@ import { DonateTopBar } from "@/components/DonateTopBar";
 import { Mono } from "@/components/Mono";
 import { SocialIcon, SOCIAL_LABEL } from "@/components/icons";
 import { normalizeSocialLink } from "@/lib/data/social-links";
+import { usd } from "@/lib/money";
 import { DEFAULT_ROULETTE_CONFIG } from "@/components/RouletteGameSettings";
+import { topicById, DEFAULT_TOPIC_ID } from "@/lib/data/roulette-topics";
 import { RouletteWheel } from "@/components/RouletteWheel";
-import { withRouletteDefaults, addSuggestion, readRound, ensureRound, readRoundMeta, setRoundWinner, newRound, type RoundMeta } from "@/lib/data/roulette";
-import { GAME_GENRES, pickWeighted, type GameGenre, type RouletteSuggestion } from "@/lib/data/roulette-mock";
-import { backgroundStyle } from "@/lib/data/pagebuilder";
+import { withRouletteDefaults, addSuggestion, readRound, ensureRound, readRoundMeta, setRoundWinner, newRound, survivors, eliminationWeights, eliminate, type RoundMeta } from "@/lib/data/roulette";
+import { GAME_GENRES, pickWeighted, roundRand, type GameGenre, type RouletteSuggestion } from "@/lib/data/roulette-mock";
+import { backgroundStyle, backgroundInk } from "@/lib/data/pagebuilder";
+import { useIsWide } from "@/lib/data/useIsWide";
 import { tierInfo } from "@/lib/level";
-import { resolvePublicSession } from "@/lib/data/gameSessions";
+import { resolvePublicSession, pullSessions } from "@/lib/data/gameSessions";
 import { GameTabs } from "@/components/games/GameTabs";
+import { useGameSync } from "@/lib/data/gameSync";
 import styles from "./page.module.css";
 
 type SendState = "idle" | "sending" | "done";
@@ -30,12 +34,16 @@ function fmtLeft(ms: number): string {
 
 // The public roulette page — what a viewer opens from the streamer's link or QR: the open
 // round with live odds, and the form to suggest (or back) a game by donating toward it.
-// Until crown-app/api exists this resolves only the local profile, and suggestions accumulate
-// in localStorage on top of the seeded round — same mock backend as the rest of the app.
+// The content maker is resolved by handle from the Crown DB (usePublicProfile), so the page
+// renders for any visitor; suggestions still accumulate in localStorage on top of the seeded
+// round — same mock backend as the rest of the app until the indexer owns it.
 export default function RoulettePage({ params }: { params: { handle: string } }) {
-  const { ready, profile } = useProfile();
-  const { getReputation } = useCrown();
   const handle = decodeURIComponent(params.handle).replace(/^@/, "");
+  // Resolve the content maker by handle from the Crown DB, so a viewer sees this page in any
+  // browser — not just the owner whose localStorage holds the profile.
+  const { profile: maker, status } = usePublicProfile(handle);
+  const { getReputation } = useCrown();
+  const isWide = useIsWide();
 
   // Session resolution: ?s=<id> picks a specific session; one live session resolves itself;
   // several → the picker below; none → the "nothing running" gate. Streamers who never used
@@ -43,7 +51,15 @@ export default function RoulettePage({ params }: { params: { handle: string } })
   const [pub, setPub] = useState<ReturnType<typeof resolvePublicSession> | null>(null);
   useEffect(() => {
     const sParam = new URLSearchParams(window.location.search).get("s");
-    setPub(resolvePublicSession(handle, "roulette", sParam));
+    // Pull the shared session registry FIRST — a viewer's browser has never seen the streamer's
+    // sessions, and without it ?s=<id> resolves to nothing and falls back to the legacy scope.
+    let dead = false;
+    void pullSessions(handle, "roulette").then(() => {
+      if (!dead) setPub(resolvePublicSession(handle, "roulette", sParam));
+    });
+    return () => {
+      dead = true;
+    };
   }, [handle]);
   const scope = pub?.scope ?? null;
 
@@ -58,6 +74,11 @@ export default function RoulettePage({ params }: { params: { handle: string } })
   const [send, setSend] = useState<SendState>("idle");
   const [view, setView] = useState<"suggest" | "wheel">("suggest"); // the top toggle: suggest/back a game vs. the wheel itself
 
+  // Shared game state: other viewers' suggestions/backings land via the nonce effect below.
+  // The meta (clock/verdict) deliberately does NOT re-read here — the per-second catch-up effect
+  // owns it, so an adopted verdict replays the wheel's landing instead of snapping to it.
+  const syncNonce = useGameSync(scope);
+
   useEffect(() => {
     if (!scope) return;
     setRound(readRound(scope));
@@ -67,9 +88,17 @@ export default function RoulettePage({ params }: { params: { handle: string } })
     return () => clearInterval(t);
   }, [scope]);
 
-  // Which round (startedAt) this tab has already triggered a spin for — so expiry,
-  // cross-tab verdicts and re-renders can't double-spin the wheel.
-  const spunFor = useRef<number | null>(null);
+  useEffect(() => {
+    if (!scope || !syncNonce) return;
+    setRound(readRound(scope));
+  }, [scope, syncNonce]);
+
+  // Which spin this tab has already triggered — so expiry, cross-tab verdicts and re-renders can't
+  // double-spin. Single rounds key on the round clock; elimination adds the knock-out count, because
+  // one elimination round legitimately spins many times.
+  const spunFor = useRef<string | null>(null);
+  // Read the format straight off the maker's rules — the spin effects below run before `cfg` exists.
+  const isElimination = (maker?.rouletteConfig?.format ?? "single") === "elimination";
 
   // Once a second: catch up with the storage — the streamer may have spun early from the
   // cabinet ("решение КМ") or started a new round; other tabs may have added suggestions.
@@ -86,9 +115,9 @@ export default function RoulettePage({ params }: { params: { handle: string } })
       spunFor.current = null;
       return;
     }
-    if (m.winner && !meta.winner && spunFor.current !== m.startedAt) {
+    if (m.winner && !meta.winner && spunFor.current !== String(m.startedAt)) {
       // Verdict decided elsewhere — replay the landing here instead of snapping to it.
-      spunFor.current = m.startedAt;
+      spunFor.current = String(m.startedAt);
       setSpin((s) => ({ id: m.winner!.id, nonce: s.nonce + 1 }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -97,30 +126,50 @@ export default function RoulettePage({ params }: { params: { handle: string } })
   // Время вышло: the clock hits zero with no verdict — the wheel spins itself.
   useEffect(() => {
     if (!now || !meta || meta.winner) return;
-    const minutes = (profile && profile.handle === handle && profile.rouletteConfig?.roundMinutes) || DEFAULT_ROULETTE_CONFIG.roundMinutes;
+    const minutes = maker?.rouletteConfig?.roundMinutes || DEFAULT_ROULETTE_CONFIG.roundMinutes;
     if (now < meta.startedAt + minutes * 60_000) return;
-    if (spunFor.current === meta.startedAt) return;
     const r = readRound(scope!);
     if (r.length === 0) {
       // Nothing suggested at all — quietly restart the clock instead of spinning an empty wheel.
       setMeta(newRound(scope!));
       return;
     }
-    const w = pickWeighted(r, Math.random());
+
+    // Elimination: the wheel keeps spinning, each spin knocking one out. Keyed on the knock-out count
+    // so every spin of the same round is allowed exactly once. Money protects — inverted weights.
+    if (isElimination) {
+      const left = survivors(r, meta);
+      if (left.length < 2) return;
+      const key = `${meta.startedAt}:${(meta.eliminated ?? []).length}`;
+      if (spunFor.current === key) return;
+      const victim = pickWeighted(left, roundRand(meta.startedAt + (meta.eliminated ?? []).length), eliminationWeights(left));
+      if (!victim) return;
+      spunFor.current = key;
+      setSpin((s) => ({ id: victim.id, nonce: s.nonce + 1 }));
+      return;
+    }
+
+    if (spunFor.current === String(meta.startedAt)) return;
+    // Seeded by the round clock: every browser that shares this meta lands the same winner.
+    const w = pickWeighted(r, roundRand(meta.startedAt));
     if (!w) return;
-    spunFor.current = meta.startedAt;
+    spunFor.current = String(meta.startedAt);
     setSpin((s) => ({ id: w.id, nonce: s.nonce + 1 }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [now, meta]);
 
   function landed(id: string) {
-    const w = readRound(scope!).find((s) => s.id === id);
-    if (w) setMeta(setRoundWinner(scope!, { id: w.id, title: w.title }));
+    const list = readRound(scope!);
+    const w = list.find((s) => s.id === id);
+    if (!w) return;
+    // In elimination the wheel lands on the one that's OUT; eliminate() crowns the last survivor.
+    if (isElimination) setMeta(eliminate(scope!, w.id, list));
+    else setMeta(setRoundWinner(scope!, { id: w.id, title: w.title }));
   }
 
-  if (!ready) return <main className="page" />;
+  if (status === "loading") return <main className="page" />;
 
-  const mine = profile && profile.handle === handle ? profile : null;
+  const mine = maker;
   const rl = mine ? withRouletteDefaults(mine) : null;
 
   if (!mine || !rl) {
@@ -128,7 +177,7 @@ export default function RoulettePage({ params }: { params: { handle: string } })
       <main className="page">
         <div className="center-note">
           <h1>No roulette here</h1>
-          <p>This content maker isn't running a game roulette right now.</p>
+          <p>This content maker isn&apos;t running a roulette right now.</p>
           <Link className="btn" href={`/@${handle}`}>
             To the content maker's page
           </Link>
@@ -138,6 +187,11 @@ export default function RoulettePage({ params }: { params: { handle: string } })
   }
 
   const cfg = mine.rouletteConfig ?? DEFAULT_ROULETTE_CONFIG;
+  // The wheel isn't games-only: speak the streamer's topic ("Suggest a film", "Tap a dish to back it").
+  const noun = topicById(cfg.topic ?? DEFAULT_TOPIC_ID).noun;
+  // Who's still in, and their knock-out odds (only meaningful in elimination).
+  const aliveNow = isElimination ? survivors(round, meta) : round;
+  const elimWeights = isElimination ? eliminationWeights(aliveNow) : [];
   if (!pub) return <main className="page" />;
   if (!pub.scope) {
     return (
@@ -157,7 +211,7 @@ export default function RoulettePage({ params }: { params: { handle: string } })
             </>
           ) : (
             <>
-              <p>Nothing is live. Start a session in the cabinet — Roulette → Sessions — and this page switches on.</p>
+              <p>Nothing is live. Start a session in your space — Roulette → Sessions — and this page switches on.</p>
               <Link className="btn" href={`/@${handle}`}>
                 To the content maker&apos;s page
               </Link>
@@ -215,7 +269,7 @@ export default function RoulettePage({ params }: { params: { handle: string } })
   }
 
   return (
-    <main className={styles.page} style={backgroundStyle(rl.design)}>
+    <main className={`${styles.page}${backgroundInk(rl.design) === "light" ? " on-light" : ""}`} style={backgroundStyle(rl.design, isWide)}>
       <DonateTopBar />
       <div className={styles.col}>
         <Link className={styles.who} href={`/@${handle}`} style={{ textDecoration: "none", color: "inherit" }} title={`@${mine.handle} — open profile`}>
@@ -234,7 +288,7 @@ export default function RoulettePage({ params }: { params: { handle: string } })
           value={view}
           onChange={(v) => setView(v as "suggest" | "wheel")}
           tabs={[
-            { key: "suggest", label: "Suggest a game", count: round.length },
+            { key: "suggest", label: `Suggest a ${noun}`, count: round.length },
             { key: "wheel", label: "The wheel" },
           ]}
         />
@@ -270,21 +324,39 @@ export default function RoulettePage({ params }: { params: { handle: string } })
             <div className={styles.roundCard}>
               <div className={styles.roundHead}>
                 <span>This round{closed ? " · closed" : spinning ? " · spinning…" : ` · ${fmtLeft(msLeft)} left`}</span>
-                <span className="num">{total} $ in the pot</span>
+                <span className="num">{usd(total)} in the pot</span>
               </div>
               {round.length ? (
                 round.map((s) => {
-                  const pct = total > 0 ? s.pool / total : 0;
+                  const isOut = isElimination && (meta?.eliminated ?? []).includes(s.id);
+                  // Single: the % is the chance of WINNING (pool share). Elimination: it's the chance of
+                  // being knocked out next — inverted pools, so a big backer reads as a low number.
+                  const elimTotal = elimWeights.reduce((sum, n) => sum + n, 0);
+                  const elimIdx = aliveNow.findIndex((a) => a.id === s.id);
+                  const pct = isElimination
+                    ? elimIdx >= 0 && elimTotal > 0
+                      ? elimWeights[elimIdx] / elimTotal
+                      : 0
+                    : total > 0
+                      ? s.pool / total
+                      : 0;
                   return (
-                    <button key={s.id} type="button" className={styles.suggestion} onClick={() => back(s)} title={`Back ${s.title}`}>
+                    <button
+                      key={s.id}
+                      type="button"
+                      className={`${styles.suggestion}${isOut ? " " + styles.sOut : ""}`}
+                      onClick={() => !isOut && back(s)}
+                      disabled={isOut}
+                      title={isOut ? `${s.title} is out` : `Back ${s.title}`}
+                    >
                       <span className={styles.sTitle}>
-                        {s.title} <span className={styles.sGenre}>{s.genre}</span>
+                        {s.title} <span className={styles.sGenre}>{isOut ? "out" : s.genre}</span>
                       </span>
                       <span className={styles.sBar} aria-hidden>
                         <span className={styles.sFill} style={{ width: `${Math.max(3, Math.round(pct * 100))}%` }} />
                       </span>
-                      <span className={`${styles.sPool} num`}>{s.pool} $</span>
-                      <span className={styles.sOdds}>{Math.round(pct * 100)}%</span>
+                      <span className={`${styles.sPool} num`}>{usd(s.pool)}</span>
+                      <span className={styles.sOdds}>{isOut ? "—" : `${Math.round(pct * 100)}%`}</span>
                     </button>
                   );
                 })
@@ -292,7 +364,9 @@ export default function RoulettePage({ params }: { params: { handle: string } })
                 <div className="footnote">Nothing suggested yet — yours starts the round.</div>
               )}
               <div className={styles.roundFoot}>
-                Round: {cfg.roundMinutes} min · winner gets played for {cfg.playMinutes} min. Tap a game to back it.
+                {isElimination
+                  ? `Elimination — each spin knocks one out, last ${noun} standing wins. Backing protects: the more it has, the safer it is. Tap a ${noun} to back it.`
+                  : `Round: ${cfg.roundMinutes} min · winner gets played for ${cfg.playMinutes} min. Tap a ${noun} to back it.`}
               </div>
             </div>
 
@@ -302,8 +376,8 @@ export default function RoulettePage({ params }: { params: { handle: string } })
 
             {!closed && rankMode && !canSuggestByRank && (
               <p className="footnote" style={{ textAlign: "center" }}>
-                Putting a game on the wheel is for <b>{gateTier?.name}+</b> viewers (yours: {rep} rep). You can still back any
-                game above — that&apos;s open to everyone.
+                Putting a {noun} on the wheel is for <b>{gateTier?.name}+</b> viewers (yours: {rep} rep). You can still back
+                any {noun} above — that&apos;s open to everyone.
               </p>
             )}
 
@@ -311,7 +385,7 @@ export default function RoulettePage({ params }: { params: { handle: string } })
               <div className={`card ${styles.suggestCard}`}>
                 <div className={styles.suggestFields}>
                   <div className="field" style={{ flex: 1 }}>
-                    <input type="text" placeholder="Game title" value={title} onChange={(e) => setTitle(e.target.value)} />
+                    <input type="text" placeholder={`${noun.charAt(0).toUpperCase()}${noun.slice(1)} title`} value={title} onChange={(e) => setTitle(e.target.value)} />
                   </div>
                   <select className={styles.genreSelect} value={genreValue} onChange={(e) => setGenre(e.target.value as GameGenre)}>
                     {genres.map((g) => (
@@ -354,14 +428,22 @@ export default function RoulettePage({ params }: { params: { handle: string } })
                     ? "Sending…"
                     : send === "done"
                       ? rankMode ? "On the wheel ✓" : "In the pot ✓"
-                      : rankMode ? "Put it on the wheel" : `Suggest for ${finalAmount} $`}
+                      : rankMode ? "Put it on the wheel" : `Suggest for ${usd(finalAmount)}`}
                 </button>
                 <div className="footnote">
                   {send === "done"
                     ? rankMode ? "On the wheel — anyone can back it with a donation." : "Counted — the odds just moved."
                     : rankMode
-                      ? `Free for ${gateTier?.name ?? "ranked"}+ viewers. Backing a game is a donation, open to everyone.`
-                      : `From ${cfg.minDonation} $. It's a donation either way — win or lose, it stays with the content maker.`}
+                      ? `Free for ${gateTier?.name ?? "ranked"}+ viewers. Backing a ${noun} is a donation, open to everyone.`
+                      : `From ${usd(cfg.minDonation)}. It's a donation either way — win or lose, it stays with the content maker.`}
+                </div>
+              </div>
+            )}
+
+            {!closed && canSuggestByRank && !rl.widgets.find((w) => w.kind === "donate")?.enabled && (
+              <div className={`card ${styles.suggestCard}`}>
+                <div className="footnote" style={{ textAlign: "center" }}>
+                  {mine.name} isn&apos;t taking suggestions right now.
                 </div>
               </div>
             )}

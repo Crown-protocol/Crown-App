@@ -1,0 +1,11 @@
+/* Phone-only tightening of the tier grid.
+   The global .tier-row is "1fr 120px 44px 40px": on a narrow screen the fixed 120px threshold
+   column eats the name field down to a sliver. Below 560px shrink the fixed columns so the tier
+   name keeps a usable width. Desktop is untouched — everything here is behind the media query. */
+@media (max-width: 560px) {
+  .list :global(.tier-head),
+  .list :global(.tier-row) {
+    grid-template-columns: minmax(0, 1fr) 84px 40px 36px;
+    gap: 8px;
+  }
+}

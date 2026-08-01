@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getProfile, deleteProfile, getProfileOwner } from "@/lib/server/store";
 import { verifySignedRequest } from "@/lib/server/auth";
+import { readSession } from "@/lib/server/session";
 import { allow } from "@/lib/server/ratelimit";
 
 export const runtime = "nodejs";
@@ -20,7 +21,9 @@ export async function DELETE(req: NextRequest, { params }: { params: { handle: s
   const owner = await getProfileOwner(handle);
   if (owner === null) return NextResponse.json({ ok: true }); // nothing to delete
   if (owner) {
-    const signer = await verifySignedRequest(req, "delete", handle, null);
+    const signedDel = await verifySignedRequest(req, "delete", handle, null);
+  const sessionDel = readSession(req);
+  const signer = signedDel ?? (sessionDel ? { pubkey: sessionDel } : null);
     if (!signer || signer.pubkey !== owner) {
       return NextResponse.json({ error: "signature of the page owner required" }, { status: 403 });
     }

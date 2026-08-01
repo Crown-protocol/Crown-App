@@ -7,7 +7,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 11px 18px;
+  /* viewport-fit=cover: keep the brand + wallet clear of the notch/status bar and the rounded
+     screen corners on notched phones. env() is 0 on desktop, so this is identical there. */
+  padding: max(11px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) 11px max(18px, env(safe-area-inset-left));
   border-bottom: 1px solid var(--line);
   background: rgba(20, 19, 24, 0.72);
   backdrop-filter: blur(14px);
@@ -26,6 +28,12 @@
 }
 .word {
   opacity: 0.92;
+}
+@media (max-width: 480px) {
+  .bar {
+    padding-left: max(14px, env(safe-area-inset-left));
+    padding-right: max(14px, env(safe-area-inset-right));
+  }
 }
 @media (max-width: 380px) {
   .word {

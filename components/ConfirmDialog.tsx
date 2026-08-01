@@ -17,16 +17,24 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
   danger = false,
+  busyLabel,
+  errorText,
 }: {
   title: string;
   body: React.ReactNode;
   confirmLabel: string;
-  onConfirm: () => void;
+  // May be async: the dialog stays open and shows progress until it resolves, so a destructive action
+  // that has to reach the server can't be "confirmed" while it is still failing.
+  onConfirm: () => void | Promise<{ ok: boolean; reason?: string } | void>;
   onCancel: () => void;
   danger?: boolean; // red confirm — only for what can't be taken back
+  busyLabel?: string; // shown on the confirm button while an async onConfirm is running
+  errorText?: (reason?: string) => string; // turns a failure reason into a human sentence
 }) {
   const cancelRef = useRef<HTMLButtonElement>(null);
   const [mounted, setMounted] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
 
   // Rendered into <body> through a portal, NOT where it's written in the tree. A `position: fixed`
   // child is positioned against the nearest ancestor that has a transform/filter/perspective —
@@ -54,16 +62,16 @@ export function ConfirmDialog({
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onCancel();
+      if (e.key === "Escape" && !busy) onCancel();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onCancel]);
+  }, [onCancel, busy]);
 
   if (!mounted) return null; // no document during SSR
 
   return createPortal(
-    <div className={styles.scrim} onClick={onCancel}>
+    <div className={styles.scrim} onClick={() => { if (!busy) onCancel(); }}>
       <div
         className={styles.card}
         role="dialog"
@@ -75,12 +83,37 @@ export function ConfirmDialog({
           {title}
         </h2>
         <div className={styles.body}>{body}</div>
+        {err && (
+          <div className="error-note" role="alert">
+            {err}
+          </div>
+        )}
         <div className={styles.actions}>
-          <button ref={cancelRef} type="button" className="btn-outline" onClick={onCancel}>
+          <button ref={cancelRef} type="button" className="btn-outline" disabled={busy} onClick={onCancel}>
             Cancel
           </button>
-          <button type="button" className={danger ? styles.danger : styles.confirm} onClick={onConfirm}>
-            {confirmLabel}
+          <button
+            type="button"
+            className={danger ? styles.danger : styles.confirm}
+            disabled={busy}
+            onClick={() => {
+              // Lock the dialog on the FIRST click, before anything runs — a fast double-click used to
+              // run a synchronous onConfirm (Log out) twice: disconnect twice, two navigations, and a
+              // second clearProof with a null address that wiped every wallet's proof on the device.
+              setBusy(true);
+              const out = onConfirm();
+              if (!out || typeof (out as Promise<unknown>).then !== "function") return;
+              setErr("");
+              void (out as Promise<{ ok: boolean; reason?: string } | void>)
+                .then((r) => {
+                  // Only a real failure keeps the dialog open; success unmounts it via the caller.
+                  if (r && r.ok === false) setErr(errorText ? errorText(r.reason) : "That didn't go through. Try again.");
+                })
+                .catch(() => setErr(errorText ? errorText("network") : "That didn't go through. Try again."))
+                .finally(() => setBusy(false));
+            }}
+          >
+            {busy ? busyLabel || "Working…" : confirmLabel}
           </button>
         </div>
       </div>

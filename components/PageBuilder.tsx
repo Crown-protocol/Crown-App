@@ -1,21 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import QRCode from "qrcode";
-import { QrIcon, CopyIcon, PhoneIcon, DesktopIcon, DragHandleIcon, UploadIcon, ChevronDown, SocialIcon, SOCIAL_LABEL, SOCIAL_KINDS, SOCIAL_BRAND } from "@/components/icons";
+import { QrIcon, CopyIcon, PhoneIcon, DesktopIcon, DragHandleIcon, ChevronDown, SocialIcon, SOCIAL_LABEL, SOCIAL_KINDS, SOCIAL_BRAND } from "@/components/icons";
 import { LivePreview } from "@/components/LivePreview";
-import {
-  BIO_MAX,
-  TASK_MAX,
-  WIDGET_LABEL,
-  BACKGROUND_COLOR_PRESETS,
-  BACKGROUND_GRADIENT_PRESETS,
-  THEMES,
-  MAX_DONATE_PRESETS,
-  backgroundStyle,
-  sameBackground,
-  withPageDefaults,
-} from "@/lib/data/pagebuilder";
+import { TASK_MAX, WIDGET_LABEL, MAX_DONATE_PRESETS, withPageDefaults } from "@/lib/data/pagebuilder";
+import { DesignTab } from "@/components/DesignTab";
 import type { PageWidget, Profile, Social } from "@/lib/data/types";
 import styles from "./PageBuilder.module.css";
 
@@ -30,8 +20,6 @@ export function PageBuilder({ profile, onSave }: { profile: Profile; onSave: (p:
   const [qrOpen, setQrOpen] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [openWidget, setOpenWidget] = useState<PageWidget["kind"] | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const bgFileRef = useRef<HTMLInputElement>(null);
 
   // Real, working URL on whatever host the app runs on (localhost in dev, the real domain in prod) —
   // not a hardcoded "crown.tv". Resolved after mount to avoid an SSR/client hydration mismatch.
@@ -59,7 +47,7 @@ export function PageBuilder({ profile, onSave }: { profile: Profile; onSave: (p:
   }
 
   function addSocial() {
-    patch({ socials: [...p.socials, { kind: "twitch", url: "" }] });
+    patch({ socials: [...p.socials, { kind: "twitch", url: "", id: crypto.randomUUID() }] });
   }
 
   function updateSocial(i: number, next: Partial<Social>) {
@@ -92,22 +80,6 @@ export function PageBuilder({ profile, onSave }: { profile: Profile; onSave: (p:
     const next = p.widgets.slice();
     [next[index], next[to]] = [next[to], next[index]];
     patch({ widgets: next });
-  }
-
-  function onAvatarFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => patch({ avatarUrl: String(reader.result) });
-    reader.readAsDataURL(file);
-  }
-
-  function onBackgroundFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => patch({ design: { background: { type: "image", value: String(reader.result) } } });
-    reader.readAsDataURL(file);
   }
 
   async function copyLink() {
@@ -145,29 +117,8 @@ export function PageBuilder({ profile, onSave }: { profile: Profile; onSave: (p:
                       <input type="checkbox" hidden checked={p.avatarEnabled} onChange={(e) => patch({ avatarEnabled: e.target.checked })} />
                       Avatar
                     </label>
-                    <button type="button" className="btn-outline" onClick={() => fileRef.current?.click()}>
-                      <UploadIcon /> Choose
-                    </button>
-                    <input ref={fileRef} type="file" accept="image/*" hidden onChange={onAvatarFile} />
-                  </div>
-                </div>
-
-                <div className={styles.bioField}>
-                  <label className={`toggle${p.bioEnabled ? " on" : ""}`}>
-                    <span className="track"><span className="knob" /></span>
-                    <input type="checkbox" hidden checked={p.bioEnabled} onChange={(e) => patch({ bioEnabled: e.target.checked })} />
-                    Description
-                  </label>
-                  <div className={styles.bioBox}>
-                    <textarea
-                      className={styles.bioInput}
-                      rows={2}
-                      maxLength={BIO_MAX}
-                      placeholder="Give for…"
-                      value={p.bio}
-                      onChange={(e) => patch({ bio: e.target.value })}
-                    />
-                    <span className={styles.charCount}>{p.bio.length}/{BIO_MAX}</span>
+                    {/* Photo replacement lives in Settings only — the game builder just toggles the
+                        avatar on/off for this page. One place to change the picture, no drift. */}
                   </div>
                 </div>
 
@@ -247,11 +198,11 @@ export function PageBuilder({ profile, onSave }: { profile: Profile; onSave: (p:
                       {open && w.kind === "socials" && (
                         <div className={styles.widgetConfig}>
                           {p.socials.map((s, si) => (
-                            <div className="social-row" key={si}>
+                            <div className="social-row" key={s.id ?? `i${si}`}>
                               <span className="ic" style={{ background: SOCIAL_BRAND[s.kind].bg, color: SOCIAL_BRAND[s.kind].fg }}>
                                 <SocialIcon kind={s.kind} />
                               </span>
-                              <div style={{ display: "grid", gridTemplateColumns: "130px 1fr", gap: 10 }}>
+                              <div className={styles.socialFields}>
                                 <select
                                   className="chip"
                                   style={{ height: 48, padding: "0 12px", borderRadius: "var(--r-2)", background: "var(--bg-0)" }}
@@ -292,96 +243,7 @@ export function PageBuilder({ profile, onSave }: { profile: Profile; onSave: (p:
             </div>
           )}
 
-          {tab === "design" && (
-            <div className={styles.tabBody}>
-              <div className="card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                <div className={styles.rowHead}>Themes</div>
-                <div className={styles.themeGrid}>
-                  {THEMES.map((t) => {
-                    const active = sameBackground(p.design, t.design);
-                    return (
-                      <button
-                        key={t.id}
-                        type="button"
-                        aria-pressed={active}
-                        className={`${styles.themeCard} ${active ? styles.themeCardOn : ""}`}
-                        onClick={() => patch({ design: t.design })}
-                      >
-                        <span className={styles.themeThumb} style={backgroundStyle(t.design)}>
-                          <span className={styles.tAvatar} />
-                          <span className={styles.tLine} />
-                          <span className={styles.tBtn} />
-                        </span>
-                        <span className={styles.themeLabel}>{t.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                <div className={styles.rowHead}>Page background</div>
-                <div className={styles.bgTypeRow}>
-                  {(["color", "gradient", "image"] as const).map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      className={`${styles.bgType} ${p.design.background.type === t ? styles.bgTypeOn : ""}`}
-                      onClick={() => {
-                        if (t === "image") { bgFileRef.current?.click(); return; }
-                        patch({ design: { background: { type: t, value: t === "color" ? BACKGROUND_COLOR_PRESETS[0] : BACKGROUND_GRADIENT_PRESETS[0].id } } });
-                      }}
-                    >
-                      {t === "color" ? "Color" : t === "gradient" ? "Gradient" : "Image"}
-                    </button>
-                  ))}
-                  <input ref={bgFileRef} type="file" accept="image/*" hidden onChange={onBackgroundFile} />
-                </div>
-
-                {p.design.background.type === "color" && (
-                  <div className={styles.swatches}>
-                    {BACKGROUND_COLOR_PRESETS.map((hex) => (
-                      <button
-                        key={hex}
-                        type="button"
-                        aria-label={hex}
-                        className={`${styles.swatch} ${p.design.background.value === hex ? styles.swatchOn : ""}`}
-                        style={{ background: hex }}
-                        onClick={() => patch({ design: { background: { type: "color", value: hex } } })}
-                      />
-                    ))}
-                    <input
-                      className={styles.hexInput}
-                      type="text"
-                      value={p.design.background.value}
-                      onChange={(e) => patch({ design: { background: { type: "color", value: e.target.value } } })}
-                    />
-                  </div>
-                )}
-
-                {p.design.background.type === "gradient" && (
-                  <div className={styles.swatches}>
-                    {BACKGROUND_GRADIENT_PRESETS.map((g) => (
-                      <button
-                        key={g.id}
-                        type="button"
-                        aria-label={g.label}
-                        className={`${styles.swatch} ${p.design.background.value === g.id ? styles.swatchOn : ""}`}
-                        style={{ backgroundImage: g.css }}
-                        onClick={() => patch({ design: { background: { type: "gradient", value: g.id } } })}
-                      />
-                    ))}
-                  </div>
-                )}
-
-                {p.design.background.type === "image" && (
-                  <div className="footnote">
-                    {p.design.background.value ? "Image set — pick Choose file to replace it." : "No image chosen yet."}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+          {tab === "design" && <DesignTab design={p.design} onChange={(design) => patch({ design })} />}
         </div>
 
         <div className={styles.previewCol}>

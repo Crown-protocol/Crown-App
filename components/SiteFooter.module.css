@@ -58,6 +58,8 @@
   color: var(--text-2);
   text-decoration: none;
   transition: color var(--dur-1) var(--ease);
+  /* the contact email is one long unbreakable token — let it wrap instead of pushing a column wide */
+  overflow-wrap: anywhere;
 }
 .col a:hover {
   color: var(--text-1);
@@ -73,6 +75,13 @@
   }
   .cols {
     gap: 40px;
+  }
+  .col {
+    gap: 6px;
+  }
+  /* roomier tap targets for the footer links on phones */
+  .col a {
+    padding: 8px 0;
   }
   .char {
     font-size: 34px;

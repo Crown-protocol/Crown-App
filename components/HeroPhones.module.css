@@ -98,7 +98,9 @@
 .screen {
   height: 100%;
   border-radius: 40px;
-  background: var(--bg-1);
+  /* All three phones share the fundraiser phone's deeper backdrop (was --bg-1 on the side phones) —
+     the one the owner liked. Kept in sync with the real donation pages' default (DEFAULT_DESIGN). */
+  background: #100f16;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -158,11 +160,14 @@
   padding: 22px 24px 0;
   gap: 14px;
 }
-/* Side phones are tucked ~52px behind the center one, so their inner edge is covered.
-   Push each side phone's content toward its VISIBLE outer edge so nothing important lands
-   under the overlap and gets clipped. Left phone's inner edge is the right; right phone's is the left. */
+/* The left phone's right edge is tucked ~40px behind the center one, so its GEOMETRIC centre sits
+   under the overlap — content centred on the shell's axis (symmetric padding) reads shifted, because
+   ~40px of screen on the right is hidden and only the left part is seen. Centre on the VISIBLE zone
+   instead: shift the column left by ~half the hidden width (extra right padding, less left) so the
+   card sits optically centred in the part of the phone you can actually see. */
 .gameLeft {
-  padding-right: 72px;
+  padding-left: 22px;
+  padding-right: 62px;
 }
 .gameRight {
   padding-left: 72px;
@@ -182,6 +187,12 @@
   letter-spacing: -0.01em;
   color: var(--text-1);
 }
+/* Roulette (centre phone): centre the eyebrow + headline over the centred wheel. Left-aligned text
+   above a centred wheel read lopsided — now the whole phone sits on one axis. */
+.center .eyebrow,
+.center .headline {
+  text-align: center;
+}
 .cta {
   width: 100%;
   height: 52px;
@@ -189,8 +200,8 @@
   align-items: center;
   justify-content: center;
   border-radius: var(--r-2);
-  background: var(--accent);
-  color: #0f0e14;
+  background: var(--accent-grad);
+  color: var(--accent-grad-ink);
   font-size: 15px;
   font-weight: 700;
   margin-top: 4px;
@@ -247,7 +258,7 @@
   position: relative;
   display: flex;
   justify-content: center;
-  padding: 6px 0 4px;
+  padding: 2px 0 2px;
 }
 .open {
   color: var(--accent);
@@ -257,10 +268,10 @@
   background: var(--bg-0);
   border: 1px solid var(--line);
   border-radius: var(--r-2);
-  padding: 11px 12px;
+  padding: 9px 12px;
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 7px;
 }
 .roundHead {
   display: flex;
@@ -313,9 +324,16 @@
 }
 
 /* ---- RIGHT: Fundraiser, dark (crown fills bottom-up, like the real page) ---- */
+/* The fundraiser is the one CENTER-composed phone, so it must not inherit .gameRight's
+   asymmetric 72/18 padding (that's for the LEFT-aligned side phones, whose text needs pushing
+   off the occluded inner edge). Centered content in an asymmetric box floats off-axis and reads
+   lopsided. Symmetric padding puts the column on the phone's true centre; its widest element
+   (the crown, ~154px) still clears the ~52px overlap, and the CTA sits below the center phone. */
 .frGame {
   align-items: center;
   text-align: center;
+  padding-left: 20px;
+  padding-right: 20px;
 }
 .frPledge {
   font-size: 15px;
@@ -324,10 +342,36 @@
   color: var(--text-1);
   letter-spacing: -0.01em;
 }
-.frGame svg {
+/* The hero fundraiser figure (HeroFundraiserFill): two stacked crown badges (empty outline + the
+   filled mark clipped to the collected fraction) plus a waterline at the fill level. */
+.frFill {
+  position: relative;
+  display: block;
   margin: 4px 0 2px;
   /* a soft accent pool under the crown so it reads as a lit trophy, not a flat grey shape */
   filter: drop-shadow(0 0 22px rgba(139, 124, 246, 0.28)) drop-shadow(0 8px 18px rgba(0, 0, 0, 0.4));
+}
+.frFillLayer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+/* one flat accent fill — an even level, not the brand mark's purple→white gradient wash */
+.frHex {
+  fill: var(--accent);
+}
+/* the collected level: a crisp accent line, width-limited to the hexagon so it never juts past the
+   mark's transparent corners (the ambiguity the plain gradient fill had — no readable level). */
+.frWaterline {
+  position: absolute;
+  left: 24%;
+  right: 24%;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent) 28%, var(--accent) 72%, transparent);
+  box-shadow: 0 0 10px var(--accent);
 }
 .frPct {
   font-size: 30px;

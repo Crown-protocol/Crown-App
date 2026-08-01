@@ -14,12 +14,6 @@ const MAX_BYTES = 150_000; // JPEG byte budget (square only)
 const ROUND_R = 0.18; // rounded-corner radius as a fraction of the side
 
 type Shape = "circle" | "rounded" | "square" | "hexagon";
-const SHAPES: { key: Shape; label: string }[] = [
-  { key: "circle", label: "Circle" },
-  { key: "rounded", label: "Rounded" },
-  { key: "square", label: "Square" },
-  { key: "hexagon", label: "Hexagon" },
-];
 
 // A pointy-top regular hexagon inscribed in an n×n box — the same orientation as the Crown badge.
 function hexPoints(n: number): [number, number][] {
@@ -63,28 +57,6 @@ function ShapeSvg({ shape, fill, stroke, strokeWidth }: { shape: Shape; fill: st
   return <rect x={0} y={0} width={VP} height={VP} rx={shape === "rounded" ? VP * ROUND_R : 0} {...common} />;
 }
 
-// Little glyph for the shape-picker buttons.
-function ShapeIcon({ shape }: { shape: Shape }) {
-  const p = { fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinejoin: "round" as const };
-  if (shape === "circle")
-    return (
-      <svg width="20" height="20" viewBox="0 0 24 24">
-        <circle cx="12" cy="12" r="9" {...p} />
-      </svg>
-    );
-  if (shape === "hexagon")
-    return (
-      <svg width="20" height="20" viewBox="0 0 24 24">
-        <polygon points={hexPoints(18).map(([x, y]) => `${x + 3},${y + 3}`).join(" ")} {...p} />
-      </svg>
-    );
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24">
-      <rect x="3" y="3" width="18" height="18" rx={shape === "rounded" ? 5 : 0} {...p} />
-    </svg>
-  );
-}
-
 export function CropModal({
   imageSrc,
   onConfirm,
@@ -98,7 +70,9 @@ export function CropModal({
   onReupload?: (file: File) => void;
   shape?: Shape;
 }) {
-  const [shape, setShape] = useState<Shape>(initialShape);
+  // Avatars are always a circle — the shape picker was removed, so `shape` is fixed to whatever the
+  // caller asks for (circle by default). The mask/clip code below still branches on it generically.
+  const shape = initialShape;
   const viewportRef = useRef<HTMLDivElement>(null);
   // x/y (viewport px) and scale live in ONE object updated by a pure function. They used to be three
   // separate states with setCropX/setCropY nested inside setCropScale's updater — but React calls
@@ -121,7 +95,12 @@ export function CropModal({
       setView({ x: (VP - img.width * bs) / 2, y: (VP - img.height * bs) / 2, scale: 1 });
       setReady(true);
     };
+    // A source that can't decode must not leave the modal stuck blank forever — close it.
+    img.onerror = () => onCancel();
     img.src = imageSrc;
+    // Re-run only when the image changes; onCancel is defined inline by parents (not stable) and
+    // must not retrigger the load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imageSrc]);
 
   // Zoom one step, keeping the focal point (fx,fy in viewport px) pinned under the cursor — so
@@ -211,6 +190,7 @@ export function CropModal({
 
     const reader = new FileReader();
     reader.onload = () => onConfirm(reader.result as string);
+    reader.onerror = () => onCancel();
     reader.readAsDataURL(blob);
   }
 
@@ -295,22 +275,6 @@ export function CropModal({
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
         </button>
-      </div>
-
-      <div className={styles.shapes} role="group" aria-label="Crop shape">
-        {SHAPES.map((sh) => (
-          <button
-            key={sh.key}
-            type="button"
-            className={`${styles.shapeBtn}${shape === sh.key ? " " + styles.shapeOn : ""}`}
-            onClick={() => setShape(sh.key)}
-            aria-pressed={shape === sh.key}
-            aria-label={sh.label}
-            title={sh.label}
-          >
-            <ShapeIcon shape={sh.key} />
-          </button>
-        ))}
       </div>
 
       <button className={styles.confirm} type="button" onClick={confirm} aria-label="Use this photo">

@@ -39,8 +39,13 @@ async function makeActor<T>(principal: string, idl: IDL.InterfaceFactory): Promi
 // One field per line, fixed order, closed vocabulary — the canisters verify
 // the wallet's Ed25519 signature over EXACTLY these bytes (game-spec §4/§5/§6).
 // Wallets show them as readable text (the Phantom constraint).
+//
+// Every canonical message ENDS with a newline: the canisters' auth.rs builders
+// push '\n' after every line including the last, and their pinned unit-test
+// vectors end in `\n"` — a message without the trailing newline fails
+// signature verification byte-for-byte.
 
-const nl = (lines: string[]) => lines.join("\n");
+const nl = (lines: string[]) => lines.join("\n") + "\n";
 
 export const taskMessage = {
   register: (canister: string, task: string, textHex: string, duration: number) =>
@@ -52,8 +57,10 @@ export const taskMessage = {
 };
 
 export const fundingMessage = {
-  create: (canister: string, goal: number, duration: number) =>
-    nl([`crown:conditional-funding:v1`, `action: create`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `goal: ${goal}`, `duration: ${duration}`]),
+  // The canonical builder pushes `collection:` UNCONDITIONALLY — create included: the id is
+  // derived (deriveCollectionId) before the canister call, so the recipient signs over it too.
+  create: (canister: string, collectionHex: string, goal: number, duration: number) =>
+    nl([`crown:conditional-funding:v1`, `action: create`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `collection: ${collectionHex}`, `goal: ${goal}`, `duration: ${duration}`]),
   action: (action: "ready" | "recipient_cancel", canister: string, collectionHex: string) =>
     nl([`crown:conditional-funding:v1`, `action: ${action}`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `collection: ${collectionHex}`]),
   vote: (canister: string, collectionHex: string, choice: "done" | "not_done") =>

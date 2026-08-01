@@ -1,519 +1,128 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import QRCode from "qrcode";
-import { QrIcon, CopyIcon, PhoneIcon, DesktopIcon, DragHandleIcon, UploadIcon, ChevronDown, SocialIcon, SOCIAL_LABEL, SOCIAL_KINDS, SOCIAL_BRAND } from "@/components/icons";
-import { LivePreview } from "@/components/LivePreview";
+import { useRef, useState } from "react";
+import { GamePageEditor, type GameEditorConfig } from "@/components/GamePageEditor";
+import { FundraiserGameSettings, DEFAULT_FUNDRAISER_CONFIG } from "@/components/FundraiserGameSettings";
 import { CrownBadge } from "@/components/CrownBadge";
 import { CropModal } from "@/components/CropModal";
-import {
-  BACKGROUND_COLOR_PRESETS,
-  BACKGROUND_GRADIENT_PRESETS,
-  THEMES,
-  backgroundStyle,
-  sameBackground,
-} from "@/lib/data/pagebuilder";
+import { NumberInput } from "@/components/NumberInput";
+import { UploadIcon } from "@/components/icons";
 import { PLEDGE_MAX, FR_DESCRIPTION_MAX, MAX_FR_PRESETS, withFundraiserDefaults } from "@/lib/data/fundraiser";
-import type { FundraiserDraft, PageWidget, Profile, Social } from "@/lib/data/types";
+import type { FundraiserDraft, Profile } from "@/lib/data/types";
 import styles from "./PageBuilder.module.css";
 
-type Tab = "page" | "design";
-type Device = "phone" | "desktop";
-
-// Widget names as they read on THIS page — same widget shapes as the main page, different verb.
-const FR_WIDGET_LABEL: Record<PageWidget["kind"], string> = {
-  donate: "Chip-in form",
-  socials: "Social icons",
+const CONFIG: GameEditorConfig = {
+  slug: "fundraiser",
+  title: "Fundraiser",
+  linkLabel: "Fundraiser link",
+  qrFileName: "crown-fundraiser-qr.png",
+  headlineLabel: "The promise",
+  headlinePlaceholder: "e.g. I'll edit the travel video in one month instead of three",
+  headlineMax: PLEDGE_MAX,
+  descriptionPlaceholder: "Details: what exactly, when, and what backers get out of it",
+  descriptionMax: FR_DESCRIPTION_MAX,
+  amountsTitle: "Chip-in amounts",
+  maxPresets: MAX_FR_PRESETS,
+  formLabel: "Chip-in form",
 };
 
-// The Fundraiser page builder — deliberately the same experience as the Task page builder
-// (PageBuilder): editor on the left with Page/Design tabs, live device preview on the right,
-// link + QR under it. Shares PageBuilder.module.css so the two builders can't drift apart.
+// The Fundraiser page builder — the shared game editor, plus the two fields only this game has:
+// the money goal and the picture that fills up as the goal is reached.
 export function FundraiserPanel({ profile, onSave }: { profile: Profile; onSave: (p: Profile) => void }) {
   const fr = withFundraiserDefaults(profile);
-  const [tab, setTab] = useState<Tab>("page");
-  const [device, setDevice] = useState<Device>("phone");
-  const [copied, setCopied] = useState(false);
-  const [qrOpen, setQrOpen] = useState(false);
-  const [qrDataUrl, setQrDataUrl] = useState("");
-  const [openWidget, setOpenWidget] = useState<PageWidget["kind"] | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const bgFileRef = useRef<HTMLInputElement>(null);
   const fillFileRef = useRef<HTMLInputElement>(null);
-  // Avatar + progress image go through the crop modal (same one as /create). cropSrc is the object
-  // URL being cropped; cropTarget says where the result lands.
   const [cropSrc, setCropSrc] = useState("");
-  const [cropTarget, setCropTarget] = useState<"avatar" | "fill">("avatar");
-
-  const [origin, setOrigin] = useState("");
-  useEffect(() => setOrigin(window.location.origin), []);
-  const link = `${origin || "https://crown.tv"}/@${profile.handle}/fundraiser`;
-
-  useEffect(() => {
-    if (!qrOpen) return;
-    QRCode.toDataURL(link, { margin: 1, width: 240, color: { dark: "#F1EFF7", light: "#00000000" } })
-      .then(setQrDataUrl)
-      .catch(() => setQrDataUrl(""));
-  }, [qrOpen, link]);
-
-  // Avatar and socials are the streamer's shared identity (same fields the main page uses);
-  // everything else lives on the fundraiser draft.
-  function patchProfile(next: Partial<Profile>) {
-    onSave({ ...profile, ...next });
-  }
 
   function patchFr(next: Partial<FundraiserDraft>) {
     onSave({ ...profile, fundraiser: { ...fr, ...next } });
   }
 
-  function patchWidget(kind: PageWidget["kind"], next: Partial<PageWidget>) {
-    patchFr({ widgets: fr.widgets.map((w) => (w.kind === kind ? { ...w, ...next } : w)) });
-  }
-
-  function moveWidget(index: number, dir: -1 | 1) {
-    const to = index + dir;
-    if (to < 0 || to >= fr.widgets.length) return;
-    const next = fr.widgets.slice();
-    [next[index], next[to]] = [next[to], next[index]];
-    patchFr({ widgets: next });
-  }
-
-  function toggleWidgetConfig(kind: PageWidget["kind"]) {
-    setOpenWidget((k) => (k === kind ? null : kind));
-  }
-
-  function updatePreset(i: number, value: number) {
-    const next = fr.presets.slice();
-    next[i] = Math.max(1, Math.round(value) || 1);
-    patchFr({ presets: next });
-  }
-
-  function addPreset() {
-    const last = fr.presets[fr.presets.length - 1] ?? 5;
-    patchFr({ presets: [...fr.presets, last + 5] });
-  }
-
-  function removePreset(i: number) {
-    if (fr.presets.length <= 1) return;
-    patchFr({ presets: fr.presets.filter((_, j) => j !== i) });
-  }
-
-  function addSocial() {
-    patchProfile({ socials: [...profile.socials, { kind: "twitch", url: "" }] });
-  }
-
-  function updateSocial(i: number, next: Partial<Social>) {
-    patchProfile({ socials: profile.socials.map((s, j) => (j === i ? { ...s, ...next } : s)) });
-  }
-
-  function removeSocial(i: number) {
-    patchProfile({ socials: profile.socials.filter((_, j) => j !== i) });
-  }
-
-  // Avatar + progress image open the crop modal instead of saving the raw file, so both get the
-  // same reframe-in-a-circle flow as sign-up. Which one is being edited is held in cropTarget.
-  function openCrop(file: File | undefined, target: "avatar" | "fill") {
+  // The progress picture goes through the same reframe-in-a-circle crop as the avatar.
+  function openFillCrop(file: File | undefined) {
     if (!file || !file.type.startsWith("image/")) return;
     if (cropSrc) URL.revokeObjectURL(cropSrc);
-    setCropTarget(target);
     setCropSrc(URL.createObjectURL(file));
   }
-  function onCropConfirm(dataUrl: string) {
+
+  function closeFillCrop() {
     if (cropSrc) URL.revokeObjectURL(cropSrc);
     setCropSrc("");
-    if (cropTarget === "avatar") patchProfile({ avatarUrl: dataUrl });
-    else patchFr({ fillImage: dataUrl });
-  }
-  function onCropCancel() {
-    if (cropSrc) URL.revokeObjectURL(cropSrc);
-    setCropSrc("");
-  }
-
-  // The page backdrop is the one image that ISN'T cropped — a square crop would ruin a full-bleed
-  // background, so it keeps the plain file → data URL path.
-  function onBackgroundFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => patchFr({ design: { background: { type: "image", value: String(reader.result) } } });
-    reader.readAsDataURL(file);
-  }
-
-  async function copyLink() {
-    try {
-      await navigator.clipboard.writeText(link);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
-    } catch {}
   }
 
   return (
-    <div className={styles.wrap}>
-      <div className={styles.builder}>
-        <div className={styles.editor}>
-          <div className={styles.tabs} role="tablist" aria-label="Fundraiser builder">
-            <button type="button" role="tab" aria-selected={tab === "page"} className={tab === "page" ? styles.tabOn : ""} onClick={() => setTab("page")}>
-              Fundraiser
-            </button>
-            <button type="button" role="tab" aria-selected={tab === "design"} className={tab === "design" ? styles.tabOn : ""} onClick={() => setTab("design")}>
-              Design
-            </button>
-          </div>
-
-          {tab === "page" && (
-            <div className={styles.tabBody}>
-              <div className="card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                <div className={styles.rowHead}>Profile</div>
-                <div className={styles.avatarRow}>
-                  {/* show the cropped avatar AS-IS (its baked-in shape is the outline) — no circle
-                      clip, no grey backdrop; only the initials fallback keeps the round chip */}
-                  {profile.avatarUrl ? (
-                    <img src={profile.avatarUrl} alt="" width={56} height={56} style={{ width: 56, height: 56, objectFit: "contain", flex: "none", display: "block" }} />
-                  ) : (
-                    <div className={styles.avatarPreview}>{profile.name.trim().charAt(0) || "?"}</div>
-                  )}
-                  <div className={styles.avatarControls}>
-                    <label className={`toggle${profile.avatarEnabled !== false ? " on" : ""}`}>
-                      <span className="track"><span className="knob" /></span>
-                      <input type="checkbox" hidden checked={profile.avatarEnabled !== false} onChange={(e) => patchProfile({ avatarEnabled: e.target.checked })} />
-                      Avatar
-                    </label>
-                    <button type="button" className="btn-outline" onClick={() => fileRef.current?.click()}>
-                      <UploadIcon /> Choose
-                    </button>
-                    <input
-                      ref={fileRef}
-                      type="file"
-                      accept="image/*"
-                      hidden
-                      onChange={(e) => {
-                        openCrop(e.target.files?.[0], "avatar");
-                        e.target.value = "";
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className={styles.avatarRow}>
-                  <div className={styles.avatarPreview} style={{ borderRadius: 12, background: "transparent", overflow: "hidden" }}>
-                    {fr.fillImage ? (
-                      <img src={fr.fillImage} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    ) : (
-                      <CrownBadge size={44} />
-                    )}
-                  </div>
-                  <div className={styles.avatarControls}>
-                    <div className={styles.rowHead}>Progress image</div>
-                    <button type="button" className="btn-outline" onClick={() => fillFileRef.current?.click()}>
-                      <UploadIcon /> Choose
-                    </button>
-                    {fr.fillImage && (
-                      <button type="button" className="btn-outline" onClick={() => patchFr({ fillImage: "" })}>
-                        Reset
-                      </button>
-                    )}
-                    <input
-                      ref={fillFileRef}
-                      type="file"
-                      accept="image/*"
-                      hidden
-                      onChange={(e) => {
-                        openCrop(e.target.files?.[0], "fill");
-                        e.target.value = "";
-                      }}
-                    />
-                  </div>
-                </div>
-                <div className="footnote">Fills up as the goal is reached. Default is the Crown badge.</div>
-
-                <div className={styles.bioField}>
-                  <div className={styles.rowHead}>The promise</div>
-                  <div className={styles.bioBox}>
-                    <textarea
-                      className={styles.bioInput}
-                      rows={2}
-                      maxLength={PLEDGE_MAX}
-                      placeholder="e.g. I'll edit the travel video in one month instead of three"
-                      value={fr.pledge}
-                      onChange={(e) => patchFr({ pledge: e.target.value })}
-                    />
-                    <span className={styles.charCount}>{fr.pledge.length}/{PLEDGE_MAX}</span>
-                  </div>
-                  <div className="footnote">This exact text is what reputation holders vote on later — deliver it or everyone's refunded.</div>
-                </div>
-
-                <div className={styles.bioField}>
-                  <label className={`toggle${fr.descriptionEnabled ? " on" : ""}`}>
-                    <span className="track"><span className="knob" /></span>
-                    <input type="checkbox" hidden checked={fr.descriptionEnabled} onChange={(e) => patchFr({ descriptionEnabled: e.target.checked })} />
-                    Description
-                  </label>
-                  <div className={styles.bioBox}>
-                    <textarea
-                      className={styles.bioInput}
-                      rows={2}
-                      maxLength={FR_DESCRIPTION_MAX}
-                      placeholder="Details: what exactly, when, and what backers get out of it"
-                      value={fr.description}
-                      onChange={(e) => patchFr({ description: e.target.value })}
-                    />
-                    <span className={styles.charCount}>{fr.description.length}/{FR_DESCRIPTION_MAX}</span>
-                  </div>
-                </div>
-
-                <div className="field" style={{ maxWidth: 220 }}>
-                  <label htmlFor="fr-goal">Goal</label>
-                  <div className="affix has-pre">
-                    <span className="affix-pre">$</span>
-                    <input
-                      id="fr-goal"
-                      type="number"
-                      min={1}
-                      value={fr.goal}
-                      onChange={(e) => patchFr({ goal: Math.max(1, Math.round(+e.target.value) || 1) })}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className={styles.rowHead}>Widgets</div>
-
-              <div className={styles.widgetList}>
-                {fr.widgets.map((w, i) => {
-                  const open = openWidget === w.kind;
-                  return (
-                    <div key={w.kind} className={styles.widgetGroup}>
-                      <div className={`${styles.widgetRow}${w.enabled ? "" : ` ${styles.widgetOff}`}`}>
-                        <DragHandleIcon className={styles.dragHandle} />
-                        <div className={styles.widgetStepper}>
-                          <button type="button" aria-label="Move up" disabled={i === 0} onClick={() => moveWidget(i, -1)}>▲</button>
-                          <button type="button" aria-label="Move down" disabled={i === fr.widgets.length - 1} onClick={() => moveWidget(i, 1)}>▼</button>
-                        </div>
-                        <button type="button" className={styles.widgetNameBtn} aria-expanded={open} onClick={() => toggleWidgetConfig(w.kind)}>
-                          {FR_WIDGET_LABEL[w.kind]}
-                          <ChevronDown className={`${styles.widgetChev}${open ? ` ${styles.widgetChevOn}` : ""}`} />
-                        </button>
-                        <label className={`toggle${w.enabled ? " on" : ""}`}>
-                          <span className="track"><span className="knob" /></span>
-                          <input type="checkbox" hidden checked={w.enabled} onChange={(e) => patchWidget(w.kind, { enabled: e.target.checked })} />
-                        </label>
-                      </div>
-
-                      {open && w.kind === "donate" && (
-                        <div className={styles.widgetConfig}>
-                          <div className={styles.presetRow}>
-                            {fr.presets.map((amount, pi) => (
-                              <div className={styles.presetChip} key={pi}>
-                                <span className={styles.presetDollar}>$</span>
-                                <input
-                                  type="number"
-                                  min={1}
-                                  aria-label={`Amount ${pi + 1}`}
-                                  value={amount}
-                                  onChange={(e) => updatePreset(pi, +e.target.value)}
-                                />
-                                {fr.presets.length > 1 && (
-                                  <button
-                                    type="button"
-                                    className={styles.presetRemove}
-                                    aria-label={`Remove amount ${pi + 1}`}
-                                    onClick={() => removePreset(pi)}
-                                  >
-                                    ✕
-                                  </button>
-                                )}
-                              </div>
-                            ))}
-                            {fr.presets.length < MAX_FR_PRESETS && (
-                              <button type="button" className={styles.presetAdd} aria-label="Add amount" onClick={addPreset}>
-                                +
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {open && w.kind === "socials" && (
-                        <div className={styles.widgetConfig}>
-                          {profile.socials.map((s, si) => (
-                            <div className="social-row" key={si}>
-                              <span className="ic" style={{ background: SOCIAL_BRAND[s.kind].bg, color: SOCIAL_BRAND[s.kind].fg }}>
-                                <SocialIcon kind={s.kind} />
-                              </span>
-                              <div style={{ display: "grid", gridTemplateColumns: "130px 1fr", gap: 10 }}>
-                                <select
-                                  className="chip"
-                                  style={{ height: 48, padding: "0 12px", borderRadius: "var(--r-2)", background: "var(--bg-0)" }}
-                                  value={s.kind}
-                                  onChange={(e) => updateSocial(si, { kind: e.target.value as Social["kind"] })}
-                                >
-                                  {SOCIAL_KINDS.map((k) => (
-                                    <option key={k} value={k}>
-                                      {SOCIAL_LABEL[k]}
-                                    </option>
-                                  ))}
-                                </select>
-                                <div className="field">
-                                  <input
-                                    type="text"
-                                    placeholder={`${s.kind}.com/…`}
-                                    value={s.url}
-                                    onChange={(e) => updateSocial(si, { url: e.target.value })}
-                                  />
-                                </div>
-                              </div>
-                              <button className="rm" type="button" aria-label="Remove" onClick={() => removeSocial(si)}>
-                                ✕
-                              </button>
-                            </div>
-                          ))}
-                          {profile.socials.length < SOCIAL_KINDS.length && (
-                            <button className="btn-outline" type="button" style={{ alignSelf: "flex-start" }} onClick={addSocial}>
-                              + Add link
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+    <>
+      <GamePageEditor
+        profile={profile}
+        onSave={onSave}
+        config={CONFIG}
+          minAmount={profile.fundraiserConfig?.minContribution ?? DEFAULT_FUNDRAISER_CONFIG.minContribution}
+        // Fundraiser calls its headline "pledge" on the wire; the editor speaks `headline`.
+        draft={{ ...fr, headline: fr.pledge }}
+        patchDraft={({ headline, ...rest }, onto) =>
+          onSave({
+            ...(onto ?? profile),
+            fundraiser: {
+              ...fr,
+              ...(rest as Partial<FundraiserDraft>),
+              ...(headline !== undefined ? { pledge: headline as string } : {}),
+            },
+          })
+        }
+        rules={<FundraiserGameSettings profile={profile} onSave={onSave} />}
+        extraFields={
+          <div className={styles.subField}>
+            <div className="field" style={{ maxWidth: 220 }}>
+              <label htmlFor="fr-goal">Goal</label>
+              <div className="affix has-pre">
+                <span className="affix-pre">$</span>
+                <NumberInput id="fr-goal" min={1} value={fr.goal} onCommit={(n) => patchFr({ goal: n })} />
               </div>
             </div>
-          )}
 
-          {tab === "design" && (
-            <div className={styles.tabBody}>
-              <div className="card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                <div className={styles.rowHead}>Themes</div>
-                <div className={styles.themeGrid}>
-                  {THEMES.map((t) => {
-                    const active = sameBackground(fr.design, t.design);
-                    return (
-                      <button
-                        key={t.id}
-                        type="button"
-                        aria-pressed={active}
-                        className={`${styles.themeCard} ${active ? styles.themeCardOn : ""}`}
-                        onClick={() => patchFr({ design: t.design })}
-                      >
-                        <span className={styles.themeThumb} style={backgroundStyle(t.design)}>
-                          <span className={styles.tAvatar} />
-                          <span className={styles.tLine} />
-                          <span className={styles.tBtn} />
-                        </span>
-                        <span className={styles.themeLabel}>{t.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                <div className={styles.rowHead}>Page background</div>
-                <div className={styles.bgTypeRow}>
-                  {(["color", "gradient", "image"] as const).map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      className={`${styles.bgType} ${fr.design.background.type === t ? styles.bgTypeOn : ""}`}
-                      onClick={() => {
-                        if (t === "image") { bgFileRef.current?.click(); return; }
-                        patchFr({ design: { background: { type: t, value: t === "color" ? BACKGROUND_COLOR_PRESETS[0] : BACKGROUND_GRADIENT_PRESETS[0].id } } });
-                      }}
-                    >
-                      {t === "color" ? "Color" : t === "gradient" ? "Gradient" : "Image"}
-                    </button>
-                  ))}
-                  <input ref={bgFileRef} type="file" accept="image/*" hidden onChange={onBackgroundFile} />
-                </div>
-
-                {fr.design.background.type === "color" && (
-                  <div className={styles.swatches}>
-                    {BACKGROUND_COLOR_PRESETS.map((hex) => (
-                      <button
-                        key={hex}
-                        type="button"
-                        aria-label={hex}
-                        className={`${styles.swatch} ${fr.design.background.value === hex ? styles.swatchOn : ""}`}
-                        style={{ background: hex }}
-                        onClick={() => patchFr({ design: { background: { type: "color", value: hex } } })}
-                      />
-                    ))}
-                    <input
-                      className={styles.hexInput}
-                      type="text"
-                      value={fr.design.background.value}
-                      onChange={(e) => patchFr({ design: { background: { type: "color", value: e.target.value } } })}
-                    />
-                  </div>
-                )}
-
-                {fr.design.background.type === "gradient" && (
-                  <div className={styles.swatches}>
-                    {BACKGROUND_GRADIENT_PRESETS.map((g) => (
-                      <button
-                        key={g.id}
-                        type="button"
-                        aria-label={g.label}
-                        className={`${styles.swatch} ${fr.design.background.value === g.id ? styles.swatchOn : ""}`}
-                        style={{ backgroundImage: g.css }}
-                        onClick={() => patchFr({ design: { background: { type: "gradient", value: g.id } } })}
-                      />
-                    ))}
-                  </div>
-                )}
-
-                {fr.design.background.type === "image" && (
-                  <div className="footnote">
-                    {fr.design.background.value ? "Image set — pick Choose file to replace it." : "No image chosen yet."}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className={styles.previewCol}>
-          <div className={styles.deviceSeg} role="group" aria-label="Preview device">
-            <button type="button" className={device === "phone" ? styles.deviceOn : ""} onClick={() => setDevice("phone")}>
-              <PhoneIcon /> Phone
-            </button>
-            <button type="button" className={device === "desktop" ? styles.deviceOn : ""} onClick={() => setDevice("desktop")}>
-              <DesktopIcon /> Desktop
-            </button>
-          </div>
-          <LivePreview src={`/@${profile.handle}/fundraiser`} device={device} />
-
-          <div className={styles.linkRow}>
-            <div className={styles.linkLabel}>Fundraiser link</div>
-            <a className={styles.linkChip} href={`/@${profile.handle}/fundraiser`} target="_blank" rel="noreferrer">
-              <span className="num">{link}</span>
-            </a>
-            <button type="button" className="btn-outline" onClick={copyLink} aria-label="Copy link">
-              <CopyIcon /> {copied ? "Copied!" : "Copy"}
-            </button>
-            <button type="button" className="btn-outline" onClick={() => setQrOpen((v) => !v)}>
-              <QrIcon /> QR code
-            </button>
-            {qrOpen && (
-              <div className={styles.qrPop} role="dialog" aria-label="QR code">
-                {qrDataUrl ? (
-                  <>
-                    <img src={qrDataUrl} alt={`QR code for ${link}`} width={200} height={200} />
-                    <a className={styles.qrDownload} href={qrDataUrl} download="crown-fundraiser-qr.png">
-                      Download PNG
-                    </a>
-                  </>
+            <div className={styles.avatarRow}>
+              <div className={styles.avatarPreview} style={{ borderRadius: 12, background: "transparent", overflow: "hidden" }}>
+                {fr.fillImage ? (
+                  <img src={fr.fillImage} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                 ) : (
-                  <div className={styles.qrLoading}>Generating…</div>
+                  <CrownBadge size={44} />
                 )}
               </div>
-            )}
+              <div className={styles.avatarControls}>
+                <button type="button" className="btn-outline" onClick={() => fillFileRef.current?.click()}>
+                  <UploadIcon /> {fr.fillImage ? "Replace picture" : "Progress picture"}
+                </button>
+                {fr.fillImage && (
+                  <button type="button" className="btn-outline" onClick={() => patchFr({ fillImage: "" })}>
+                    Reset
+                  </button>
+                )}
+                <input
+                  ref={fillFileRef}
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  onChange={(e) => {
+                    openFillCrop(e.target.files?.[0]);
+                    e.target.value = "";
+                  }}
+                />
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        }
+      />
 
-      {cropSrc && <CropModal imageSrc={cropSrc} onConfirm={onCropConfirm} onCancel={onCropCancel} onReupload={(f) => openCrop(f, cropTarget)} />}
-    </div>
+      {cropSrc && (
+        <CropModal
+          imageSrc={cropSrc}
+          onConfirm={(dataUrl) => {
+            closeFillCrop();
+            patchFr({ fillImage: dataUrl });
+          }}
+          onCancel={closeFillCrop}
+          onReupload={openFillCrop}
+        />
+      )}
+    </>
   );
 }

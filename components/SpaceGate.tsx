@@ -1,7 +1,7 @@
 "use client";
 
 import { Logo } from "@/components/Logo";
-import { WalletButton } from "@/components/WalletButton";
+import { WalletConnect } from "@/components/WalletConnect";
 import { CrownBadge } from "@/components/CrownBadge";
 import { isDemoAddress } from "@/lib/data/session";
 import styles from "./SpaceGate.module.css";
@@ -27,8 +27,17 @@ export function SpaceGate({
   allowDemo: boolean;
   onDemoEnter: () => void;
 }) {
-  // A wallet is connected, but it isn't the one this page pays out to.
-  const wrongWallet = Boolean(connectedAddress);
+  // Three distinct states, and they must not be confused:
+  //   • a DIFFERENT wallet is connected      → "that's not this page's wallet" (switch accounts)
+  //   • THIS page's wallet is connected but
+  //     hasn't signed the ownership proof yet → "confirm the signature" (the popup is open right now)
+  //   • nothing connected                     → "connect your wallet"
+  // Comparing addresses is what was missing: `Boolean(connectedAddress)` called every connected wallet
+  // "wrong", so re-signing after a re-registration showed "you're connected as X but this page pays out
+  // to X — switch to that wallet", naming the same address twice.
+  const sameWallet = Boolean(connectedAddress) && Boolean(pageAddress) && connectedAddress === pageAddress;
+  const wrongWallet = Boolean(connectedAddress) && !sameWallet;
+  const awaitingSignature = sameWallet;
   const demoPage = isDemoAddress(pageAddress);
 
   return (
@@ -41,7 +50,16 @@ export function SpaceGate({
         <div className={styles.card}>
           <CrownBadge className={styles.mark} />
 
-          {wrongWallet ? (
+          {awaitingSignature ? (
+            <>
+              <h1 className={styles.title}>Confirm the signature</h1>
+              <p className={styles.lead}>
+                Your wallet <span className={`${styles.addr} num`}>{short(connectedAddress!)}</span> is connected —
+                approve the signature request to finish signing in. It&apos;s free and moves no funds. Closed it by
+                mistake? Reconnect below.
+              </p>
+            </>
+          ) : wrongWallet ? (
             <>
               <h1 className={styles.title}>That&apos;s not this page&apos;s wallet</h1>
               <p className={styles.lead}>
@@ -67,7 +85,7 @@ export function SpaceGate({
           )}
 
           <div className={styles.action}>
-            <WalletButton />
+            <WalletConnect />
           </div>
 
           {allowDemo && (

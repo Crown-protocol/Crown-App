@@ -35,6 +35,20 @@ export async function getProfile(handle: string): Promise<Profile | null> {
   return r.rows.length ? (JSON.parse(String(r.rows[0].data)) as Profile) : null;
 }
 
+// The account behind a wallet: the page whose OWNER is this wallet — owner is the base58 pubkey that
+// signed the registration, i.e. the true login (not the payout address, which a manual page can point
+// elsewhere). This is what "does this wallet already have an account?" resolves against at sign-in.
+// Newest first, so if a wallet ever owns more than one page the most recently touched wins.
+export async function getProfileByOwner(owner: string): Promise<Profile | null> {
+  if (!owner) return null;
+  const c = await db();
+  const r = await c.execute({
+    sql: `SELECT data FROM profiles WHERE owner = ? ORDER BY updated_at DESC LIMIT 1`,
+    args: [owner],
+  });
+  return r.rows.length ? (JSON.parse(String(r.rows[0].data)) as Profile) : null;
+}
+
 export async function listProfiles(): Promise<Profile[]> {
   const c = await db();
   const r = await c.execute(`SELECT data FROM profiles ORDER BY updated_at DESC LIMIT 500`);

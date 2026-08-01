@@ -1,267 +1,196 @@
-/* One mini-game's own page — the same template for every game. Only design-charter tokens:
-   one purple accent, no gold. Top navigation is the shared <TopNav> — do not re-add a header here. */
+/* Mini-game detail page — one template for every game. Neutral dark ground, quiet accents; the one
+   splash of colour is the game's own interactive demo (the roulette wheel, the fundraiser fill, …).
+   Primary buttons keep Crown's purple. Uses the app's tokens from globals.css. Top nav is the shared
+   <TopNav> — do not re-add a header here. */
+
 .wrap {
   min-height: 100vh;
-  display: flex;
-  flex-direction: column;
 }
 
 .main {
-  width: 100%;
-  max-width: 1600px;
+  max-width: 1120px;
   margin: 0 auto;
-  padding: 28px 40px 80px;
-  display: flex;
-  flex-direction: column;
-  gap: 28px;
-}
-@media (max-width: 1100px) {
-  .main {
-    padding: 24px 20px 64px;
-  }
+  padding: 56px 32px 110px;
 }
 
-
-/* ---- hero ---- */
+/* hero */
 .hero {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 18px;
+  margin-bottom: 16px;
 }
 .icon {
-  flex: none;
   width: 60px;
   height: 60px;
-  border-radius: var(--r-2);
-  display: grid;
-  place-items: center;
-  background: var(--accent-soft);
+  flex: none;
+  border-radius: 16px;
+  color: var(--text-1);
+  background: var(--bg-2);
   border: 1px solid var(--line-strong);
-  color: var(--accent);
-}
-.heroCopy {
-  min-width: 0;
-}
-.head {
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  justify-content: center;
 }
-.head h1 {
-  font-size: clamp(28px, 4vw, 36px);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
+.hero h1 {
+  margin: 0;
+  font-size: 38px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
 }
 .tagline {
-  font-size: 17px;
-  line-height: 1.5;
+  margin: 0 0 52px;
   color: var(--text-2);
+  font-size: 19px;
+  line-height: 1.5;
   max-width: 62ch;
-  margin-top: 8px;
+  text-wrap: balance;
 }
 
-/* ---- two columns: reading on the left, the demo playing alongside ---- */
-/* Info on the left, the playable sim on the right — the sim gets the bigger half, it's the point
-   of the page. Not sticky: it's taller than the viewport once it's running. */
 .cols {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
-  gap: 48px;
+  grid-template-columns: minmax(0, 1fr) 418px;
+  gap: 64px;
   align-items: start;
 }
-@media (max-width: 1000px) {
+@media (max-width: 980px) {
   .cols {
     grid-template-columns: 1fr;
-    gap: 32px;
+    gap: 44px;
   }
-  /* on narrow screens the sim leads — playing it explains the game faster than the text does */
-  .right {
-    order: -1;
-  }
-}
-.left {
-  display: flex;
-  flex-direction: column;
-  gap: 36px;
-  min-width: 0;
-}
-.right {
-  min-width: 0;
 }
 
-/* ---- pitch: three headline facts where a wall of prose used to be ---- */
-.pitch {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+.eyebrow {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin: 0 0 22px;
 }
-@media (max-width: 640px) {
-  .pitch {
-    grid-template-columns: 1fr;
-  }
+.section + .section {
+  margin-top: 48px;
 }
-.pitchCard {
-  background: var(--bg-1);
-  border: 1px solid var(--line);
-  border-radius: var(--r-2);
-  padding: 14px;
+
+/* how it works — a real 3-step sequence with a hairline spine */
+.steps {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  transition: border-color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
+  position: relative;
 }
-.pitchCard:hover {
-  border-color: var(--accent);
-  transform: translateY(-2px);
+.step {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 18px;
+  padding: 0 0 26px;
+  position: relative;
 }
-.pitchLabel {
-  font-size: 11px;
+.step:last-child {
+  padding-bottom: 0;
+}
+.step::before {
+  content: "";
+  position: absolute;
+  left: 17.5px;
+  top: 34px;
+  bottom: -2px;
+  width: 1px;
+  background: linear-gradient(var(--line-strong), transparent);
+}
+.step:last-child::before {
+  display: none;
+}
+.stepNum {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
   font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--accent);
+  color: var(--text-1);
+  background: var(--bg-2);
+  border: 1px solid var(--line-strong);
+  z-index: 1;
 }
-.pitchValue {
-  font-size: 14px;
-  line-height: 1.4;
+.stepLead {
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--text-1);
+  letter-spacing: -0.01em;
+  padding-top: 4px;
+}
+.stepSub {
+  font-size: 15px;
+  color: var(--text-2);
+  margin-top: 5px;
+  max-width: 54ch;
+}
+
+/* what you set — a clean bordered table of the real knobs */
+.knobs {
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  overflow: hidden;
+  background: var(--bg-1);
+}
+.knob {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+}
+.knob + .knob {
+  border-top: 1px solid var(--line);
+}
+.knobMain {
+  min-width: 0;
+}
+.knobLabel {
+  font-size: 15px;
   font-weight: 600;
   color: var(--text-1);
 }
-
-.section {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.h2 {
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+.knobHint {
+  font-size: 13.5px;
   color: var(--text-3);
+  margin-top: 3px;
 }
-.body {
-  font-size: 16px;
-  line-height: 1.6;
-  color: var(--text-2);
-}
-
-/* ---- rules: numbered, with the streamer's knobs marked inline (see RuleLine) ---- */
-.rulesHead {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.legend {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 12px;
-  color: var(--text-3);
-}
-.legendChip {
-  width: 22px;
-  height: 12px;
-  border-radius: 3px;
-  background: var(--accent-soft);
-  border-bottom: 1px dashed var(--accent);
-}
-.rules {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.rule {
-  display: flex;
-  gap: 14px;
-  align-items: baseline;
-}
-.ruleNum {
+.knobVal {
   flex: none;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  display: inline-grid;
-  place-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
   background: var(--bg-2);
   border: 1px solid var(--line);
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text-3);
-  transform: translateY(3px);
-}
-.ruleText {
-  font-size: 15px;
-  line-height: 1.65;
-  color: var(--text-2);
-}
-
-/* ---- what you control ---- */
-.controls {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-@media (max-width: 560px) {
-  .controls {
-    grid-template-columns: 1fr;
-  }
-}
-.control {
-  background: var(--bg-1);
-  border: 1px solid var(--line);
-  border-radius: var(--r-2);
-  padding: 14px;
-  transition: border-color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
-}
-.control:hover {
-  border-color: var(--line-strong);
-  transform: translateY(-1px);
-}
-.controlTop {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-}
-.controlLabel {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-1);
-}
-.controlValue {
-  flex: none;
-  padding: 2px 8px;
-  border-radius: var(--r-1);
-  background: var(--accent-soft);
-  border-bottom: 1px dashed var(--accent);
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-1);
+  padding: 3px 11px;
+  border-radius: var(--r-pill);
   white-space: nowrap;
+  margin-top: 1px;
 }
-.controlHint {
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--text-3);
-  margin-top: 6px;
-}
-.note {
+.knobsNote {
   font-size: 13px;
   color: var(--text-3);
+  margin: 14px 2px 0;
 }
 
-/* ---- CTA ---- */
 .cta {
+  margin-top: 52px;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 18px;
   flex-wrap: wrap;
-  padding-top: 20px;
-  border-top: 1px solid var(--line);
+}
+.cta .footnote {
+  font-size: 13.5px;
+  color: var(--text-3);
+}
+
+/* the demo lives in a sticky rail */
+.rail {
+  position: sticky;
+  top: 32px;
 }

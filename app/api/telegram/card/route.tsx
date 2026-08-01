@@ -70,6 +70,50 @@ function Chip({ text }: { text: string }) {
   );
 }
 
+// Clip a single line to a pixel width, ellipsis included. Satori has no text-overflow, so a string
+// that doesn't fit simply overruns the card instead of being cut — which is exactly what happened
+// the first time someone pasted a wall of text with no spaces in it.
+//
+// The width estimate is deliberately rough: Inter's average glyph runs ~0.55em, but CJK and emoji
+// are full-width, so those count double. Erring narrow costs a few characters; erring wide puts
+// text outside the image.
+function fit(text: string, fontSize: number, maxWidth: number): string {
+  const widthOf = (s: string) => {
+    let w = 0;
+    for (const ch of s) w += /[ᄀ-ᇿ⺀-鿿가-힯＀-｠]|\p{Extended_Pictographic}/u.test(ch) ? 1 : 0.55;
+    return w * fontSize;
+  };
+  if (widthOf(text) <= maxWidth) return text;
+  const chars = [...text];
+  while (chars.length > 1 && widthOf(chars.join("") + "…") > maxWidth) chars.pop();
+  return chars.join("") + "…";
+}
+
+// Same idea across several wrapped lines: break long unbroken runs so they wrap at all, then clip
+// to `lines`. Words are kept whole where they fit — only a word too long for one line is chopped.
+function clamp(text: string, fontSize: number, maxWidth: number, lines: number): string {
+  const per = Math.max(4, Math.floor(maxWidth / (fontSize * 0.55)));
+  const out: string[] = [];
+  let line = "";
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    let w = word;
+    // A single word wider than the line: chop it into line-sized pieces so it wraps instead of
+    // running off the edge.
+    while (w.length > per) {
+      if (line) { out.push(line); line = ""; }
+      out.push(w.slice(0, per));
+      w = w.slice(per);
+      if (out.length >= lines) return out.slice(0, lines).join(" ").slice(0, per * lines - 1) + "…";
+    }
+    if (!line) line = w;
+    else if (line.length + 1 + w.length <= per) line += " " + w;
+    else { out.push(line); line = w; }
+    if (out.length >= lines) return out.slice(0, lines).join(" ") + "…";
+  }
+  if (line) out.push(line);
+  return out.length > lines ? out.slice(0, lines).join(" ") + "…" : out.join(" ");
+}
+
 function Frame({ children }: { children: React.ReactNode }) {
   return (
     <div
@@ -109,10 +153,16 @@ export async function GET(req: Request) {
   if (t === "stats") {
     // rows: "Label:Value|Label:Value" — the prepared captions; only the figures change.
     // "|" as the row separator because the figures themselves contain commas ($4,120).
+    //
+    // Split on the FIRST colon only: values are free text now (a suggested game's name, someone's
+    // @handle), and "Idea:it works 1:1" must not be dropped for having two colons.
     const rows = (p.get("rows") ?? "")
       .split("|")
-      .map((r) => r.split(":"))
-      .filter((r) => r.length === 2);
+      .map((r) => {
+        const i = r.indexOf(":");
+        return i === -1 ? null : [r.slice(0, i), r.slice(i + 1)];
+      })
+      .filter((r): r is string[] => r !== null && r[1].trim() !== "");
 
     return new ImageResponse(
       (
@@ -121,27 +171,70 @@ export async function GET(req: Request) {
             <Wordmark />
             {label ? <Chip text={label} /> : null}
           </div>
-          <div style={{ display: "flex", fontSize: 46, fontWeight: 700, color: TEXT_1, marginTop: 48 }}>{title}</div>
-          <div style={{ display: "flex", flexWrap: "wrap", marginTop: 28 }}>
-            {rows.map(([k, v], i) => (
-              <div
-                key={i}
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  width: 500,
-                  marginRight: i % 2 === 0 ? 44 : 0,
-                  marginBottom: 22,
-                  padding: "22px 28px",
-                  background: PANEL,
-                  border: `1px solid ${LINE}`,
-                  borderRadius: 18,
-                }}
-              >
-                <div style={{ display: "flex", fontSize: 22, fontWeight: 600, color: TEXT_2, letterSpacing: 1 }}>{k}</div>
-                <div style={{ display: "flex", fontSize: 44, fontWeight: 700, color: TEXT_1, marginTop: 4 }}>{v}</div>
-              </div>
-            ))}
+          {/* One line, always: a wrapped title printed straight over the tiles, because this row is
+              laid out at its own height and a second line doesn't push anything down. Clipping to a
+              fixed height instead sliced the letters in half — so keep the row its natural height
+              and make sure the text can't wrap in the first place. */}
+          <div
+            style={{
+              display: "flex",
+              flexShrink: 0,
+              fontSize: 46,
+              fontWeight: 700,
+              color: TEXT_1,
+              marginTop: 34,
+              marginBottom: 22,
+              lineHeight: 1.2,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {fit(title, 46, 1040)}
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap" }}>
+            {rows.map(([k, v], i) => {
+              // A tile is 500 wide with 28 of padding either side, so 444 of usable text. Values used
+              // to be figures ("$4,120") and always fit; now they can be anything a stranger typed,
+              // and one long unbroken word ran straight off the card. Shrink first, then clip.
+              //
+              // Long values get two lines rather than one tiny one: at 26px a single line holds
+              // barely half a sentence, and the cut landed mid-word often enough to look like the
+              // text itself was broken.
+              const size = v.length > 26 ? 26 : v.length > 16 ? 34 : 44;
+              const shown = size === 26 ? clamp(v, 26, 444, 2) : fit(v, size, 444);
+              return (
+                <div
+                  key={i}
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    width: 500,
+                    marginRight: i % 2 === 0 ? 44 : 0,
+                    marginBottom: 18,
+                    padding: "18px 28px",
+                    background: PANEL,
+                    border: `1px solid ${LINE}`,
+                    borderRadius: 18,
+                  }}
+                >
+                  <div style={{ display: "flex", fontSize: 22, fontWeight: 600, color: TEXT_2, letterSpacing: 1 }}>
+                    {fit(k, 22, 444)}
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      fontSize: size,
+                      fontWeight: 700,
+                      color: TEXT_1,
+                      marginTop: 4,
+                      lineHeight: 1.25,
+                      maxWidth: 444,
+                    }}
+                  >
+                    {shown}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </Frame>
       ),
@@ -157,12 +250,21 @@ export async function GET(req: Request) {
           {label ? <Chip text={label} /> : null}
         </div>
         <div style={{ display: "flex", flexDirection: "column", marginTop: value ? 40 : 72 }}>
-          {value ? <div style={{ display: "flex", fontSize: 150, fontWeight: 700, color: TEXT_1, lineHeight: 1, letterSpacing: -3 }}>{value}</div> : null}
+          {value ? (
+            <div style={{ display: "flex", fontSize: 150, fontWeight: 700, color: TEXT_1, lineHeight: 1, letterSpacing: -3 }}>
+              {fit(value, 150, 1088)}
+            </div>
+          ) : null}
+          {/* maxWidth wraps on spaces, but an unbroken run of characters ignores it — so cap the
+              number of lines too. Two for the title, three for the body: past that the card stops
+              being a card and the full text is in the message underneath anyway. */}
           <div style={{ display: "flex", fontSize: 52, fontWeight: 700, color: TEXT_1, marginTop: 28, lineHeight: 1.15, maxWidth: 1050 }}>
-            {title}
+            {clamp(title, 52, 1050, 2)}
           </div>
           {sub ? (
-            <div style={{ display: "flex", fontSize: 30, color: TEXT_2, marginTop: 18, lineHeight: 1.35, maxWidth: 1000 }}>{sub}</div>
+            <div style={{ display: "flex", fontSize: 30, color: TEXT_2, marginTop: 18, lineHeight: 1.35, maxWidth: 1000 }}>
+              {clamp(sub, 30, 1000, 3)}
+            </div>
           ) : null}
         </div>
         {handle ? (

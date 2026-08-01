@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCrown } from "@/lib/data/DataProvider";
 import { DonateForm } from "@/components/DonateForm";
 import { Mono } from "@/components/Mono";
+import { usd } from "@/lib/money";
 
 function plural(n: number, one: string, many: string) {
   return n === 1 ? one : many;
@@ -54,14 +55,14 @@ export default function CampaignPage({ params }: { params: { handle: string; slu
         {goal ? (
           <div className="card">
             <div className="goal-sum">
-              <span className="goal-now num">{campaign.raised} $</span>
-              <span className="goal-of num">of {goal} $</span>
+              <span className="goal-now num">{usd(campaign.raised)}</span>
+              <span className="goal-of num">of {usd(goal)}</span>
             </div>
             <div className="bar">
               <div className="bar-fill" style={{ width: mounted ? `${pct}%` : "0%" }} />
             </div>
             <div className="goal-meta num">
-              {campaign.count} {plural(campaign.count, "donation", "donations")} · {left} $ left
+              {campaign.count} {plural(campaign.count, "donation", "donations")} · {usd(left)} left
             </div>
           </div>
         ) : null}

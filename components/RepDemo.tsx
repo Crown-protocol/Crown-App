@@ -6,10 +6,12 @@ import styles from "./RepDemo.module.css";
 // Interactive demo of per-streamer reputation: press a donate chip, watch the number tick up, the
 // bar fill, and the rank climb Newcomer → Regular → VIP. Pure client-side, no data layer — this is a
 // landing showcase, so the "streamer" here is fictional and the tiers are the mock ones the product ships.
+// One purple accent only (design charter — no gold, no second hue). Tiers read as a climb via a
+// monochrome purple ramp: dim → full accent, brightest at the top rank.
 const TIERS = [
-  { name: "Newcomer", from: 0, color: "#9AA0AE" },
-  { name: "Regular", from: 10, color: "#5B9BF0" },
-  { name: "VIP", from: 100, color: "#F0B94F" },
+  { name: "Newcomer", from: 0, color: "#6F6A84" },
+  { name: "Regular", from: 10, color: "#9B8CE6" },
+  { name: "VIP", from: 100, color: "#C0B7FA" },
 ];
 const MAX = TIERS[TIERS.length - 1].from;
 const CHIPS = [5, 10, 25];

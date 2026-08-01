@@ -170,6 +170,26 @@
   font-weight: 700;
 }
 
+/* "Installed" status pill — semantic green (like the error red elsewhere), a small chip beside the
+   wallet name so you can see at a glance which one is ready. */
+.installed {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: rgba(92, 192, 138, 0.16);
+  color: #5CC08A;
+  white-space: nowrap;
+}
+/* In the space-between row, hug the name and push the wallet icon to the far right. */
+.row .installed { margin-right: auto; }
+/* On the light-purple featured button, a dark chip reads better than green. */
+.featured .installed { background: rgba(15, 14, 20, 0.16); color: var(--accent-grad-ink); }
+
 .soon {
   margin-top: 12px;
   padding: 10px 12px;
@@ -179,6 +199,33 @@
   font-size: 13px;
   text-align: center;
 }
+.error {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: var(--r-2);
+  background: var(--error-soft);
+  color: var(--error);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* Connecting spinner. The featured (Phantom) variant is dark ink to read on the light-purple button;
+   the row (Solflare) variant is the accent on the dark row. */
+.spinner {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid var(--line-strong);
+  border-top-color: var(--accent);
+  animation: wmSpin 0.7s linear infinite;
+}
+.spinnerInk {
+  border-color: rgba(15, 14, 20, 0.28);
+  border-top-color: var(--accent-grad-ink);
+}
+@keyframes wmSpin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
 
 .foot {
   margin-top: 16px;
@@ -196,4 +243,26 @@
 }
 .foot a:hover {
   color: var(--accent);
+}
+
+/* ---- phone: fit the dialog to the screen, bigger tap targets, safe-area bottom ---- */
+@media (max-width: 480px) {
+  .overlay {
+    padding: 12px;
+  }
+  .card {
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+  }
+  /* the head's ? and × get a comfortable 44px hit area */
+  .head {
+    grid-template-columns: 44px 1fr 44px;
+  }
+  .help,
+  .close {
+    width: 44px;
+    height: 44px;
+  }
 }

@@ -37,16 +37,30 @@ export const MOCK_ROULETTE_HISTORY: RouletteRound[] = [
   { id: "r3", date: "Jun 30, 2026", winner: "Fortnite", genre: "Shooter", pot: 410, entries: 5, playedMinutes: 45 },
 ];
 
+// Deterministic per-round rand in [0,1): mulberry32 seeded by the round clock's zero. Every
+// browser that agrees on startedAt (the synced meta) computes the SAME spin — so an expiring
+// round lands on one winner everywhere, with no coordinator and no race between tabs.
+export function roundRand(seed: number): number {
+  let t = (seed >>> 0) + 0x6d2b79f5;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+
 // Weighted-random pick — pool share = odds. Mirrors what the real spin will do server-side
 // later; kept pure (rand passed in) so the Overview tab can demo it client-side with no backend.
-export function pickWeighted(rows: RouletteSuggestion[], rand: number): RouletteSuggestion | null {
-  const total = rows.reduce((sum, r) => sum + r.pool, 0);
+// `weights` overrides the default "pool = odds". Elimination rounds pass inverted pools, so the
+// best-backed suggestion is the LEAST likely to be picked (picked = knocked out there).
+export function pickWeighted(rows: RouletteSuggestion[], rand: number, weights?: number[]): RouletteSuggestion | null {
+  const w = weights && weights.length === rows.length ? weights : rows.map((r) => r.pool);
+  const total = w.reduce((sum, n) => sum + n, 0);
   // Rank mode can spin a wheel nobody has backed yet — no money means equal slices, not no spin.
   if (!total) return rows.length ? rows[Math.min(rows.length - 1, Math.floor(rand * rows.length))] : null;
   let acc = 0;
   const target = rand * total;
-  for (const r of rows) {
-    acc += r.pool;
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    acc += w[i];
     // strict "<" so a slice's upper boundary belongs to the next slice, and a zero-pool
     // suggestion (acc unchanged) can never be the one that first exceeds the target
     if (target < acc) return r;

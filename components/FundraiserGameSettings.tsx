@@ -1,6 +1,12 @@
 "use client";
 
 import type { FundraiserConfig, Profile } from "@/lib/data/types";
+import { NumberInput } from "@/components/NumberInput";
+import { HelpTip } from "@/components/HelpTip";
+import { RulesSummary, daysText } from "@/components/RulesSummary";
+import { WarnIcon } from "@/components/WarnIcon";
+import { withFundraiserDefaults } from "@/lib/data/fundraiser";
+import { usd } from "@/lib/money";
 
 export const DEFAULT_FUNDRAISER_CONFIG: FundraiserConfig = {
   minContribution: 1,
@@ -36,31 +42,63 @@ export function FundraiserGameSettings({ profile, onSave }: { profile: Profile; 
     onSave({ ...profile, fundraiserConfig: { ...cfg, ...next } });
   }
 
+  // The accept threshold is a % of the fundraiser's goal — meaningless without the goal beside it.
+  // Read the goal from the maker's fundraiser page so the % can be shown as a real dollar amount.
+  const goal = withFundraiserDefaults(profile).goal;
+  const acceptDollars = Math.round((goal * cfg.minAcceptPct) / 100);
+
   return (
     <div className="game-settings">
-      <div className="card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <h2>Rules</h2>
+      <section className="card" aria-labelledby="fr-money-h">
+        <h2 id="fr-money-h">Money</h2>
 
         <div className="field">
-          <label htmlFor="fr-min">Minimum chip-in</label>
+          <label htmlFor="fr-min">
+            Minimum chip-in
+            <HelpTip text="Minimum per chip-in." />
+          </label>
           <div className="affix has-pre">
             <span className="affix-pre">$</span>
-            <input
-              id="fr-min"
-              type="number"
-              min={1}
-              value={cfg.minContribution}
-              onChange={(e) => patch({ minContribution: Math.max(1, Math.round(+e.target.value) || 1) })}
-            />
-          </div>
-          <div className="footnote">
-            Viewers can't chip in less than this. Each contribution is its own escrow on-chain — tiny ones cost more gas
-            to refund than they hold.
+            <NumberInput id="fr-min" min={1} value={cfg.minContribution} onCommit={(n) => patch({ minContribution: n })} />
           </div>
         </div>
 
+        <div className="toggle-row">
+          <label className={`toggle${cfg.allowBelowGoal ? " on" : ""}`}>
+            <span className="track">
+              <span className="knob" />
+            </span>
+            <input type="checkbox" hidden checked={cfg.allowBelowGoal} onChange={(e) => patch({ allowBelowGoal: e.target.checked })} />
+            Allow closing below the goal
+          </label>
+          <HelpTip text="Accept a partial amount, or require the full goal." />
+        </div>
+
+        {cfg.allowBelowGoal && (
+          <div className="field">
+            <label htmlFor="fr-accept">
+              But no less than
+              <HelpTip text="% of the goal. Below this the accept button stays off." />
+            </label>
+            <div className="affix has-suf">
+              <NumberInput id="fr-accept" min={1} max={100} value={cfg.minAcceptPct} onCommit={(n) => patch({ minAcceptPct: n })} />
+              <span className="affix-suf">%</span>
+            </div>
+            <p className="hint">
+              = <b className="num">{usd(acceptDollars)}</b> at your <span className="num">{usd(goal)}</span> goal.
+            </p>
+          </div>
+        )}
+      </section>
+
+      <section className="card" aria-labelledby="fr-timing-h">
+        <h2 id="fr-timing-h">Timing</h2>
+
         <div className="field">
-          <label htmlFor="fr-funding">Collection runs for</label>
+          <label htmlFor="fr-funding">
+            Collection runs for
+            <HelpTip text="If you haven't accepted the amount by then, everyone is refunded automatically." />
+          </label>
           <select id="fr-funding" value={cfg.fundingDays} onChange={(e) => patch({ fundingDays: +e.target.value })}>
             {FUNDING_OPTIONS.map((o) => (
               <option key={o.days} value={o.days}>
@@ -68,11 +106,13 @@ export function FundraiserGameSettings({ profile, onSave }: { profile: Profile; 
               </option>
             ))}
           </select>
-          <div className="footnote">If you haven't accepted the amount by then, everyone is refunded automatically.</div>
         </div>
 
         <div className="field">
-          <label htmlFor="fr-delivery">Time to deliver</label>
+          <label htmlFor="fr-delivery">
+            Time to deliver
+            <HelpTip text="Counted from the moment you accept the amount. Don't deliver and every backer is refunded in full." />
+          </label>
           <select id="fr-delivery" value={cfg.deliveryDays} onChange={(e) => patch({ deliveryDays: +e.target.value })}>
             {DELIVERY_OPTIONS.map((o) => (
               <option key={o.days} value={o.days}>
@@ -80,48 +120,26 @@ export function FundraiserGameSettings({ profile, onSave }: { profile: Profile; 
               </option>
             ))}
           </select>
-          <div className="footnote">Counted from the moment you accept the amount. Miss it — refunds all around.</div>
-        </div>
-      </div>
-
-      <div className="card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <h2>Partial goal</h2>
-
-        <label className={`toggle${cfg.allowBelowGoal ? " on" : ""}`}>
-          <span className="track">
-            <span className="knob" />
-          </span>
-          <input type="checkbox" hidden checked={cfg.allowBelowGoal} onChange={(e) => patch({ allowBelowGoal: e.target.checked })} />
-          Allow closing below the goal
-        </label>
-        <div className="footnote">
-          Collected 18k of 20k? On: you can accept the smaller amount and deliver anyway. Off: it's the full goal or
-          everyone gets refunded.
         </div>
 
-        {cfg.allowBelowGoal && (
-          <div className="field">
-            <label htmlFor="fr-accept">But no less than</label>
-            <div className="affix has-suf">
-              <input
-                id="fr-accept"
-                type="number"
-                min={1}
-                max={100}
-                value={cfg.minAcceptPct}
-                onChange={(e) => patch({ minAcceptPct: Math.min(100, Math.max(1, Math.round(+e.target.value) || 1)) })}
-              />
-              <span className="affix-suf">%</span>
-            </div>
-            <div className="footnote">% of the goal. Below this the accept button stays off.</div>
+        {cfg.deliveryDays < cfg.fundingDays && (
+          <div className="rules-warn" role="status">
+            <WarnIcon />
+            <span>
+              You&apos;re giving yourself <b>{daysText(cfg.deliveryDays)}</b> to deliver but collecting for{" "}
+              <b>{daysText(cfg.fundingDays)}</b> — an unusually short delivery window. Allowed, just double-check it&apos;s what you want.
+            </span>
           </div>
         )}
-      </div>
+      </section>
 
-      <div className="notice">
-        <b>Fixed by the contract, not a setting here:</b> don't deliver — even with the goal fully met — and every
-        backer is refunded exactly what they put in. Reputation is only earned when you deliver.
-      </div>
+      <RulesSummary>
+        Backers chip in from {usd(cfg.minContribution)} for {daysText(cfg.fundingDays)}.{" "}
+        {cfg.allowBelowGoal
+          ? `You can accept once ${cfg.minAcceptPct}% of the goal is in;`
+          : "You can only accept once the full goal is in;"}{" "}
+        after that you have {daysText(cfg.deliveryDays)} to deliver. Don&apos;t, and every backer is refunded in full.
+      </RulesSummary>
     </div>
   );
 }

@@ -30,7 +30,7 @@ export function DonationsChart({ d, periodLabel }: { d: DashboardPeriod; periodL
   const earned = series.reduce((a, b) => a + b, 0);
   const peakValue = series.length ? Math.max(...series) : 0;
   const peakIndex = series.indexOf(peakValue);
-  const peakLabel = peakIndex >= 0 && d.labels?.[peakIndex] ? `${d.labels[peakIndex]} · ${peakValue} $` : `${peakValue} $`;
+  const peakLabel = peakIndex >= 0 && d.labels?.[peakIndex] ? `${d.labels[peakIndex]} · ${money(peakValue)}` : money(peakValue);
 
   // Click a game when everything's on → isolate it; otherwise toggle it in/out (never below one).
   function toggle(k: DonationSource) {

@@ -6,8 +6,9 @@ import styles from "./TopNav.module.css";
 const LINKS = [
   { href: "/discover", label: "Find a content maker" },
   { href: "/games", label: "Mini-games" },
-  { href: "/admin", label: "Admin Panel" },
 ];
+// Admin/ops is reachable by direct URL only — it must not be advertised in the public marketing
+// nav (every anonymous visitor would see and open it). Gating the /admin route itself is backend.
 
 // The one and only top navigation on the site: wordmark + nav links + TopRight.
 // Every full-nav page renders this — don't fork a second copy, or pages drift out of sync.

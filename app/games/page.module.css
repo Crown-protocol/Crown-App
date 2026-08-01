@@ -1,14 +1,13 @@
-/* Mini-games catalog page. Only design-charter tokens: one purple accent, no gold.
-   Top navigation is the shared <TopNav> component (components/TopNav.tsx) — do not
-   re-add a header here, or this page silently drifts from the rest of the site again. */
+/* Mini-games catalog page — a full-width poster grid with a single "suggest a game" CTA. Only
+   design-charter tokens: one purple accent. Top navigation is the shared <TopNav> component — do
+   not re-add a header here. */
 .wrap {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
 }
 
-/* Entrance: the heading settles in, then the game cards cascade up one by one. Plays once on
-   mount (the page is above the fold, so no observer needed) — same move as /discover. */
+/* Entrance: settle up — the head, then the grid cascades card by card. */
 @keyframes gamesIn {
   from {
     opacity: 0;
@@ -19,53 +18,7 @@
     transform: none;
   }
 }
-
-.main {
-  width: 100%;
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: 32px 24px 64px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-.head h1 {
-  font-size: 26px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-.head p {
-  font-size: 15px;
-  color: var(--text-3);
-  margin-top: 2px;
-}
-
-/* heading first, then the cards */
-.head {
-  animation: gamesIn 0.5s var(--ease) both;
-}
-
-/* GamesList owns its own module, so reach its cards from here via :global() — scoped under
-   .main so ONLY this page animates. The homepage teaser reuses GamesList and already has its
-   own scroll-reveal; animating the shared component itself would double up there.
-   The cards animate OPACITY only (not transform): the card's own :hover scale lives on
-   transform, and an entrance animation with a fill would sit on top of it and kill the hover.
-   The upward slide is done by the grid as a whole instead. */
-.main :global([class*="GamesList_grid"]) {
-  animation: gamesIn 0.5s var(--ease) both;
-  animation-delay: 0.06s;
-}
-.main :global([class*="GamesList_card"]) {
-  animation: fadeIn 0.45s var(--ease) both;
-}
-.main :global([class*="GamesList_card"]):nth-child(1) { animation-delay: 0.12s; }
-.main :global([class*="GamesList_card"]):nth-child(2) { animation-delay: 0.2s; }
-.main :global([class*="GamesList_card"]):nth-child(3) { animation-delay: 0.28s; }
-.main :global([class*="GamesList_card"]):nth-child(4) { animation-delay: 0.36s; }
-.main :global([class*="GamesList_card"]):nth-child(5) { animation-delay: 0.44s; }
-.main :global([class*="GamesList_card"]):nth-child(n + 6) { animation-delay: 0.52s; }
-
-@keyframes fadeIn {
+@keyframes cellIn {
   from {
     opacity: 0;
   }
@@ -74,10 +27,112 @@
   }
 }
 
+.main {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+@media (max-width: 640px) {
+  .main {
+    padding: 24px 16px 48px;
+    gap: 22px;
+  }
+}
+
+/* Title + subtitle on the left, the "suggest a mini-game" CTA on the right. */
+.head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  animation: gamesIn 0.5s var(--ease) both;
+}
+.headText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.title {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.subtitle {
+  font-size: 15px;
+  color: var(--text-3);
+}
+@media (max-width: 640px) {
+  .title {
+    font-size: 23px;
+  }
+}
+
+/* Suggest CTA — a quiet outlined pill (the primary filled accent is reserved for money actions).
+   Lifts to the accent on hover. */
+.suggest {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 18px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line-strong);
+  background: var(--bg-1);
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
+}
+.suggest svg {
+  color: var(--accent);
+}
+.suggest:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: translateY(-1px);
+}
+.suggest:hover svg {
+  color: var(--accent);
+}
+.suggest:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-accent);
+}
+
+/* Poster grid — the cards come from GamesList's module untouched; this grid only lays them out
+   and drives the entrance cascade. */
+.grid {
+  display: grid;
+  /* auto-FIT, not auto-fill: with only four games, auto-fill kept a phantom empty column on the
+     right; auto-fit collapses the empty track so the cards stretch to fill the row evenly. */
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  align-content: start;
+  animation: gamesIn 0.42s var(--ease) both;
+  animation-delay: 0.05s;
+}
+.grid .cell {
+  animation: cellIn 0.42s var(--ease) both;
+}
+.grid .cell:nth-child(1) { animation-delay: 0.08s; }
+.grid .cell:nth-child(2) { animation-delay: 0.12s; }
+.grid .cell:nth-child(3) { animation-delay: 0.16s; }
+.grid .cell:nth-child(4) { animation-delay: 0.2s; }
+.grid .cell:nth-child(n + 5) { animation-delay: 0.24s; }
+
 @media (prefers-reduced-motion: reduce) {
   .head,
-  .main :global([class*="GamesList_grid"]),
-  .main :global([class*="GamesList_card"]) {
+  .grid,
+  .grid .cell {
     animation: none;
   }
 }

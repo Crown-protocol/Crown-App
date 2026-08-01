@@ -13,7 +13,9 @@
   padding: 56px 24px 88px;
 }
 .title {
-  font-size: clamp(30px, 5vw, 46px);
+  /* Capped at 44px to match LegalPage — wallet-guide, terms and privacy share the same 720px
+     centred shell and sit one click apart, so their H1s must not drift (was 46px here vs 44px there). */
+  font-size: clamp(30px, 5vw, 44px);
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--text-1);
@@ -160,4 +162,25 @@
 }
 .back:hover {
   color: var(--accent-hover);
+}
+
+/* ---- phone: tighter gutters and step cards ---- */
+@media (max-width: 480px) {
+  .article {
+    padding: 40px 16px 64px;
+  }
+  .lead {
+    font-size: 16px;
+  }
+  .steps {
+    margin-top: 28px;
+  }
+  .step {
+    padding: 18px;
+    gap: 14px;
+  }
+  .num {
+    width: 30px;
+    height: 30px;
+  }
 }

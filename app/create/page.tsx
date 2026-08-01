@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useProfile } from "@/lib/data/ProfileProvider";
-import { DEMO_ADDRESS } from "@/lib/data/session";
+import { DEMO_ADDRESS, isDemoAddress, startDemoSession } from "@/lib/data/session";
+import { markProved } from "@/lib/data/proveOwnership";
+import { MOCK_STREAMERS } from "@/lib/data/mock";
 import { isValidAddress } from "@/lib/chain/config";
 import { useWallet } from "@/lib/chain/useWallet";
 import { useCrown } from "@/lib/data/DataProvider";
@@ -12,6 +14,7 @@ import { SocialIcon, SOCIAL_LABEL, SOCIAL_KINDS, SOCIAL_BRAND } from "@/componen
 import { SOCIAL_EXAMPLE, isSocialValid, sanitizeSocials } from "@/lib/data/social-links";
 import { TierEditor, defaultTiers } from "@/components/TierEditor";
 import { CropModal } from "@/components/CropModal";
+import { WalletModal } from "@/components/WalletModal";
 import { toHandle } from "@/lib/translit";
 import type { Social, Tier } from "@/lib/data/types";
 import styles from "./page.module.css";
@@ -32,7 +35,6 @@ export default function CreatePage() {
   const [name, setName] = useState("");
   const [handle, setHandle] = useState("");
   const [handleEdited, setHandleEdited] = useState(false);
-  const [bio, setBio] = useState("");
   const [socials, setSocials] = useState<Social[]>([{ kind: "youtube", url: "" }]);
   const [walletMode, setWalletMode] = useState<"connected" | "manual">("connected");
   const [manualAddr, setManualAddr] = useState("");
@@ -42,6 +44,12 @@ export default function CreatePage() {
   // 256×256 as a data URL. cropSrc is the object URL the modal is currently cropping.
   const [avatarUrl, setAvatarUrl] = useState("");
   const [cropSrc, setCropSrc] = useState("");
+  // Same Aave-style wallet picker as the donation pages — opens Phantom/Solflare (with install
+  // links when none is present). The old bare wallet.connect() silently did nothing with no wallet.
+  const [walletModalOpen, setWalletModalOpen] = useState(false);
+  // Publishing the page to the Crown DB (registration must not claim success until the server has it).
+  const [publishing, setPublishing] = useState(false);
+  const [publishErr, setPublishErr] = useState("");
 
   function pickAvatar(file: File | undefined) {
     if (!file || !file.type.startsWith("image/")) return;
@@ -64,7 +72,10 @@ export default function CreatePage() {
   useEffect(() => setHost(window.location.host), []);
 
   const cleanHandle = handle.trim().replace(/^@/, "").toLowerCase();
-  const canNext1 = name.trim().length > 0 && cleanHandle.length > 0;
+  // Built-in demo handles (/@nova) live in code, not the DB — the server refuses them (409), so
+  // catch it here with a normal field error instead of a silently dead link.
+  const reserved = !!MOCK_STREAMERS[cleanHandle];
+  const canNext1 = name.trim().length > 0 && cleanHandle.length > 0 && !reserved;
   // A filled-in social link must be a real profile URL on its platform (anti-phishing) before moving on.
   const canNext2 = socials.every((s) => !s.url.trim() || isSocialValid(s.kind, s.url));
 
@@ -80,8 +91,16 @@ export default function CreatePage() {
   const addr = resolvedAddress();
   // A real, well-formed destination is required before finishing (a bad/empty address would make the
   // streamer's own /@handle 404 and route donations nowhere). Demo mode uses the fixed demo address.
+  // A REAL payout address also needs the wallet's signature: the server refuses an unsigned page
+  // with a real address (anti-squatting), so finishing without a connected wallet would "save"
+  // locally and silently never publish — the public link would be dead in every other browser.
+  const manualNeedsWallet = walletMode === "manual" && manualValid && !isDemoAddress(manualAddr.trim()) && !wallet.connected;
   const canFinish =
-    walletMode === "manual" ? manualValid : mode === "chain" ? isValidAddress(wallet.address ?? "") : true;
+    walletMode === "manual"
+      ? manualValid && !manualNeedsWallet
+      : mode === "chain"
+        ? isValidAddress(wallet.address ?? "")
+        : true;
 
   // Every step change goes through here so `dir` and `step` always agree.
   function go(to: number) {
@@ -89,17 +108,41 @@ export default function CreatePage() {
     setStep(to);
   }
 
-  function finish() {
+  async function finish() {
+    if (publishing) return;
+    setPublishing(true);
+    setPublishErr("");
     const parsedTiers = tiers.filter((t) => t.name.trim()).map((t) => ({ ...t, name: t.name.trim() }));
-    save({
+    // Wait for the SERVER copy. A page that only made it into localStorage is invisible to every other
+    // browser (its /@handle 404s, and signing in elsewhere says "no account") — telling the user
+    // "you're registered" in that state is a lie that costs them their handle.
+    const res = await save({
       handle: cleanHandle,
       name: name.trim(),
-      bio: bio.trim(),
       address: addr,
       socials: sanitizeSocials(socials),
       tiers: parsedTiers.length ? parsedTiers : defaultTiers(),
       ...(avatarUrl ? { avatarEnabled: true, avatarUrl } : {}),
     });
+    setPublishing(false);
+    // Only count this as proof of ownership if the wallet REALLY signed. A demo-address page publishes
+    // without a signature, and stamping a proof for it handed the "this wallet proved itself" flag to a
+    // wallet that never signed anything.
+    if (res.ok && res.signed) markProved(wallet.address);
+    if (!res.ok) {
+      setPublishErr(
+        res.reason === "unsigned"
+          ? "Your wallet didn't sign the page, so it wasn't published. Approve the signature request and press Finish again."
+          : res.reason === "taken"
+            ? "That handle is already taken — pick another one."
+            : "Couldn't reach Crown to publish your page. Check your connection and press Finish again."
+      );
+      return;
+    }
+    // A demo-address page has no wallet to prove ownership with, so the cabinet gate (which signs a
+    // wallet in OR accepts a demo session) would otherwise bounce us back to /create. Mark the demo
+    // session here so /space recognises the just-created page and lands in the cabinet.
+    if (isDemoAddress(addr)) startDemoSession();
     router.push("/space");
   }
 
@@ -187,23 +230,20 @@ export default function CreatePage() {
                   />
                 </div>
                 {name.trim() && !cleanHandle && <div className={styles.err}>Use latin letters or digits.</div>}
+                {reserved && <div className={styles.err}>This handle is taken.</div>}
               </div>
 
-              <div className="field">
-                <label htmlFor="w-bio">About</label>
-                <textarea id="w-bio" rows={2} placeholder="Optional" value={bio} onChange={(e) => setBio(e.target.value)} />
-              </div>
             </>
           )}
 
           {step === 2 && (
             <>
               {socials.map((s, i) => (
-                <div className="social-row" key={i}>
+                <div className="social-row" key={s.id ?? `i${i}`}>
                   <span className="ic" style={{ background: SOCIAL_BRAND[s.kind].bg, color: SOCIAL_BRAND[s.kind].fg }}>
                     <SocialIcon kind={s.kind} />
                   </span>
-                  <div style={{ display: "grid", gridTemplateColumns: "130px 1fr", gap: 10 }}>
+                  <div className={styles.socialFields}>
                     <select
                       className="chip"
                       style={{ height: 48, padding: "0 12px", borderRadius: "var(--r-2)", background: "var(--bg-0)" }}
@@ -236,7 +276,7 @@ export default function CreatePage() {
                 </div>
               ))}
               {socials.length < SOCIAL_KINDS.length && (
-                <button className="btn-outline" type="button" style={{ alignSelf: "flex-start" }} onClick={() => setSocials((p) => [...p, { kind: "twitch", url: "" }])}>
+                <button className="btn-outline" type="button" style={{ alignSelf: "flex-start" }} onClick={() => setSocials((p) => [...p, { kind: "twitch", url: "", id: crypto.randomUUID() }])}>
                   + Add link
                 </button>
               )}
@@ -257,7 +297,7 @@ export default function CreatePage() {
                 </button>
 
                 {mode === "chain" && walletMode === "connected" && !wallet.connected && (
-                  <button className="btn" type="button" style={{ alignSelf: "flex-start" }} onClick={() => wallet.connect()}>
+                  <button className="btn" type="button" style={{ alignSelf: "flex-start" }} onClick={() => setWalletModalOpen(true)}>
                     {wallet.connecting ? "Opening wallet…" : "Connect wallet"}
                   </button>
                 )}
@@ -280,6 +320,14 @@ export default function CreatePage() {
                       onChange={(e) => setManualAddr(e.target.value)}
                     />
                     {manualAddr.trim() && !manualValid && <div className={styles.err}>Enter a valid Solana address (base58).</div>}
+                    {manualNeedsWallet && (
+                      <>
+                        <div className={styles.err}>Connect a wallet to sign the page — donations still go to this address.</div>
+                        <button className="btn" type="button" style={{ alignSelf: "flex-start", marginTop: 8 }} onClick={() => setWalletModalOpen(true)}>
+                          {wallet.connecting ? "Opening wallet…" : "Connect wallet"}
+                        </button>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -303,14 +351,19 @@ export default function CreatePage() {
           <button className={styles.back} type="button" onClick={() => (step === 1 ? router.push("/") : go(step - 1))}>
             ← Back
           </button>
+          {publishErr && (
+            <div className="error-note" role="alert" style={{ flex: "1 1 100%", order: -1 }}>
+              {publishErr}
+            </div>
+          )}
           <div className={styles.navRight}>
             {(step === 2 || step === 4) && (
               <button
                 className={styles.skip}
                 type="button"
-                disabled={step === 4 && !canFinish}
+                disabled={(step === 4 && !canFinish) || publishing}
                 onClick={() => {
-                  if (step === 4) return finish();
+                  if (step === 4) return void finish();
                   // Skipping socials shouldn't smuggle a half-typed invalid link forward — drop
                   // the invalid/empty ones now, the same clean-up finish() would do anyway.
                   if (step === 2) setSocials(sanitizeSocials(socials));
@@ -330,8 +383,8 @@ export default function CreatePage() {
                 Next
               </button>
             ) : (
-              <button className="btn" type="button" disabled={!canFinish} onClick={finish}>
-                Done
+              <button className="btn" type="button" disabled={!canFinish || publishing} onClick={() => void finish()}>
+                {publishing ? "Publishing…" : "Done"}
               </button>
             )}
           </div>
@@ -339,6 +392,7 @@ export default function CreatePage() {
       </div>
 
       {cropSrc && <CropModal imageSrc={cropSrc} onConfirm={onCropConfirm} onCancel={onCropCancel} onReupload={(f) => pickAvatar(f)} />}
+      {walletModalOpen && <WalletModal onClose={() => setWalletModalOpen(false)} />}
     </main>
   );
 }

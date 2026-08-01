@@ -105,3 +105,25 @@
   outline: none;
   box-shadow: 0 0 0 3px rgba(229, 114, 107, 0.25);
 }
+
+/* ---- phone: fit the card, tall equal-width buttons, safe-area bottom ---- */
+@media (max-width: 480px) {
+  .scrim {
+    padding: 16px;
+  }
+  .card {
+    padding: 20px;
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
+  }
+  .actions {
+    gap: 8px;
+  }
+  /* Cancel (.btn-outline) + confirm/danger share the row as two big tap targets */
+  .actions button {
+    flex: 1 1 0;
+    min-height: 44px;
+  }
+}

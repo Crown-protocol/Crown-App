@@ -4,6 +4,7 @@
 import type { FundraiserDraft, PageWidget, Profile } from "./types";
 import { isFreshScope } from "./freshScope";
 import { DEFAULT_DESIGN } from "./pagebuilder";
+import { sendOp } from "./gameSync";
 
 export const PLEDGE_MAX = 140;
 export const FR_DESCRIPTION_MAX = 300;
@@ -60,6 +61,8 @@ export function addCollected(handle: string, amount: number): number {
   try {
     localStorage.setItem(`${COLLECTED_KEY}:${handle}`, String(next));
   } catch {}
+  // Share it as a DELTA: concurrent chip-ins from different browsers must sum.
+  sendOp(handle, "crown-fundraiser-collected", { type: "add", delta: Math.max(0, amount) });
   return next;
 }
 
@@ -73,6 +76,7 @@ export type FundraiserState = "collecting" | "delivering" | "delivered" | "refun
 export interface FundraiserStatus {
   state: FundraiserState;
   accepted?: number; // the amount locked in when you accept and move to delivering
+  chainCollection?: string; // hex collection id once the streamer opened it on the funding canister
 }
 
 export interface Backer {
@@ -117,7 +121,7 @@ export function readStatus(handle: string): FundraiserStatus {
       const s = JSON.parse(raw);
       // Only accept a known state — an unrecognised value (corruption/tamper) would otherwise
       // persist and wedge the campaign, since no UI transition can leave an off-enum state.
-      if (s && FUNDRAISER_STATES.includes(s.state)) return { state: s.state, accepted: s.accepted };
+      if (s && FUNDRAISER_STATES.includes(s.state)) return { state: s.state, accepted: s.accepted, chainCollection: s.chainCollection };
     }
   } catch {}
   return { state: "collecting" };
@@ -127,5 +131,7 @@ export function writeStatus(handle: string, status: FundraiserStatus): Fundraise
   try {
     localStorage.setItem(`${STATUS_KEY}:${handle}`, JSON.stringify(status));
   } catch {}
+  // Single-writer key (the streamer's accept/deliver/refund) — authoritative overwrite.
+  sendOp(handle, "crown-fundraiser-status", { type: "replace", value: status });
   return status;
 }

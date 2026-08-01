@@ -1,0 +1,22 @@
+const WebSocket=require("ws"),http=require("http"),fs=require("fs");
+const jsonReq=(u,m)=>new Promise((res,rej)=>{const r=http.request(u,{method:m},x=>{let d="";x.on("data",c=>d+=c);x.on("end",()=>res(JSON.parse(d)))});r.on("error",rej);r.end()});
+(async()=>{
+const t=await jsonReq("http://localhost:9222/json/new?about:blank","PUT");
+const ws=new WebSocket(t.webSocketDebuggerUrl);let id=0;const p=new Map();
+ws.on("message",r=>{const m=JSON.parse(r);if(m.id&&p.has(m.id)){p.get(m.id)(m);p.delete(m.id)}});
+const send=(me,pa={})=>new Promise(r=>{const i=++id;p.set(i,r);ws.send(JSON.stringify({id:i,method:me,params:pa}))});
+const ev=async e=>{const r=await send("Runtime.evaluate",{expression:e,returnByValue:true});return r.result&&r.result.result?r.result.result.value:"(none)"};
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+await new Promise(r=>ws.on("open",r));
+await send("Page.enable");await send("Runtime.enable");
+await send("Emulation.setDeviceMetricsOverride",{width:1400,height:1000,deviceScaleFactor:1.25,mobile:false});
+await send("Page.navigate",{url:"http://localhost:3000/space"});await wait(3000);
+await ev(`(function(){localStorage.setItem('crown-demo-session','1');if(!localStorage.getItem('crown-profile'))localStorage.setItem('crown-profile',JSON.stringify({handle:'kira',name:'Kira',bio:'t',address:'CrownDemo1111111111111111111111111111111111',socials:[],tiers:[{name:'Fan',threshold:0,color:'#8B7CF6'}]}));return 'ok'})()`);
+await send("Page.navigate",{url:"http://localhost:3000/space"});await wait(6000);
+await ev(`(function(){var a=[...document.querySelectorAll('.sidenav a,.sidenav button,nav a,nav button')].find(e=>/^Widgets$/.test(e.textContent.trim()));a&&a.click();return 'ok'})()`);await wait(3500);
+console.log("? button present:", await ev(`!!document.querySelector('[class*="WidgetsPanel_helpQ"]')`));
+await ev(`(function(){var b=document.querySelector('[class*="WidgetsPanel_helpQ"]');b&&b.click();return 'clicked'})()`);await wait(600);
+console.log("guide open:", await ev(`!!document.querySelector('[class*="WidgetsPanel_guide"]')`));
+console.log("guide steps:", await ev(`document.querySelectorAll('[class*="WidgetsPanel_guideSteps"] li').length`));
+const s=await send("Page.captureScreenshot",{format:"png"});fs.writeFileSync("/tmp/claude-1000/-home-kiper/321cfff9-8423-43b0-ab03-830aada2e634/scratchpad/guide.png",Buffer.from(s.result.data,"base64"));
+process.exit(0)})();

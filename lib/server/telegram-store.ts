@@ -9,6 +9,8 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { db, now } from "./db";
+import { enqueue } from "./telegram-outbox";
+import { quickStatsRows, monthlyRows, platformRows } from "./telegram-stats";
 import { URGENCY_OF, URGENCY_LABEL, type NotifUrgency, type NotifKind } from "@/lib/data/notifications";
 
 // The old JSON file — read ONCE to import legacy state into the DB, then ignored.
@@ -45,6 +47,10 @@ export interface TgStore {
   founders: number[]; // chat ids that entered the founder secret
   outbox: OutboxItem[]; // queued messages, drained by the bot
 }
+
+// A link code is single-use and short-lived: long enough to switch apps and tap Start, short enough
+// that a stale deep link in a chat history is dead.
+export const LINK_CODE_TTL_MS = 15 * 60 * 1000;
 
 const EMPTY: TgStore = { botUsername: null, pending: {}, links: {}, founders: [], outbox: [] };
 
@@ -108,7 +114,6 @@ export async function writeStore(s: TgStore): Promise<void> {
     await tx.execute(`DELETE FROM tg_pending`);
     await tx.execute(`DELETE FROM tg_links`);
     await tx.execute(`DELETE FROM tg_founders`);
-    await tx.execute(`DELETE FROM tg_outbox`);
     if (s.botUsername) {
       await tx.execute({
         sql: `INSERT INTO tg_meta (key, value) VALUES ('bot_username', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
@@ -129,12 +134,9 @@ export async function writeStore(s: TgStore): Promise<void> {
     for (const chatId of s.founders) {
       await tx.execute({ sql: `INSERT OR IGNORE INTO tg_founders (chat_id) VALUES (?)`, args: [chatId] });
     }
-    for (const o of s.outbox) {
-      await tx.execute({
-        sql: `INSERT INTO tg_outbox (chat_id, caption, card, buttons, created_at) VALUES (?, ?, ?, ?, ?)`,
-        args: [o.chatId, o.caption, o.card ? JSON.stringify(o.card) : null, o.buttons ? JSON.stringify(o.buttons) : null, now()],
-      });
-    }
+    // NOTE: tg_outbox is deliberately NOT rewritten here. The queue owns its own rows and their
+    // delivery state (lib/server/telegram-outbox.ts); rewriting it from a snapshot is exactly what
+    // used to resurrect drained messages and drop freshly queued ones.
     await tx.commit();
   } catch (e) {
     await tx.rollback();
@@ -171,21 +173,21 @@ function buttonsFor(kind: NotifKind): TgButton[][] | undefined {
 }
 
 // Queue a notification for a streamer — respects their category toggles unless forced (test button).
-export function queueNotify(
+export async function queueNotify(
   s: TgStore,
   handle: string,
   kind: NotifKind,
   title: string,
   body: string,
   force = false
-): boolean {
+): Promise<boolean> {
   const link = s.links[handle];
   if (!link) return false;
   const urgency = URGENCY_OF[kind];
   if (!force && !link.categories[urgency]) return false;
 
   const { value, cardTitle } = splitMoney(title);
-  s.outbox.push({
+  await enqueue({
     chatId: link.chatId,
     caption: `<b>${esc(title)}</b>${body ? `\n${esc(body)}` : ""}`,
     card: {
@@ -201,55 +203,41 @@ export function queueNotify(
   return true;
 }
 
-// ---- demo figures (replaced by the real backend later) ----
+// ---- real figures, read from the donations the indexer mirrored (lib/server/telegram-stats.ts) ----
 
-function queueMonthly(s: TgStore, chatId: number, name: string) {
-  s.outbox.push({
+export async function queueMonthly(s: TgStore, chatId: number, name: string, handle: string) {
+  const { rows, headline } = await monthlyRows(handle);
+  await enqueue({
     chatId,
-    caption: `<b>${esc(name)}, your month on Crown</b>\nEarned $4,120 — up 18% on last month.`,
-    card: {
-      t: "stats",
-      label: "Summary",
-      title: `${name}, your month on Crown`,
-      rows: "Earned:$4,120 (+18%)|Donations:312|VIPs:120 (+30)|Best day:$340",
-    },
+    caption: `<b>${esc(name)}, your month on Crown</b>\n${esc(headline)}`,
+    card: { t: "stats", label: "Summary", title: `${name}, your month on Crown`, rows },
   });
 }
 
-function queueQuickStats(s: TgStore, chatId: number, name: string) {
-  s.outbox.push({
+async function queueQuickStats(s: TgStore, chatId: number, name: string, handle: string) {
+  await enqueue({
     chatId,
     caption: `<b>${esc(name)} — right now</b>`,
-    card: {
-      t: "stats",
-      label: "Summary",
-      title: `${name} — right now`,
-      rows: "Today:$180 · 6 donations|This week:$1,840 (+22%)|Reputation holders:402|Games run:3",
-    },
+    card: { t: "stats", label: "Summary", title: `${name} — right now`, rows: await quickStatsRows(handle) },
   });
 }
 
-function queuePlatform(s: TgStore, chatId: number) {
-  s.outbox.push({
+async function queuePlatform(s: TgStore, chatId: number) {
+  await enqueue({
     chatId,
     caption: "<b>Crown — platform</b>",
-    card: {
-      t: "stats",
-      label: "Founders",
-      title: "Crown — platform",
-      rows: "Content makers:1,284 (+56)|Donations this month:$184,200|Mini-games run:312|New viewers:8,420",
-    },
+    card: { t: "stats", label: "Founders", title: "Crown — platform", rows: await platformRows() },
   });
 }
 
 // Queue a card to every founder chat — the admin channel. `rows` switches to the stats layout.
-export function queueAdmin(
+export async function queueAdmin(
   s: TgStore,
   input: { label: string; title: string; body?: string; value?: string; rows?: string }
-): number {
+): Promise<number> {
   const { value, cardTitle } = input.value !== undefined ? { value: input.value, cardTitle: input.title } : splitMoney(input.title);
   for (const chatId of s.founders) {
-    s.outbox.push({
+    await enqueue({
       chatId,
       caption: `<b>${esc(input.title)}</b>${input.body ? `\n${esc(input.body)}` : ""}`,
       card: input.rows
@@ -260,11 +248,14 @@ export function queueAdmin(
   return s.founders.length;
 }
 
+// Samples for /demo. Every one is labelled SAMPLE in its own title: scrolled back to a week later,
+// a card reading "$50 landed in your wallet" is indistinguishable from real money, and this bot's
+// whole promise is that it never says a number that didn't happen.
 const DEMO_SAMPLES: { kind: NotifKind; title: string; body: string }[] = [
-  { kind: "big_donation", title: "toffi donated $50", body: "“Beat the boss with no armor on”" },
-  { kind: "auction_lot_offered", title: "New auction lot — $60", body: "Private until you accept: “Finish the map on the hardest difficulty.”" },
-  { kind: "roulette_closing", title: "Your roulette round closes in 12m", body: "$1,600 in the pot, 3 games suggested." },
-  { kind: "payout", title: "$50 landed in your wallet", body: "Task completed — toffi earned +50 reputation with you." },
+  { kind: "big_donation", title: "SAMPLE — toffi donated $50", body: "“Beat the boss with no armor on”. Not real: this is what a donation looks like." },
+  { kind: "auction_lot_offered", title: "SAMPLE — new auction lot, $60", body: "Private until you accept: “Finish the map on the hardest difficulty.” Not a real lot." },
+  { kind: "roulette_closing", title: "SAMPLE — roulette round closing", body: "$1,600 in the pot, 3 picks suggested. Not a real round." },
+  { kind: "payout", title: "SAMPLE — $50 payout", body: "This is how a payout arrives. No money moved." },
 ];
 
 // ---- the bot's brain: one Telegram update in → replies/edits out ----
@@ -310,7 +301,8 @@ const HELP = [
   "/settings — choose what arrives",
   "/stats — how it's going right now",
   "/monthly — your month in one card",
-  "/demo — three samples",
+  "/demo — samples, clearly marked as samples",
+  "/help — this list",
   "/stop — disconnect",
 ].join("\n");
 
@@ -365,17 +357,29 @@ export async function handleEvent(ev: BotEvent): Promise<BotResult> {
 
   switch (cmd) {
     case "/start": {
-      if (arg && s.pending[arg]) {
-        const { handle, name } = s.pending[arg];
+      const pend = arg ? s.pending[arg] : undefined;
+      // A link code is a bearer token for someone's notification stream, so it can't live forever:
+      // an old deep link found in a chat history must not still connect. Expired codes are cleaned
+      // up here and reported honestly, instead of the generic "not connected yet" that used to send
+      // people back to the cabinet they had just come from.
+      const expired = !!pend && Date.now() - pend.at > LINK_CODE_TTL_MS;
+      if (expired && arg) {
+        delete s.pending[arg];
+        await writeStore(s);
+      }
+      if (arg && pend && !expired) {
+        const { handle, name } = pend;
         delete s.pending[arg];
         s.links[handle] = { chatId, tgName: ev.tgName ?? "", name, categories: { ...ALL_ON }, monthly: true, at: Date.now() };
-        s.outbox.push({
+        await enqueue({
           chatId,
           caption: `<b>Connected</b>\nThis chat now gets everything from ${esc(name)}'s page.`,
           card: { t: "notify", label: "Connected", title: `This chat is linked to ${name}'s page`, sub: "Everything from the bell, right here.", handle },
         });
         await writeStore(s);
         reply(chatId, HELP);
+      } else if (expired) {
+        reply(chatId, "That link has expired. Open your Crown cabinet → Settings → Telegram and tap Connect again.");
       } else if (found) {
         reply(chatId, `Already connected to ${found[1].name}'s page.\n\n${HELP}`);
       } else {
@@ -391,16 +395,14 @@ export async function handleEvent(ev: BotEvent): Promise<BotResult> {
     case "/stats": {
       if (!found) reply(chatId, NOT_CONNECTED);
       else {
-        queueQuickStats(s, chatId, found[1].name);
-        await writeStore(s);
+        await queueQuickStats(s, chatId, found[1].name, found[0]);
       }
       break;
     }
     case "/monthly": {
       if (!found) reply(chatId, NOT_CONNECTED);
       else {
-        queueMonthly(s, chatId, found[1].name);
-        await writeStore(s);
+        await queueMonthly(s, chatId, found[1].name, found[0]);
       }
       break;
     }
@@ -430,14 +432,82 @@ export async function handleEvent(ev: BotEvent): Promise<BotResult> {
     }
     case "/platform": {
       if (s.founders.includes(chatId)) {
-        queuePlatform(s, chatId);
-        await writeStore(s);
+        await queuePlatform(s, chatId);
       } else reply(chatId, "Founders only.");
       break;
     }
-    default:
+    case "/help":
       reply(chatId, HELP);
+      break;
+    default:
+      // A command we don't know gets a short correction; ordinary chatter gets the help once,
+      // instead of the whole block being dumped in reply to every stray message.
+      reply(chatId, cmd.startsWith("/") ? `I don't know ${esc(cmd)}.\n\n${HELP}` : HELP);
   }
 
   return out;
+}
+
+// ---- bot process state (cursor + liveness) ----
+// Kept out of the snapshot store on purpose: these are written by the bot on every poll, and going
+// through readStore→writeStore would rewrite every tg_* table twice a second.
+
+async function botState(key: string): Promise<string | null> {
+  const c = await db();
+  const r = await c.execute({ sql: `SELECT v FROM tg_bot_state WHERE k = ?`, args: [key] });
+  return r.rows.length ? String(r.rows[0].v) : null;
+}
+
+async function setBotState(key: string, value: string): Promise<void> {
+  const c = await db();
+  await c.execute({
+    sql: `INSERT INTO tg_bot_state (k, v, updated_at) VALUES (?, ?, ?)
+          ON CONFLICT(k) DO UPDATE SET v = excluded.v, updated_at = excluded.updated_at`,
+    args: [key, value, now()],
+  });
+}
+
+// The getUpdates cursor. Held server-side so a bot restart resumes where it left off instead of
+// replaying (or skipping) a day of updates.
+export async function readOffset(): Promise<number> {
+  const v = await botState("offset");
+  const n = v ? Number(v) : 0;
+  return Number.isFinite(n) ? n : 0;
+}
+
+export async function writeOffset(offset: number): Promise<void> {
+  if (!Number.isFinite(offset)) return;
+  await setBotState("offset", String(offset));
+}
+
+// Heartbeat: the bot touches this every poll, so "is the bot running?" is a real question with a
+// real answer instead of "botUsername was set once, months ago".
+export async function touchBotSeen(): Promise<void> {
+  await setBotState("last_seen", String(now()));
+}
+
+export async function botLastSeen(): Promise<number> {
+  const v = await botState("last_seen");
+  const n = v ? Number(v) : 0;
+  return Number.isFinite(n) ? n : 0;
+}
+
+// A single bot instance may hold the lease; a second one starting up is told to stand down. Two
+// pollers would double-deliver and make Telegram return 409 in a hot loop.
+export async function acquireBotLease(instanceId: string, ttlMs = 60_000): Promise<boolean> {
+  const c = await db();
+  const raw = await botState("lease");
+  const nowMs = now();
+  if (raw) {
+    try {
+      const lease = JSON.parse(raw) as { id: string; at: number };
+      if (lease.id !== instanceId && nowMs - lease.at < ttlMs) return false;
+    } catch {}
+  }
+  await c.execute({
+    sql: `INSERT INTO tg_bot_state (k, v, updated_at) VALUES ('lease', ?, ?)
+          ON CONFLICT(k) DO UPDATE SET v = excluded.v, updated_at = excluded.updated_at`,
+    args: [JSON.stringify({ id: instanceId, at: nowMs }), nowMs],
+  });
+  return true;
 }

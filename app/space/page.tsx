@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSolanaWallet } from "@/lib/chain/wallet";
 import { useProfile } from "@/lib/data/ProfileProvider";
 import { useCrown } from "@/lib/data/DataProvider";
 import { SpaceGate } from "@/components/SpaceGate";
-import { isDemoAddress, walletOwns, readDemoSession, startDemoSession, endDemoSession } from "@/lib/data/session";
+import { isDemoAddress, isOwnerAddress, readDemoSession, startDemoSession, endDemoSession } from "@/lib/data/session";
+import { lookupAccountByOwner } from "@/lib/data/lookupAccount";
+import { proveOwnership, clearProof, hasProof, hasAnyProof } from "@/lib/data/proveOwnership";
 import { Logo } from "@/components/Logo";
 import { Mono } from "@/components/Mono";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -18,24 +20,21 @@ import { TaskPanel } from "@/components/TaskPanel";
 import { WidgetsPanel } from "@/components/WidgetsPanel";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { TelegramPanel } from "@/components/TelegramPanel";
-import { TaskGameSettings } from "@/components/TaskGameSettings";
 import { TaskOverview } from "@/components/TaskOverview";
 import { FundraiserPanel } from "@/components/FundraiserPanel";
-import { FundraiserGameSettings } from "@/components/FundraiserGameSettings";
 import { FundraiserOverview } from "@/components/FundraiserOverview";
 import { RoulettePanel } from "@/components/RoulettePanel";
-import { RouletteGameSettings } from "@/components/RouletteGameSettings";
 import { RouletteOverview } from "@/components/RouletteOverview";
 import { AuctionPanel } from "@/components/AuctionPanel";
-import { AuctionGameSettings } from "@/components/AuctionGameSettings";
 import { AuctionOverview } from "@/components/AuctionOverview";
 import { GameSessions, SessionBar } from "@/components/GameSessions";
 import { getCurrentSession, activeSessions } from "@/lib/data/gameSessions";
 import { NavIcon, GameIcon, ChevronDown } from "@/components/icons";
+import { usd } from "@/lib/money";
 import { MOCK_DASHBOARD, type DashboardPeriodKey } from "@/lib/data/mock";
-import { GAMES, type GameId, type GameModule } from "@/lib/data/games";
+import { GAMES, type GameId } from "@/lib/data/games";
 
-type Section = "home" | "donations" | "games" | "widgets" | "settings";
+type Section = "home" | "donations" | "games" | "widgets" | "telegram" | "settings";
 
 // The panel reads as two labelled groups — "Home" and "Games", the same shape — with Settings
 // pinned to the bottom on its own (see .side-bottom).
@@ -45,45 +44,27 @@ const NAV_HOME: { key: Section; label: string }[] = [
   { key: "widgets", label: "Widgets" },
 ];
 
-type GameTab = "page" | "sessions" | "overview" | "settings";
+// A game's rules used to be a fourth sidebar item ("Settings") rendering the same panel the
+// builder's Rules tab now hosts. Two doors to one room read as two different rooms, so the
+// sidebar item is gone — Page → Rules is the single way in.
+type GameTab = "page" | "sessions" | "overview";
+const GAME_SUBTABS: { key: GameTab; label: string }[] = [
+  { key: "page", label: "Page" },
+  { key: "sessions", label: "Sessions" },
+  { key: "overview", label: "Overview" },
+];
 const GAME_TABS: Record<GameId, { key: GameTab; label: string }[]> = {
-  task: [
-    { key: "page", label: "Page" },
-    { key: "sessions", label: "Sessions" },
-    { key: "overview", label: "Overview" },
-    { key: "settings", label: "Settings" },
-  ],
-  roulette: [
-    { key: "page", label: "Page" },
-    { key: "sessions", label: "Sessions" },
-    { key: "overview", label: "Overview" },
-    { key: "settings", label: "Settings" },
-  ],
-  fundraiser: [
-    { key: "page", label: "Page" },
-    { key: "sessions", label: "Sessions" },
-    { key: "overview", label: "Overview" },
-    { key: "settings", label: "Settings" },
-  ],
-  auction: [
-    { key: "page", label: "Page" },
-    { key: "sessions", label: "Sessions" },
-    { key: "overview", label: "Overview" },
-    { key: "settings", label: "Settings" },
-  ],
+  task: GAME_SUBTABS,
+  roulette: GAME_SUBTABS,
+  fundraiser: GAME_SUBTABS,
+  auction: GAME_SUBTABS,
 };
-
-// Only whether a game is live — no shipping-status label anywhere: the sidebar shows it as a
-// dot, and a game's own tabs say what it does rather than when it lands.
-function isLive(game: GameModule): boolean {
-  return game.status === "available";
-}
 
 export default function SpacePage() {
   const router = useRouter();
-  const { address, connected: isConnected, disconnect } = useSolanaWallet();
+  const { address, connected: isConnected, disconnect, signMessage } = useSolanaWallet();
   const { mode } = useCrown();
-  const { ready, registered, profile, save, reset } = useProfile();
+  const { ready, registered, profile, hasSession, sessionChecked, saveDeferred, hydrate, signOut, reset } = useProfile();
   const [section, setSection] = useState<Section>("home");
   const [period, setPeriod] = useState<DashboardPeriodKey>("30");
 
@@ -96,6 +77,54 @@ export default function SpacePage() {
     setSessionReady(true);
   }, []);
 
+  // Landing here with a connected wallet but no local profile — most often a fresh device, or after
+  // clearing the browser. Ask the Crown DB whether this wallet OWNS an account: if so, load it (log
+  // in); if not, this wallet has no page, so go straight to registration instead of the old
+  // "create your page first" dead-end. Only runs once per address, and never in demo (no wallet).
+  const probedFor = useRef<string | null>(null);
+  // Set while we are deliberately leaving the cabinet (page deleted). Deleting wipes the profile, and
+  // for the instant before the wallet actually disconnects the probe would see "no profile + no
+  // account in the DB" and redirect to /create — hijacking the navigation to the landing page.
+  const leavingRef = useRef(false);
+  useEffect(() => {
+    if (leavingRef.current) return;
+    if (!ready || !isConnected || !address) return;
+    // Nothing to do once we're already in: a live server session, or THIS wallet having proved itself
+    // with a profile loaded. Without the hasSession arm the probe re-ran on a valid session and asked
+    // the wallet to sign again — a popup on a plain reload, which is exactly what must never happen.
+    if (hasSession && profile) return;
+    if (profile && hasProof(address)) return;
+    if (probedFor.current === address) return; // one probe per connected wallet
+    probedFor.current = address;
+    void (async () => {
+      const found = await lookupAccountByOwner(address);
+      // Couldn't reach the account service — leave everything as-is and let the probe retry on the
+      // next address change / reload. Never fall through to /create: that would send an existing
+      // creator into re-registration, where finishing overwrites their own live page.
+      if (found.status === "error") {
+        probedFor.current = null;
+        return;
+      }
+      if (found.status === "found") {
+        const account = found.profile;
+        // Prove ownership once per device (wallet signs). Declined → let the probe re-arm so a retry
+        // (or the gate) can ask again, don't log in unproven.
+        const proof = await proveOwnership(address, signMessage);
+        if (proof === "declined") {
+          probedFor.current = null;
+          return;
+        }
+        hydrate(account); // load THIS wallet's own account (replaces any stale profile on the device)
+      } else if (!profile && !leavingRef.current) {
+        // This wallet owns no page and the device has none either → registration. (Not while we're on
+        // our way out after a delete — that navigation owns the screen.)
+        router.replace("/create");
+      }
+      // Wallet owns nothing but a profile sits on this device: it isn't this wallet's account, so we
+      // leave it be — the gate below shows "that's not this page's wallet" instead of letting them in.
+    })();
+  }, [ready, profile, hasSession, isConnected, address, hydrate, router, signMessage]);
+
   // Bumps whenever a session is created/selected/ended, so everything reading the session
   // registry (a plain localStorage store) re-renders with the fresh pick.
   const [sessionNonce, setSessionNonce] = useState(0);
@@ -105,35 +134,88 @@ export default function SpacePage() {
   const [gameId, setGameId] = useState<GameId>(GAMES[0].id);
   const [gameTab, setGameTab] = useState<GameTab>(GAME_TABS[GAMES[0].id][0].key);
 
-  if (!ready || !sessionReady) return <main className="page" />;
+  // The sidebar is a drawer: open by default on desktop (pushes content aside), tucked away on a
+  // phone (slides over with a scrim). `navAnim` gates the slide transition so setting the correct
+  // initial state on mount doesn't animate. On a phone, picking anything closes the drawer.
+  const [navOpen, setNavOpen] = useState(true);
+  const [navAnim, setNavAnim] = useState(false);
+  useEffect(() => {
+    setNavOpen(window.matchMedia("(min-width: 901px)").matches);
+    const id = requestAnimationFrame(() => setNavAnim(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+  // Escape closes the drawer (phone), matching the scrim tap.
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !window.matchMedia("(min-width: 901px)").matches) setNavOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [navOpen]);
+  const closeNavOnPhone = () => { if (!window.matchMedia("(min-width: 901px)").matches) setNavOpen(false); };
 
+  // Wait for the session answer too. Deciding on `ready` alone showed the gate for the moment
+  // between reading the cached profile and hearing back from the server — on a reload that moment IS
+  // the whole experience: the cabinet flashed "Connect your wallet" at someone already signed in.
+  if (!ready || !sessionReady || !sessionChecked) return <main className="page" />;
+
+  // No profile loaded on this device yet. Rather than a "create your page first" dead-end, decide by
+  // the wallet:
   if (!registered || !profile) {
+    // On our way out after deleting the page — render nothing and let the navigation to the landing
+    // page finish. Without this, the branches below would fire /create in that same instant.
+    if (leavingRef.current) return <main className="page" />;
+    // Wallet connected → the probe above is resolving it (load the owned account, or redirect to
+    // /create). Show a quiet loading state, never a wall with a redundant button.
+    if (isConnected && address) {
+      return <main className="page" />;
+    }
+    // Demo way in but no page exists — there's nothing to show a space for; go make one.
+    if (demoSession) {
+      router.replace("/create");
+      return <main className="page" />;
+    }
+    // Cold open, no wallet: ask for it. Connecting then routes via the same owner lookup (the probe),
+    // so an existing account logs in and a new wallet lands on /create.
     return (
-      <main className="page">
-        <header className="appbar">
-          <Logo />
-        </header>
-        <div className="center-note">
-          <h1>Create your page first</h1>
-          <p>The dashboard appears as soon as you have your own donation page.</p>
-          <Link className="btn" href="/create">
-            Create your page
-          </Link>
-        </div>
-      </main>
+      <SpaceGate
+        pageAddress=""
+        allowDemo={mode === "mock"}
+        onDemoEnter={() => router.replace("/create")}
+      />
     );
   }
 
-  // Signed in when the connected wallet is the one this page pays out to — or via the demo
-  // session, which is the only way into a page whose payout address is the demo placeholder.
-  const signedIn = walletOwns(address ?? undefined, profile.address) || demoSession;
+  // A profile EXISTS on this device — but that alone must NOT open the cabinet: on a shared or
+  // borrowed browser someone else's profile can still be sitting in localStorage. Two things do
+  // qualify as being signed in:
+  //
+  //   • the server session (hasSession) — the cookie minted from a verified signature. This is the
+  //     one that survives a reload, and leaving it out is why the cabinet threw people back to
+  //     "Connect your wallet" on every refresh: the extension needs a moment to reattach, and until
+  //     it did, `isConnected` was false and the gate slammed shut on a perfectly valid session.
+  //   • the connected wallet that proved ownership here (hasProof).
+  //
+  // Neither is weaker than what was here before — a session only exists because a wallet signed for
+  // it, and logging out deletes it server-side along with the proof.
+  //
+  // We deliberately do NOT compare against profile.address: that's the PAYOUT address (editable in
+  // Settings), not a login — a creator may pay out to a different wallet than the one they sign in
+  // with, and comparing against it used to lock people out of their own space.
+  // While no wallet is attached yet (the extension reconnects seconds after load, or the person
+  // signed in before sessions existed and has no cookie at all), fall back to the device-level
+  // proof — the same rule the landing header uses. A proof is only ever written after a verified
+  // signature and log out deletes it, so this opens the cabinet for exactly the people who already
+  // signed here, and nobody else.
+  const proven = isConnected && !!address ? hasProof(address) : hasAnyProof();
+  const signedIn = hasSession || proven || demoSession;
   if (!signedIn) {
+    // Either nothing is connected (cold open on a device that holds a profile), or a wallet IS
+    // connected but hasn't proved it owns this account — the probe above is asking it to sign, and if
+    // it owns nothing the gate below names the mismatch instead of opening someone else's cabinet.
     return (
       <SpaceGate
         pageAddress={profile.address}
         connectedAddress={isConnected && address ? address : undefined}
-        // A demo page can never be matched by a real wallet, and on mock data nothing is real
-        // money yet — in both cases locking the owner out would be theatre, not security.
         allowDemo={isDemoAddress(profile.address) || mode === "mock"}
         onDemoEnter={() => {
           startDemoSession();
@@ -174,30 +256,49 @@ export default function SpacePage() {
   function goSection(s: Section) {
     setSection(s);
     setOpenGame(null);
+    closeNavOnPhone();
   }
 
   function selectGameTab(id: GameId, tab: GameTab) {
     setSection("games");
     setGameId(id);
     setGameTab(tab);
+    closeNavOnPhone();
   }
 
   return (
     <main className="page">
-      <div className="space">
+      <div className={`space${navOpen ? " nav-open" : ""}${navAnim ? " nav-anim" : ""}`}>
         <div className="topbar">
+          <button
+            type="button"
+            className="nav-toggle"
+            aria-label={navOpen ? "Collapse menu" : "Open menu"}
+            aria-expanded={navOpen}
+            onClick={() => setNavOpen((v) => !v)}
+          >
+            {/* chevrons both ways, not ✕/burger: the drawer slides — left tucks it away, right brings it back */}
+            {navOpen ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden><path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden><path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            )}
+          </button>
           <Logo />
           <div className="me">
             {/* your public page opens from your name — no separate button needed */}
             <Link className="who" href={`/@${profile.handle}`} title={`Open /@${profile.handle}`} style={{ textDecoration: "none", color: "inherit" }}>
               <Mono name={profile.name} size={28} src={profile.avatarUrl} />
-              {profile.name}
+              <span>{profile.name}</span>
             </Link>
             <NotificationBell handle={profile.handle} />
           </div>
         </div>
 
-        <nav className="sidenav" aria-label="Cabinet sections">
+        <button type="button" className="nav-scrim" aria-hidden tabIndex={-1} onClick={() => setNavOpen(false)} />
+
+        <div className="space-body">
+        <nav className="sidenav" aria-label="Space sections">
           <div className="side-label">Home</div>
 
           {NAV_HOME.map((n) => (
@@ -211,14 +312,12 @@ export default function SpacePage() {
           <div className="side-label">Games</div>
 
           {GAMES.map((g) => {
-            const gsLive = isLive(g);
             const open = openGame === g.id;
             return (
               <div key={g.id}>
                 <button type="button" className={`game-row${open ? " open" : ""}`} aria-expanded={open} onClick={() => toggleGame(g.id)}>
                   <GameIcon id={g.id} width={18} height={18} />
                   {g.title}
-                  <span className={`gt-dot${gsLive ? " live" : ""}`} aria-hidden />
                   <ChevronDown className="chev" />
                 </button>
                 {open && (
@@ -239,8 +338,31 @@ export default function SpacePage() {
             );
           })}
 
+          <div className="side-divider" />
+          <div className="side-label">Bot</div>
+          <button
+            type="button"
+            className={`nav-item${section === "telegram" ? " active" : ""}`}
+            onClick={() => goSection("telegram")}
+          >
+            <NavIcon name="telegram" />
+            Telegram
+          </button>
+
           <div className="side-bottom">
             <div className="side-divider" />
+            {/* Admin/ops — owner-only entry, deliberately NOT in the public marketing nav (TopNav).
+                Rendered ONLY when the connected wallet is the platform owner's (OWNER_ADDRESS);
+                the /admin route's real access gate is on the backend. */}
+            {isOwnerAddress(address) && (
+              <Link href="/admin" className="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M12 3l7 3v5c0 4.3-2.9 7.6-7 8.7C7.9 18.6 5 15.3 5 11V6l7-3Z" />
+                  <path d="M9.2 12l2 2 3.6-3.8" />
+                </svg>
+                Admin
+              </Link>
+            )}
             <button
               type="button"
               className={`nav-item${section === "settings" ? " active" : ""}`}
@@ -272,7 +394,7 @@ export default function SpacePage() {
 
               <div className="tiles">
                 <div className="card tile">
-                  <div className="v num">{d.received} $</div>
+                  <div className="v num">{usd(d.received)}</div>
                   <div className="k">received</div>
                 </div>
                 <div className="card tile">
@@ -337,7 +459,7 @@ export default function SpacePage() {
                   <p className="hint" style={{ marginBottom: 8 }}>
                     Build the task page, then share the link or QR — viewers open it and set you a task.
                   </p>
-                  <TaskPanel profile={profile} onSave={save} />
+                  <TaskPanel profile={profile} onSave={saveDeferred} />
                 </>
               )}
               {game.id === "roulette" && (
@@ -345,7 +467,7 @@ export default function SpacePage() {
                   <p className="hint" style={{ marginBottom: 8 }}>
                     Build the roulette page, then share the link or QR — viewers open it and suggest a game.
                   </p>
-                  <RoulettePanel profile={profile} onSave={save} />
+                  <RoulettePanel profile={profile} onSave={saveDeferred} />
                 </>
               )}
               {game.id === "fundraiser" && (
@@ -353,7 +475,7 @@ export default function SpacePage() {
                   <p className="hint" style={{ marginBottom: 8 }}>
                     Build the fundraiser page, then share the link or QR — viewers open it and chip in.
                   </p>
-                  <FundraiserPanel profile={profile} onSave={save} />
+                  <FundraiserPanel profile={profile} onSave={saveDeferred} />
                 </>
               )}
               {game.id === "auction" && (
@@ -361,7 +483,7 @@ export default function SpacePage() {
                   <p className="hint" style={{ marginBottom: 8 }}>
                     Build the auction page, then share the link or QR — viewers open it and bid their lots.
                   </p>
-                  <AuctionPanel profile={profile} onSave={save} />
+                  <AuctionPanel profile={profile} onSave={saveDeferred} />
                 </>
               )}
             </>
@@ -379,6 +501,7 @@ export default function SpacePage() {
                   gameId={game.id}
                   gameTitle={game.title}
                   tiers={profile.tiers}
+                  fundraiserGoal={profile.fundraiser?.goal}
                   onOpen={() => {
                     setSessionNonce((n) => n + 1);
                     setGameTab("overview");
@@ -409,16 +532,12 @@ export default function SpacePage() {
               )}
 
               {game.id === "task" && gameTab === "overview" && (liveSessions.length > 0 || currentSession) && <TaskOverview profile={profile} scope={gameScope} />}
-              {game.id === "task" && gameTab === "settings" && <TaskGameSettings profile={profile} onSave={save} />}
 
               {game.id === "fundraiser" && gameTab === "overview" && (liveSessions.length > 0 || currentSession) && <FundraiserOverview profile={profile} scope={gameScope} />}
-              {game.id === "fundraiser" && gameTab === "settings" && <FundraiserGameSettings profile={profile} onSave={save} />}
 
               {game.id === "roulette" && gameTab === "overview" && (liveSessions.length > 0 || currentSession) && <RouletteOverview profile={profile} scope={gameScope} shareQuery={shareQuery} />}
-              {game.id === "roulette" && gameTab === "settings" && <RouletteGameSettings profile={profile} onSave={save} />}
 
               {game.id === "auction" && gameTab === "overview" && (liveSessions.length > 0 || currentSession) && <AuctionOverview profile={profile} scope={gameScope} shareQuery={shareQuery} />}
-              {game.id === "auction" && gameTab === "settings" && <AuctionGameSettings profile={profile} onSave={save} />}
             </>
           )}
 
@@ -427,23 +546,62 @@ export default function SpacePage() {
               <div className="main-head">
                 <h1>Settings</h1>
               </div>
-              <TelegramPanel handle={profile.handle} name={profile.name} />
               <SettingsPanel
                 profile={profile}
-                onSave={save}
-                onDelete={() => {
-                  reset();
-                  router.push("/");
-                }}
-                onLogOut={() => {
-                  // Signing out ends the session, nothing more: drop the wallet, drop the demo
-                  // session. The page and its settings stay put — sign back in to pick them up.
+                walletAddress={isConnected && address ? address : undefined}
+                onSave={saveDeferred}
+                onDelete={async () => {
+                  // Claim the navigation before anything clears: the probe must not fire /create while
+                  // we're deleting and heading to the landing page.
+                  leavingRef.current = true;
+                  // Wait for the DB row to actually go before leaving — navigating first killed the
+                  // in-flight request and the page survived on the server. On failure stay put and
+                  // report it; SettingsPanel surfaces the reason.
+                  const res = await reset();
+                  if (!res.ok) {
+                    leavingRef.current = false; // stayed in the cabinet — re-arm the probe
+                    return res;
+                  }
+                  // The page is gone, so this device must not walk straight back in: drop the proof and
+                  // the remembered wallet, otherwise the /space probe would re-hydrate on the next load.
+                  clearProof(address);
                   disconnect();
                   endDemoSession();
                   setDemoSession(false);
                   router.push("/");
+                  // Re-arm once the navigation is under way. Left stuck true, coming BACK to /space
+                  // (back button / any in-app link, which reuses the cached route segment) rendered a
+                  // permanently blank cabinet with the probe disabled.
+                  setTimeout(() => { leavingRef.current = false; }, 1500);
+                  return res;
+                }}
+                onLogOut={() => {
+                  // Claim the navigation FIRST. Logging out clears the proof and the profile, but this
+                  // component is still mounted and `address` only drops on the next render — the probe
+                  // would fire in that gap, re-prove ownership and hydrate the profile straight back in,
+                  // so after a reload Log out looked like it did nothing.
+                  leavingRef.current = true;
+                  // Forget this device: proof for THIS wallet (captured before disconnect nulls the
+                  // address), the wallet connection, the cached profile and any demo session. The page
+                  // stays in the DB — but the next sign-in must connect AND sign again.
+                  clearProof(address); // no address (wallet already gone) → clears every proof on this device
+                  disconnect(); // also clears the remembered wallet, so no silent auto-reconnect
+                  signOut(); // drop the local profile, so the next login runs the full flow (+ signature)
+                  endDemoSession();
+                  setDemoSession(false);
+                  router.push("/");
+                  setTimeout(() => { leavingRef.current = false; }, 1500);
                 }}
               />
+            </>
+          )}
+
+          {section === "telegram" && (
+            <>
+              <div className="main-head">
+                <h1>Telegram bot</h1>
+              </div>
+              <TelegramPanel handle={profile.handle} name={profile.name} />
             </>
           )}
 
@@ -455,6 +613,7 @@ export default function SpacePage() {
               <WidgetsPanel handle={profile.handle} />
             </>
           )}
+        </div>
         </div>
       </div>
     </main>

@@ -33,9 +33,16 @@ const FILTERS: Filter[] = ["all", "action", "money", "nice", "digest", "system"]
 
 // A short two-note chime, synthesized on the spot — no audio file to ship. Wrapped in try:
 // browsers block audio before the first user gesture, and a blocked ding must not break anything.
+//
+// ONE shared AudioContext for the page's lifetime, resumed if the browser suspended it. Creating a
+// fresh context per donation (and closing it on a timer) piled up contexts during a raid until the
+// browser's ~6-context cap was hit and the chime went silent.
+let sharedCtx: AudioContext | null = null;
 function ding() {
   try {
-    const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+    if (!sharedCtx) sharedCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+    const ctx = sharedCtx;
+    if (ctx.state === "suspended") void ctx.resume();
     const play = (freq: number, at: number) => {
       const o = ctx.createOscillator();
       const g = ctx.createGain();
@@ -50,7 +57,6 @@ function ding() {
     };
     play(880, 0); // A5
     play(1174.66, 0.09); // D6
-    setTimeout(() => void ctx.close().catch(() => {}), 900);
   } catch {}
 }
 

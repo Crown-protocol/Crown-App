@@ -21,7 +21,7 @@ export function LineIcon(props: SVGProps<SVGSVGElement>) {
 }
 
 function money(v: number) {
-  return `${Math.round(v).toLocaleString("en-US")} $`;
+  return `$${Math.round(v).toLocaleString("en-US")}`;
 }
 
 // Line view — an area chart in the accent, drawn like the reference: the stroke and the fill both
@@ -58,16 +58,20 @@ function LineView({
       <div style={{ height: 168, position: "relative" }}>
         <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: "100%", height: "100%", display: "block" }} aria-hidden>
           <defs>
-            {/* brighter at the top, darker toward the baseline — used for BOTH the fill and the stroke */}
+            {/* the SAME ramp the bars use (--chart-grad: grad-top → white), so the two views read
+                as one chart: peaks saturated purple, the baseline fading to white */}
+            {/* the stroke gradient spans the PATH's own bbox, and the line lives low in the frame —
+                so the purple has to hold most of the way down, or everything but the peak reads
+                white. Purple until ~70%, white only at the very baseline: the bars' ramp, scaled. */}
             <linearGradient id="chart-line-fill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--accent-hover)" stopOpacity="0.45" />
-              <stop offset="55%" stopColor="var(--accent)" stopOpacity="0.16" />
-              <stop offset="100%" stopColor="var(--accent-down)" stopOpacity="0" />
+              <stop offset="0%" stopColor="var(--grad-top)" stopOpacity="0.55" />
+              <stop offset="70%" stopColor="var(--grad-top)" stopOpacity="0.18" />
+              <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
             </linearGradient>
             <linearGradient id="chart-line-stroke" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#C9BEFF" />
-              <stop offset="60%" stopColor="var(--accent)" />
-              <stop offset="100%" stopColor="var(--accent-down)" />
+              <stop offset="0%" stopColor="var(--grad-top)" />
+              <stop offset="70%" stopColor="var(--grad-top)" />
+              <stop offset="100%" stopColor="#ffffff" />
             </linearGradient>
           </defs>
 
@@ -149,7 +153,7 @@ export function Chart({
     setHover(Math.max(0, Math.min(days.length - 1, i)));
   }
 
-  const tipLeft = hover === null ? 0 : view === "bar" ? ((hover + 0.5) / days.length) * 100 : (hover / (days.length - 1)) * 100;
+  const tipLeft = hover === null ? 0 : view === "bar" ? ((hover + 0.5) / days.length) * 100 : days.length > 1 ? (hover / (days.length - 1)) * 100 : 50;
 
   return (
     <>

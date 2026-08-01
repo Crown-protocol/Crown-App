@@ -40,6 +40,12 @@
   flex-direction: column;
   gap: 32px;
 }
+@media (max-width: 640px) {
+  .main {
+    padding: 28px 16px 48px;
+    gap: 24px;
+  }
+}
 
 .searchRow {
   display: flex;
@@ -64,6 +70,12 @@
   .body {
     grid-template-columns: 1fr;
   }
+  /* stacked above the results — sticky would let the filter block drift over the cards on scroll */
+  .sidebar {
+    position: static;
+    top: auto;
+    gap: 20px;
+  }
 }
 
 .sidebar {
@@ -87,6 +99,26 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-3);
+}
+/* label + "Clear" on one line; Clear appears only when platforms are selected */
+.filterHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.clearPlatforms {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+  transition: color var(--dur-1) var(--ease);
+}
+.clearPlatforms:hover {
+  color: var(--accent-hover);
 }
 .filterGroup :global(.seg) {
   width: fit-content;
@@ -128,6 +160,13 @@
 }
 .platformRow.platformOn .platformCount {
   color: var(--accent);
+}
+/* comfortable tap targets for the filter rows on touch */
+@media (max-width: 640px) {
+  .platformRow {
+    height: auto;
+    min-height: 44px;
+  }
 }
 
 .grid {

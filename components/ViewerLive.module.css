@@ -5,10 +5,13 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  font-size: 18px;
+  font-size: 13px;
   font-weight: 700;
-  letter-spacing: -0.01em;
-  margin-bottom: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 12px;
+  padding-left: 2px;
 }
 .liveDot {
   width: 8px;
@@ -23,24 +26,30 @@
   50% { box-shadow: 0 0 0 6px var(--accent-soft); }
 }
 
+/* Single-column stack — in the page's narrow centred column a 2-up grid made ragged, uneven-height
+   cards (the old "holes"). A clean vertical list reads calmer and every card is full width. */
 .grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 .card {
   background: var(--bg-1);
   border: 1px solid var(--line);
   border-radius: var(--r-3);
-  padding: 18px;
+  padding: 18px 20px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  transition: border-color var(--dur-1) var(--ease);
+  gap: 11px;
+  transition: border-color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
 }
 .card:hover {
   border-color: var(--line-strong);
+  transform: translateY(-1px);
 }
+/* The CTA sits inline on the right of the header row now (see .cardHead), so the trailing spacer +
+   bottom CTA are collapsed — cards are compact, not tall boxes with a lonely button at the bottom. */
+.spacer { display: none; }
 .cardHead {
   display: flex;
   align-items: center;
@@ -96,20 +105,36 @@
 .spacer {
   flex: 1;
 }
+/* Quiet accent-text link, not a filled button — the ONE filled purple CTA on the page is Donate.
+   These are secondary "join in" actions and shouldn't compete with it (design charter: gradient/
+   filled accent is reserved for the primary money action). */
 .cta {
   align-self: flex-start;
   display: inline-flex;
   align-items: center;
-  height: 40px;
-  padding: 0 16px;
-  border-radius: var(--r-2);
-  background: var(--accent-grad, var(--accent));
-  color: var(--accent-grad-ink, #0f0e14);
+  gap: 4px;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
+  color: var(--accent);
   text-decoration: none;
-  transition: filter var(--dur-1) var(--ease);
+  margin-top: 1px;
+  transition: gap var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
 }
 .cta:hover {
-  filter: brightness(1.05);
+  gap: 8px;
+}
+
+/* Phone: the live-games grid becomes a single column (auto-fit's 240px min can't guarantee it on
+   the narrowest devices), padding tightens, and the CTA grows to a comfortable tap height. */
+@media (max-width: 560px) {
+  .grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .card {
+    padding: 16px;
+  }
+  .cta {
+    height: 44px;
+  }
 }

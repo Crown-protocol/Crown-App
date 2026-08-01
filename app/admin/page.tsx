@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { SocialIcon, GameIcon, NavIcon, SearchIcon } from "@/components/icons";
 import { CrownBadge } from "@/components/CrownBadge";
+import { LaunchReadiness } from "@/components/LaunchReadiness";
+import { BotPanel } from "@/components/admin/BotPanel";
 import { BarsIcon, LineIcon } from "@/components/Chart";
 import { StatTile, BarList, GrowthChart, StatusPill, SortHeader, money, shortMoney, axisTicks } from "@/components/ops";
 import { useCrown } from "@/lib/data/DataProvider";
@@ -27,12 +29,48 @@ function PeopleIcon() {
   );
 }
 
-type Section = "overview" | "streamers" | "donators" | "tasks" | "moderation" | "settings";
+// A single donor — the counterpart to PeopleIcon (a crowd) above. Content makers and Donators used
+// to share one glyph, which made two different sections look like the same one.
+function DonorIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="12" cy="8" r="3.4" />
+      <path d="M5.5 19.5c0-3.3 2.9-5.9 6.5-5.9s6.5 2.6 6.5 5.9" />
+    </svg>
+  );
+}
+
+// Launch readiness: a checklist. It shared the settings glyph with Moderation, so the sidebar showed
+// the same icon twice for two unrelated screens.
+function ChecklistIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="m4 7 2 2 3.5-3.5" />
+      <path d="m4 16 2 2 3.5-3.5" />
+      <path d="M13 7.5h7" />
+      <path d="M13 16.5h7" />
+    </svg>
+  );
+}
+
+// Moderation: a shield — "we check things here", distinct from Settings' sliders.
+function ShieldIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M12 3.5 5 6.3v5.2c0 4 2.9 7.6 7 9 4.1-1.4 7-5 7-9V6.3L12 3.5Z" />
+      <path d="m9.2 12 2 2 3.6-3.8" />
+    </svg>
+  );
+}
+
+type Section = "overview" | "streamers" | "donators" | "tasks" | "bot" | "launch" | "moderation" | "settings";
 const NAV: { key: Section; label: string; icon: () => React.JSX.Element }[] = [
   { key: "overview", label: "Overview", icon: () => <NavIcon name="home" /> },
   { key: "streamers", label: "Content makers", icon: PeopleIcon },
-  { key: "donators", label: "Donators", icon: PeopleIcon },
+  { key: "donators", label: "Donators", icon: DonorIcon },
   { key: "tasks", label: "Tasks", icon: () => <NavIcon name="games" /> },
+  { key: "bot", label: "Telegram bot", icon: () => <NavIcon name="telegram" /> },
+  { key: "launch", label: "Launch readiness", icon: ChecklistIcon },
 ];
 const RANGES = [
   { key: "1d", label: "1D", n: 2 },
@@ -53,8 +91,7 @@ export default function OpsPage() {
             Crown
           </Link>
         </div>
-        <div className="brand" style={{ paddingTop: 0 }}>
-          <span className="tag">admin panel</span>
+        <div className="brand brand-tag" style={{ paddingTop: 0 }}>
         </div>
         {NAV.map((n) => (
           <button key={n.key} type="button" className={`admin-item${section === n.key ? " active" : ""}`} onClick={() => setSection(n.key)}>
@@ -64,12 +101,12 @@ export default function OpsPage() {
         ))}
         <div className="admin-divider" />
         <button type="button" className={`admin-item${section === "moderation" ? " active" : ""}`} onClick={() => setSection("moderation")}>
-          <NavIcon name="settings" />
+          <ShieldIcon />
           Moderation
         </button>
         <div className="admin-divider" />
         <button type="button" className={`admin-item${section === "settings" ? " active" : ""}`} onClick={() => setSection("settings")}>
-          <NavIcon name="widgets" />
+          <NavIcon name="settings" />
           Settings
         </button>
       </nav>
@@ -81,6 +118,8 @@ export default function OpsPage() {
         {section === "streamers" && <Streamers />}
         {section === "donators" && <Donators />}
         {section === "tasks" && <Tasks />}
+        {section === "bot" && <BotPanel />}
+        {section === "launch" && <LaunchReadiness />}
         {section === "moderation" && <Moderation />}
         {section === "settings" && <Settings />}
       </div>
@@ -609,8 +648,9 @@ function Moderation() {
                   {OPS_STREAMERS.map((r) => <option key={r.handle} value={r.handle}>@{r.handle}</option>)}
                 </select>
               </div>
-              <label className={`toggle${preserve ? " on" : ""}`} style={{ alignSelf: "end", height: 52 }} onClick={() => setPreserve((v) => !v)}>
+              <label className={`toggle${preserve ? " on" : ""}`} style={{ alignSelf: "end", height: 52 }}>
                 <span className="track"><span className="knob" /></span>
+                <input type="checkbox" hidden checked={preserve} onChange={(e) => setPreserve(e.target.checked)} />
                 Preserve evidence + report
               </label>
             </div>
@@ -650,6 +690,98 @@ function Moderation() {
   );
 }
 
+// Demo pages, seeded and removed from one place. The wipe only ever touches pages this panel
+// created (the server tracks them); anything else in the DB is left alone, so there's no way to
+// lose a real page by pressing the wrong button.
+function TestData() {
+  const [stat, setStat] = useState<{ test: number; total: number; seedSize: number } | null>(null);
+  const [busy, setBusy] = useState("");
+  const [note, setNote] = useState("");
+  const [confirming, setConfirming] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const r = await fetch("/api/admin/test-data", { cache: "no-store" });
+      if (r.ok) setStat(await r.json());
+    } catch {}
+  }, []);
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function run(action: "seed" | "wipe") {
+    setBusy(action);
+    setNote("");
+    try {
+      const r = await fetch("/api/admin/test-data", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const j = (await r.json()) as { added?: number; removed?: number; error?: string };
+      if (!r.ok) setNote(j.error ?? "Didn't work.");
+      else if (action === "seed")
+        setNote(j.added ? `Added ${j.added} demo page${j.added === 1 ? "" : "s"}.` : "They're already there.");
+      else setNote(j.removed ? `Removed ${j.removed} demo page${j.removed === 1 ? "" : "s"}.` : "Nothing to remove.");
+      void load();
+    } catch {
+      setNote("Didn't work.");
+    } finally {
+      setBusy("");
+      setConfirming(false);
+    }
+  }
+
+  return (
+    <div className="panel" style={{ maxWidth: 640 }}>
+      <div className="panel-head">
+        <div>
+          <h2>Test data</h2>
+          <div className="ph-sub">Demo pages for trying the panel out. Only these are ever deleted.</div>
+        </div>
+      </div>
+
+      <p className="footnote" style={{ marginTop: 0 }}>
+        {stat ? `${stat.test} demo page${stat.test === 1 ? "" : "s"} of ${stat.total} total.` : "Counting…"}
+      </p>
+
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
+        <button type="button" className="btn-outline" disabled={!!busy} onClick={() => void run("seed")}>
+          {busy === "seed" ? "Adding…" : "Add test data"}
+        </button>
+        {confirming ? (
+          <>
+            {/* btn-danger is 48px tall by default — match the outline buttons it sits beside. */}
+            <button
+              type="button"
+              className="btn-danger"
+              style={{ height: 40, padding: "0 16px", fontSize: 14 }}
+              disabled={!!busy}
+              onClick={() => void run("wipe")}
+            >
+              {busy === "wipe" ? "Removing…" : `Yes, remove ${stat?.test ?? 0}`}
+            </button>
+            <button type="button" className="btn-outline" disabled={!!busy} onClick={() => setConfirming(false)}>
+              Cancel
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="btn-outline"
+            disabled={!!busy || !stat?.test}
+            onClick={() => setConfirming(true)}
+          >
+            Remove test data
+          </button>
+        )}
+      </div>
+
+      {note && <p className="footnote" style={{ marginTop: 12 }}>{note}</p>}
+    </div>
+  );
+}
+
 function Settings() {
   const { mode, setMode, ready } = useCrown();
 
@@ -680,6 +812,8 @@ function Settings() {
           </div>
         )}
       </div>
+
+      <TestData />
 
       <div className="panel placeholder" style={{ maxWidth: 640 }}>
         <h2>Not wired up yet</h2>

@@ -97,9 +97,11 @@ export function GameIcon({ id, ...props }: { id: GameId } & SVGProps<SVGSVGEleme
   }
 }
 
-export function NavIcon({ name }: { name: "home" | "donations" | "viewers" | "games" | "widgets" | "settings" }) {
+export function NavIcon({ name }: { name: "home" | "donations" | "viewers" | "games" | "widgets" | "settings" | "telegram" }) {
   const p = { width: 20, height: 20, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.75, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
   switch (name) {
+    case "telegram":
+      return (<svg {...p}><path d="M21 4 3 11l5 2 2 6 3-4 5 4 3-15Z" /><path d="m8 13 8-6-5 8" /></svg>);
     case "home":
       return (<svg {...p}><path d="m4 11 8-7 8 7" /><path d="M6 10v9h12v-9" /></svg>);
     case "donations":

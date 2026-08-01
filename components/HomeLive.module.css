@@ -14,7 +14,7 @@
   background: var(--bg-1);
   border: 1px solid var(--line);
   border-radius: var(--r-3);
-  padding: 20px;
+  padding: 24px; /* match the other cabinet cards (global .card) — Live-now was tighter at 20 */
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -73,4 +73,28 @@
 }
 .spacer {
   flex: 1;
+}
+
+/* Phone: one card per row (the auto-fit min would otherwise keep two cramped columns on a
+   wide phone) and tighter padding so the cards don't eat the whole screen. */
+@media (max-width: 600px) {
+  .head {
+    font-size: 17px;
+    margin-bottom: 12px;
+  }
+  .grid {
+    /* minmax(0,1fr), not 1fr: 1fr's min-content floor let a card's header row (icon + title +
+       status pill) push the column wider than a narrow phone screen. 0 lets it shrink to fit. */
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  .card {
+    padding: 16px;
+    gap: 12px;
+    min-width: 0;
+  }
+  /* the header row wraps so a long title + pill never force horizontal overflow */
+  .cardHead {
+    flex-wrap: wrap;
+  }
 }

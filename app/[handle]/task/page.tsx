@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useProfile } from "@/lib/data/ProfileProvider";
+import { usePublicProfile } from "@/lib/data/usePublicProfile";
 import { useCrown } from "@/lib/data/DataProvider";
 import { Logo } from "@/components/Logo";
 import { ReputationDelta } from "@/components/ReputationDelta";
@@ -10,22 +10,31 @@ import { DonateTopBar } from "@/components/DonateTopBar";
 import { Mono } from "@/components/Mono";
 import { SocialIcon, SOCIAL_LABEL } from "@/components/icons";
 import { normalizeSocialLink } from "@/lib/data/social-links";
+import { usd } from "@/lib/money";
 import { DEFAULT_TASK_CONFIG } from "@/components/TaskGameSettings";
 import { withTaskPageDefaults, readTasks, addTask, activeCount, type GameTask } from "@/lib/data/tasks";
-import { backgroundStyle } from "@/lib/data/pagebuilder";
-import { resolvePublicSession } from "@/lib/data/gameSessions";
+import { backgroundStyle, backgroundInk } from "@/lib/data/pagebuilder";
+import { useIsWide } from "@/lib/data/useIsWide";
+import { resolvePublicSession, pullSessions } from "@/lib/data/gameSessions";
+import { useGameSync } from "@/lib/data/gameSync";
+import { useGameChain } from "@/lib/chain/useGameChain";
+import { taskStartOnChain } from "@/lib/chain/gameFlows";
 import { GameTabs } from "@/components/games/GameTabs";
 import styles from "./page.module.css";
 
 type SendState = "idle" | "sending" | "done";
 
-// The public task page — what a viewer opens from the link or QR to set a paid task.
-// Until crown-app/api exists this resolves only the local profile and the queue accumulates in
-// localStorage, so a task set here really does show up in the streamer's Task → Overview tab.
+// The public task page — what a viewer opens from the link or QR to set a paid task. The content
+// maker is resolved by handle from the Crown DB (usePublicProfile), so the page renders for any
+// visitor; the task queue still accumulates in localStorage (the mock backend) until the indexer
+// owns it, so a task set here shows up in the streamer's Task → Overview tab in the same browser.
 export default function TaskPage({ params }: { params: { handle: string } }) {
-  const { ready, profile } = useProfile();
-  const { getReputation } = useCrown();
   const handle = decodeURIComponent(params.handle).replace(/^@/, "");
+  // Resolve the content maker by handle from the Crown DB, so a viewer sees this page in any
+  // browser — not just the owner whose localStorage holds the profile.
+  const { profile: maker, status } = usePublicProfile(handle);
+  const { getReputation } = useCrown();
+  const isWide = useIsWide();
 
   // Session resolution: ?s=<id> picks a specific session; one live session resolves itself;
   // several → the picker below; none → the "nothing running" gate. Streamers who never used
@@ -33,7 +42,15 @@ export default function TaskPage({ params }: { params: { handle: string } }) {
   const [pub, setPub] = useState<ReturnType<typeof resolvePublicSession> | null>(null);
   useEffect(() => {
     const sParam = new URLSearchParams(window.location.search).get("s");
-    setPub(resolvePublicSession(handle, "task", sParam));
+    // Pull the shared session registry FIRST — a viewer's browser has never seen the streamer's
+    // sessions, and without it ?s=<id> resolves to nothing and falls back to the legacy scope.
+    let dead = false;
+    void pullSessions(handle, "task").then(() => {
+      if (!dead) setPub(resolvePublicSession(handle, "task", sParam));
+    });
+    return () => {
+      dead = true;
+    };
   }, [handle]);
   const scope = pub?.scope ?? null;
 
@@ -45,15 +62,21 @@ export default function TaskPage({ params }: { params: { handle: string } }) {
   const [send, setSend] = useState<SendState>("idle");
   const [durationH, setDurationH] = useState<number | null>(null); // the donor's deadline pick
   const [view, setView] = useState<"set" | "queue">("set"); // the top toggle: set a task vs. what's already on the list
+  const [chainErr, setChainErr] = useState("");
+  const chain = useGameChain("task");
+
+  // Shared game state: pulls the server copy on mount and every few seconds — other viewers'
+  // tasks land in `queue` via the nonce dep below.
+  const syncNonce = useGameSync(scope);
 
   useEffect(() => {
     if (!scope) return;
     setQueue(readTasks(scope));
-  }, [scope]);
+  }, [scope, syncNonce]);
 
-  if (!ready) return <main className="page" />;
+  if (status === "loading") return <main className="page" />;
 
-  const mine = profile && profile.handle === handle ? profile : null;
+  const mine = maker;
   const tp = mine ? withTaskPageDefaults(mine) : null;
 
   if (!mine || !tp) {
@@ -90,7 +113,7 @@ export default function TaskPage({ params }: { params: { handle: string } }) {
             </>
           ) : (
             <>
-              <p>Nothing is live. Start a session in the cabinet — Task for donation → Sessions — and this page switches on.</p>
+              <p>Nothing is live. Start a session in your space — Task for donation → Sessions — and this page switches on.</p>
               <Link className="btn" href={`/@${handle}`}>
                 To the content maker&apos;s page
               </Link>
@@ -111,22 +134,43 @@ export default function TaskPage({ params }: { params: { handle: string } }) {
 
   // $1 donated = 1 reputation (front.md I §4) — so this task's amount is exactly the gain.
   const rep = getReputation(handle);
+  const durationHours = durationH ?? Math.min(24, cfg.deadlineHours);
 
-  function submit() {
+  function finishSubmit(escrow?: string) {
+    setQueue(addTask(scope!, { from: name, amount: finalAmount, text, requireApproval: cfg.requireApproval, durationHours, ...(escrow ? { escrow } : {}) }));
+    setText("");
+    setCustom("");
+    setSend("done");
+    setTimeout(() => setSend("idle"), 2400);
+  }
+
+  async function submit() {
     if (!canSend) return;
+    setChainErr("");
     setSend("sending");
-    setTimeout(() => {
-      setQueue(addTask(scope!, { from: name, amount: finalAmount, text, requireApproval: cfg.requireApproval, durationHours: durationH ?? Math.min(24, cfg.deadlineHours) }));
-      setText("");
-      setCustom("");
-      setSend("done");
-      setTimeout(() => setSend("idle"), 2400);
-    }, 1100);
+    // Chain path: the task canister is live — real escrow first, the synced queue mirrors it.
+    if (chain.live) {
+      if (!chain.wallet) {
+        setChainErr("Connect your wallet — tasks here are real escrow.");
+        setSend("idle");
+        return;
+      }
+      const res = await taskStartOnChain(chain.wallet, { recipient: mine!.address, dollars: finalAmount, durationHours, text, handle });
+      if (!res.ok) {
+        setChainErr(res.error);
+        setSend("idle");
+        return;
+      }
+      finishSubmit(res.escrow);
+      return;
+    }
+    // Mock path — the demo simulation, exactly as before.
+    setTimeout(() => finishSubmit(), 1100);
   }
 
 
   return (
-    <main className={styles.page} style={backgroundStyle(tp.design)}>
+    <main className={`${styles.page}${backgroundInk(tp.design) === "light" ? " on-light" : ""}`} style={backgroundStyle(tp.design, isWide)}>
       <DonateTopBar />
       <div className={styles.col}>
         <Link className={styles.who} href={`/@${handle}`} style={{ textDecoration: "none", color: "inherit" }} title={`@${mine.handle} — open profile`}>
@@ -162,7 +206,7 @@ export default function TaskPage({ params }: { params: { handle: string } }) {
               queue.map((t) => (
                 <div key={t.id} className={styles.task}>
                   <span className={styles.taskText}>{t.text}</span>
-                  <span className={`${styles.taskAmt} num`}>{t.amount} $</span>
+                  <span className={`${styles.taskAmt} num`}>{usd(t.amount)}</span>
                   <span className={`pill ${t.state === "done" ? "ok" : t.state === "refunded" ? "bad" : "wait"}`}>
                     <span className="dot" />
                     {t.state === "pending" ? "awaiting" : t.state === "active" ? "in progress" : t.state === "done" ? "done" : "refunded"}
@@ -234,8 +278,13 @@ export default function TaskPage({ params }: { params: { handle: string } }) {
                 is the gain. Shared with the other mini-games via ReputationDelta. */}
             <ReputationDelta rep={rep} gain={finalAmount} tiers={mine.tiers} />
 
-            <button type="button" className={`btn ${styles.send}`} disabled={!canSend} onClick={submit}>
-              {send === "sending" ? "Sending…" : send === "done" ? "In escrow ✓" : `Set the task · ${finalAmount} $`}
+            {chainErr && (
+              <div className="footnote" style={{ color: "var(--error)" }}>
+                {chainErr}
+              </div>
+            )}
+            <button type="button" className="btn" disabled={!canSend} onClick={() => void submit()}>
+              {send === "sending" ? "Sending…" : send === "done" ? "In escrow ✓" : `Set the task · ${usd(finalAmount)}`}
             </button>
 
             <div className="footnote">
@@ -245,7 +294,15 @@ export default function TaskPage({ params }: { params: { handle: string } }) {
                   ? cfg.requireApproval
                     ? "Sent — it's waiting for them to accept. Declined or missed, and you're refunded."
                     : "Sent — the clock is already running."
-                  : `From ${cfg.minAmount} $ · you pick the deadline, up to ${cfg.deadlineHours}h.`}
+                  : `From ${usd(cfg.minAmount)} · you pick the deadline, up to ${cfg.deadlineHours}h.`}
+            </div>
+          </div>
+        )}
+
+        {view === "set" && !tp.widgets.find((w) => w.kind === "donate")?.enabled && (
+          <div className={`card ${styles.form}`}>
+            <div className="footnote" style={{ textAlign: "center" }}>
+              {mine.name} isn&apos;t taking tasks right now.
             </div>
           </div>
         )}

@@ -135,6 +135,37 @@ const MIGRATIONS: string[][] = [
   // demo pages (created without a wallet) — writable unsigned, but a demo
   // write can never touch an owned page.
   [`ALTER TABLE profiles ADD COLUMN owner TEXT NOT NULL DEFAULT ''`],
+  // v3 — shared game state: the server copy of the per-scope keys the mini-games
+  // used to keep only in each browser's localStorage (task queue, roulette round,
+  // auction lots, fundraiser total). One row per (scope, k); v is the same JSON
+  // the client stores locally, so the sync layer adopts it verbatim.
+  [
+    `CREATE TABLE IF NOT EXISTS game_state (
+      scope TEXT NOT NULL,
+      k TEXT NOT NULL,
+      v TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (scope, k)
+    )`,
+  ],
+  // v4 — reliable Telegram delivery. The outbox used to be drained destructively: the bot GET
+  // cleared the table before anything was actually sent, so a crash or a Telegram 429 lost those
+  // notifications for good. Rows now carry delivery state, so a message leaves the queue only once
+  // the bot confirms Telegram accepted it (see /api/telegram/outbox + /outbox/ack).
+  [
+    `ALTER TABLE tg_outbox ADD COLUMN claimed_at INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE tg_outbox ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE tg_outbox ADD COLUMN next_try_at INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE tg_outbox ADD COLUMN last_error TEXT`,
+    `CREATE INDEX IF NOT EXISTS idx_tg_outbox_due ON tg_outbox(next_try_at, claimed_at)`,
+    // The bot's own cursor + heartbeat live here (getUpdates offset, last-seen), so a restart
+    // doesn't replay a day of updates and the cabinet can tell whether the bot is actually alive.
+    `CREATE TABLE IF NOT EXISTS tg_bot_state (
+      k TEXT PRIMARY KEY,
+      v TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    )`,
+  ],
 ];
 
 let client: Client | null = null;

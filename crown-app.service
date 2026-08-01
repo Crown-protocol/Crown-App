@@ -1,0 +1,36 @@
+[Unit]
+# Crown site (Next.js, production build). Install as a USER unit — no root needed:
+#
+#   cp crown-app.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now crown-app
+#   systemctl --user status crown-app     # is it up
+#   journalctl --user -u crown-app -f     # what is it doing
+#
+# `enable` is the part that matters: without it the service does not come back after a reboot,
+# which is exactly how the site ended up down twice — running fine, then simply gone after a
+# restart with nothing in the log to explain it.
+#
+# It also needs lingering, or the user manager stops when you log out:
+#   loginctl enable-linger $USER
+Description=Crown site (Next.js)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Crown-App
+# `next start` serves the build in .next — run `npm run build` after changing code.
+# Full path: npm lives in nvm's version directory, which systemd does not have on its PATH.
+ExecStart=/home/kiper/.nvm/versions/node/v20.20.2/bin/npm run start
+Environment=PATH=/home/kiper/.nvm/versions/node/v20.20.2/bin:/usr/local/bin:/usr/bin:/bin
+Restart=always
+RestartSec=3
+# Don't spin forever if the build is missing or the port is taken.
+StartLimitIntervalSec=60
+StartLimitBurst=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

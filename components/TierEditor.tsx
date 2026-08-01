@@ -2,15 +2,18 @@
 
 import { useLayoutEffect, useRef, useState } from "react";
 import type { Tier } from "@/lib/data/types";
+import styles from "./TierEditor.module.css";
 
-const TIER_COLORS = ["#9AA0AE", "#5B9BF0", "#4FD1A5", "#F0B94F", "#F0834F", "#8B7CF6"];
+// One purple accent only (design charter — no gold, no second hue). The swatches are a monochrome
+// purple ramp plus a neutral, so any tier a streamer picks stays on-brand.
+const TIER_COLORS = ["#5B5670", "#6F6A84", "#8B7CF6", "#9B8CE6", "#B9A8FF", "#C0B7FA"];
 let uid = 0;
 
 export function defaultTiers(): Tier[] {
   return [
-    { name: "Newcomer", threshold: 0, color: TIER_COLORS[0] },
-    { name: "Regular", threshold: 10, color: TIER_COLORS[1] },
-    { name: "VIP", threshold: 100, color: TIER_COLORS[3] },
+    { name: "Newcomer", threshold: 0, color: TIER_COLORS[1] },
+    { name: "Regular", threshold: 10, color: TIER_COLORS[3] },
+    { name: "VIP", threshold: 100, color: TIER_COLORS[5] },
   ];
 }
 
@@ -29,24 +32,25 @@ function toTiers(rows: Row[]): Tier[] {
   return rows.map((r) => ({ name: r.name, threshold: Math.max(0, Math.round(+r.threshold) || 0), color: r.color }));
 }
 
-// FLIP: after any render where rows moved, slide each one from its previous screen
-// position to its new one instead of letting it snap. No-ops when nothing moved
-// (typing a name, picking a color) — only a resort actually displaces rows.
-function useFlip(order: number[]) {
+// FLIP, but gated to a real reorder. The layout effect used to run on EVERY render and
+// re-measure every row — so a render mid-animation (each keystroke re-renders the whole
+// panel) would sample a row halfway through its slide and yank it again: rows that "crawl"
+// forever. Now positions are snapshotted ONCE, synchronously, the instant a reorder is
+// requested (capture()); the effect consumes that snapshot and does nothing on any other
+// render. One reorder = exactly one animation, no feedback loop.
+function useFlip() {
   const els = useRef(new Map<number, HTMLDivElement>());
-  const prevRects = useRef(new Map<number, DOMRect>());
+  const first = useRef<Map<number, DOMRect> | null>(null);
 
   useLayoutEffect(() => {
-    const nextRects = new Map<number, DOMRect>();
-    els.current.forEach((el, id) => nextRects.set(id, el.getBoundingClientRect()));
-
-    for (const id of order) {
-      const el = els.current.get(id);
-      const prev = prevRects.current.get(id);
-      const next = nextRects.get(id);
-      if (!el || !prev || !next) continue;
-      const dy = prev.top - next.top;
-      if (Math.abs(dy) < 1) continue;
+    const snapshot = first.current;
+    if (!snapshot) return; // not a reorder — leave every row exactly where it is
+    first.current = null;
+    els.current.forEach((el, id) => {
+      const prev = snapshot.get(id);
+      if (!prev) return;
+      const dy = prev.top - el.getBoundingClientRect().top;
+      if (Math.abs(dy) < 1) return;
       el.style.transition = "none";
       el.style.transform = `translateY(${dy}px)`;
       el.getBoundingClientRect(); // force reflow before re-enabling the transition
@@ -54,14 +58,23 @@ function useFlip(order: number[]) {
         el.style.transition = "transform 320ms cubic-bezier(.22,.61,.36,1)";
         el.style.transform = "";
       });
-    }
-    prevRects.current = nextRects;
+    });
   });
 
-  return (id: number) => (el: HTMLDivElement | null) => {
+  // Record where every row sits right now — call this immediately before a state change
+  // that reorders them, so the effect can slide them from here to their new spots.
+  const capture = () => {
+    const m = new Map<number, DOMRect>();
+    els.current.forEach((el, id) => m.set(id, el.getBoundingClientRect()));
+    first.current = m;
+  };
+
+  const setRef = (id: number) => (el: HTMLDivElement | null) => {
     if (el) els.current.set(id, el);
     else els.current.delete(id);
   };
+
+  return { setRef, capture };
 }
 
 // Name / logo / color per reputation tier. Sorts itself by threshold — reorder on blur,
@@ -69,7 +82,7 @@ function useFlip(order: number[]) {
 // its correct spot instead of just sitting in the wrong place (front.md I §6 tiers).
 export function TierEditor({ initialTiers, onChange, max = 8 }: { initialTiers: Tier[]; onChange: (tiers: Tier[]) => void; max?: number }) {
   const [rows, setRows] = useState<Row[]>(() => toRows(initialTiers));
-  const setRef = useFlip(rows.map((r) => r.id));
+  const { setRef, capture } = useFlip();
 
   function commit(next: Row[]) {
     setRows(next);
@@ -82,6 +95,9 @@ export function TierEditor({ initialTiers, onChange, max = 8 }: { initialTiers: 
 
   function resort() {
     const sorted = [...rows].sort((a, b) => (+a.threshold || 0) - (+b.threshold || 0));
+    // nothing to do (and nothing to animate) if the order is already correct
+    if (sorted.every((r, i) => r.id === rows[i].id)) return;
+    capture(); // snapshot current positions, then let the effect slide rows into order
     setRows(sorted);
     onChange(toTiers(sorted));
   }
@@ -93,12 +109,13 @@ export function TierEditor({ initialTiers, onChange, max = 8 }: { initialTiers: 
   }
 
   function removeTier(id: number) {
+    capture(); // rows below the removed one slide up into the gap
     commit(rows.filter((r) => r.id !== id));
   }
 
   return (
     <>
-      <div className="tier-list">
+      <div className={`tier-list ${styles.list}`}>
         <div className="tier-head">
           <span>Name</span>
           <span>Reputation ≥</span>

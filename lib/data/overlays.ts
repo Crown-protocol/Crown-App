@@ -2,7 +2,20 @@
 // and the landing showcase all iterate the same list. A streamer adds an overlay to OBS as a
 // Browser Source by its URL. Three general widgets + one per mini-game.
 
-export type OverlayKind = "alerts" | "rank" | "goal" | "top" | "roulette" | "task" | "fundraiser" | "auction";
+export type OverlayKind =
+  | "alerts"
+  | "rank"
+  | "goal"
+  | "top"
+  | "roulette"
+  | "task"
+  | "fundraiser"
+  | "auction"
+  | "ticker"
+  | "qr"
+  | "session"
+  | "record"
+  | "train";
 
 // Which mini-game a widget belongs to, if it's game-specific (used to group them in the cabinet).
 export type OverlayGame = "roulette" | "task" | "fundraiser" | "auction";
@@ -25,6 +38,12 @@ export const OVERLAYS: OverlayDef[] = [
   { kind: "task", label: "Task", desc: "The active paid task and how long is left to do it.", game: "task" },
   { kind: "fundraiser", label: "Fundraiser", desc: "A crown that fills toward the goal as viewers chip in.", game: "fundraiser" },
   { kind: "auction", label: "Auction", desc: "The live lot board — what's leading and by how much.", game: "auction" },
+  // general — batch 2, donation-driven (components/overlays/Extras.tsx)
+  { kind: "ticker", label: "Donation ticker", desc: "A thin broadcast-style strip of recent donations along the screen edge, with the session total pinned right." },
+  { kind: "qr", label: "Donate QR", desc: "An always-on corner QR code pointing at the streamer's donate page, pulsing on live donations." },
+  { kind: "session", label: "Stream total", desc: "A minimal pill showing everything raised this stream, live, with an odometer roll on every donation." },
+  { kind: "record", label: "Stream record", desc: "The stream's biggest single donation, standing as a public challenge — with a coronation when someone beats it." },
+  { kind: "train", label: "Donation train", desc: "A combo counter that grows while donations keep coming and dies when they stop — one shared timer for all of chat to beat." },
 ];
 
 export function isOverlayKind(v: string): v is OverlayKind {

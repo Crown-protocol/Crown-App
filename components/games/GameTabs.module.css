@@ -51,3 +51,22 @@
   background: rgba(15, 14, 20, 0.18);
   color: var(--accent-grad-ink, #0f0e14);
 }
+
+/* Phone: keep the toggle on one row without pushing the page — it stays centred while it fits and
+   scrolls inside itself if the labels ever run long. Tabs never compress below their text. */
+@media (max-width: 480px) {
+  .tabs {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .tab {
+    flex-shrink: 0;
+    padding: 0 16px;
+    font-size: 14px;
+  }
+}

@@ -1,8 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useGameSync } from "@/lib/data/gameSync";
+import { useGameChain } from "@/lib/chain/useGameChain";
+import { fundingAction } from "@/lib/chain/gameFlows";
 import { Mono } from "@/components/Mono";
 import { StatTile } from "@/components/ops";
+import { usd } from "@/lib/money";
 import { DEFAULT_FUNDRAISER_CONFIG } from "@/components/FundraiserGameSettings";
 import {
   withFundraiserDefaults,
@@ -29,11 +33,13 @@ export function FundraiserOverview({ profile, scope }: { profile: Profile; scope
   const [backers, setBackers] = useState<Backer[]>([]);
   const [status, setStatus] = useState<FundraiserStatus>({ state: "collecting" });
 
+  // Shared game state: viewers' chip-ins from other browsers land via the nonce dep.
+  const syncNonce = useGameSync(handle);
   useEffect(() => {
     setRaised(raisedTotal(handle));
     setBackers(readBackers(handle));
     setStatus(readStatus(handle));
-  }, [handle]);
+  }, [handle, syncNonce]);
 
   const goal = fr.goal;
   const pct = Math.min(100, Math.round((raised / goal) * 100));
@@ -42,8 +48,18 @@ export function FundraiserOverview({ profile, scope }: { profile: Profile; scope
   const markPct = cfg.allowBelowGoal ? Math.min(100, cfg.minAcceptPct) : 100;
   const canAccept = raised >= acceptThreshold;
 
+  const chain = useGameChain("fundraiser");
+
   function set(next: FundraiserStatus) {
-    setStatus(writeStatus(handle, next));
+    // Merge, don't replace — the chain collection id must survive every state hop.
+    const merged: FundraiserStatus = { ...status, ...next };
+    // On-chain twin: "delivered" = ready (the vote decides the payout), "refunded" = the
+    // recipient's own cancel. The canister is the enforcement; this UI is the intent.
+    if (status.chainCollection && chain.live && chain.wallet) {
+      if (next.state === "delivered") void fundingAction(chain.wallet, status.chainCollection, "ready");
+      if (next.state === "refunded") void fundingAction(chain.wallet, status.chainCollection, "recipient_cancel");
+    }
+    setStatus(writeStatus(handle, merged));
   }
 
   return (
@@ -64,7 +80,7 @@ export function FundraiserOverview({ profile, scope }: { profile: Profile; scope
           </div>
           <div className={styles.progressMeta}>
             <span>
-              <b className="num">{raised} $</b> of {goal} $
+              <b className="num">{usd(raised)}</b> of {usd(goal)}
             </span>
             <span>
               {pct}% · {backers.length} backers
@@ -74,8 +90,8 @@ export function FundraiserOverview({ profile, scope }: { profile: Profile; scope
       </div>
 
       <div className="stat-grid">
-        <StatTile k="Raised" v={`${raised} $`} />
-        <StatTile k="Goal" v={`${goal} $`} />
+        <StatTile k="Raised" v={usd(raised)} />
+        <StatTile k="Goal" v={usd(goal)} />
         <StatTile k="Backers" v={String(backers.length)} />
       </div>
 
@@ -84,13 +100,13 @@ export function FundraiserOverview({ profile, scope }: { profile: Profile; scope
           <>
             <div className={styles.statusRow}>
               <button type="button" className="btn" disabled={!canAccept} onClick={() => set({ state: "delivering", accepted: raised })}>
-                Accept {raised} $
+                Accept {usd(raised)}
               </button>
             </div>
             <div className="footnote">
               {canAccept
                 ? `Collection runs ${cfg.fundingDays} days. Accepting starts your ${cfg.deliveryDays}-day delivery window.`
-                : `Accept unlocks at ${acceptThreshold} $ — ${cfg.allowBelowGoal ? `${cfg.minAcceptPct}% of the goal` : "the full goal"}.`}
+                : `Accept unlocks at ${usd(acceptThreshold)} — ${cfg.allowBelowGoal ? `${cfg.minAcceptPct}% of the goal` : "the full goal"}.`}
             </div>
           </>
         )}
@@ -99,7 +115,7 @@ export function FundraiserOverview({ profile, scope }: { profile: Profile; scope
           <>
             <span className="pill attn" style={{ alignSelf: "flex-start" }}>
               <span className="dot" />
-              Delivering — accepted {status.accepted} $
+              Delivering — accepted {usd(status.accepted)}
             </span>
             <div className={styles.statusRow}>
               <button type="button" className="btn" onClick={() => set({ state: "delivered" })}>
@@ -149,7 +165,7 @@ export function FundraiserOverview({ profile, scope }: { profile: Profile; scope
               <span className={styles.backerName}>{b.name}</span>
               <span className={styles.when}>{b.when}</span>
               <span className={styles.backerAmt}>
-                <span className="num">{b.amount}</span> $
+                {usd(b.amount)}
               </span>
             </div>
           ))}

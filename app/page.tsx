@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { setCtaHandoff } from "@/lib/data/ctaHandoff";
+import { useSignedIn } from "@/lib/data/useSignedIn";
 import Link from "next/link";
 import { TopNav } from "@/components/TopNav";
 import { GamesList } from "@/components/GamesList";
@@ -9,13 +11,17 @@ import { HeroPhones } from "@/components/HeroPhones";
 import { MoneyFlow } from "@/components/MoneyFlow";
 import { SiteFooter } from "@/components/SiteFooter";
 import { RepDemo } from "@/components/RepDemo";
-import { DEMO_HANDLE } from "@/lib/data/mock";
+import { AuthButton } from "@/components/AuthButton";
 import { useProfile } from "@/lib/data/ProfileProvider";
 import styles from "./page.module.css";
 
 export default function HomePage() {
   const rootRef = useRef<HTMLElement>(null);
-  const { ready, registered } = useProfile();
+  const { ready } = useProfile();
+  // Same source of truth as the header — see components/TopRight.tsx.
+  const signedIn = useSignedIn();
+  // Mirrors what we publish to the header, so both halves of the swap move together.
+  const [handedOff, setHandedOff] = useState(false);
 
   // Scroll reveal, downward only: a section animates when you scroll DOWN into it, and again if you
   // go back up and come down a second time — but scrolling UP never animates. A block sliding in as
@@ -61,6 +67,28 @@ export default function HomePage() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  // The header's sign-up button and this page's closing one are the same offer. Hand the baton to
+  // the big one as it comes into view (and back on the way up) so only one is ever on screen.
+  const finalRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = finalRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        setCtaHandoff(entry.isIntersecting);
+        setHandedOff(entry.isIntersecting);
+      },
+      // Only once it's genuinely in play, not the moment a pixel appears.
+      { threshold: 0.6 }
+    );
+    io.observe(el);
+    return () => {
+      io.disconnect();
+      setCtaHandoff(false);
+      setHandedOff(false);
+    };
+  }, []);
+
   return (
     <main className={styles.wrap} ref={rootRef}>
       <TopNav className={styles.navIn} />
@@ -72,16 +100,11 @@ export default function HomePage() {
               Donations you can <span className={styles.italic}>play</span>
             </h1>
             <p className={`${styles.heroSub} ${styles.reveal} ${styles.d2}`}>
-              A donation page in dollars, plus mini-games your viewers run — every cent is yours.
+              A donation page in dollars, plus mini-games your viewers run — straight to your wallet.
             </p>
-            <div className={`${styles.heroCta} ${styles.reveal} ${styles.d3}`}>
-              <Link className="btn" href="/create">
-                Create your page
-              </Link>
-              <Link className={styles.ctaGhost} href={`/@${DEMO_HANDLE}`}>
-                See an example
-              </Link>
-            </div>
+            {/* No buttons in the hero. The nav already carries "Create or log in" for a signed-out
+                visitor, and the closing band carries it again after the pitch — a third copy on top
+                of the fold just repeated itself. */}
           </div>
           <div className={`${styles.reveal} ${styles.d4}`}>
             <HeroPhones />
@@ -126,7 +149,7 @@ export default function HomePage() {
               </h2>
               <p className={styles.repLead}>
                 Each dollar builds a viewer&apos;s reputation <b>with you</b> — and climbs the tiers you set.
-                Try it 👉
+                Try it.
               </p>
             </div>
 
@@ -149,20 +172,24 @@ export default function HomePage() {
         <div className={styles.bandInner}>
           {/* Don't pitch "create a page" at someone who already has one — send them to it.
               Rendered only once the profile is read, so the button never flips under the cursor. */}
-          <div className={`final ${styles.reveal}`}>
-            {!ready ? null : registered ? (
+          <div className={`final ${styles.reveal}`} ref={finalRef}>
+            {/* `cta-arrive` is the mirror of the header's `cta-handoff`: same duration and easing,
+                so exactly one of the two is ever solid — they cross over instead of overlapping. */}
+            {!ready ? null : signedIn ? (
               <>
                 <p>Your page is live.</p>
-                <Link className="btn" href="/space">
-                  Go to your personal space
-                </Link>
+                <span className={`cta-arrive${handedOff ? " here" : ""}`}>
+                  <Link className="btn" href="/space">
+                    Personal space
+                  </Link>
+                </span>
               </>
             ) : (
               <>
                 <p>All you need is a wallet.</p>
-                <Link className="btn" href="/create">
-                  Create your page
-                </Link>
+                <span className={`cta-arrive${handedOff ? " here" : ""}`}>
+                  <AuthButton label="Create or log in" />
+                </span>
               </>
             )}
           </div>

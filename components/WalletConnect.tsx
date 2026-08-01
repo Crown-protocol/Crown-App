@@ -1,8 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useSolanaWallet, type WalletName } from "@/lib/chain/wallet";
-import { PhantomIcon, SolflareIcon } from "@/components/WalletIcons";
+import { useProfile } from "@/lib/data/ProfileProvider";
+import { useMyReputation } from "@/lib/data/useMyReputation";
+import { clearProof } from "@/lib/data/proveOwnership";
+import { PhantomIcon, SolflareIcon, WalletConnectIcon } from "@/components/WalletIcons";
 import { WalletModal } from "@/components/WalletModal";
 import styles from "./WalletConnect.module.css";
 
@@ -13,8 +17,9 @@ import styles from "./WalletConnect.module.css";
 const WALLET_ICON: Record<WalletName, (p: { size?: number }) => JSX.Element> = {
   phantom: PhantomIcon,
   solflare: SolflareIcon,
+  walletconnect: WalletConnectIcon,
 };
-const WALLET_LABEL: Record<WalletName, string> = { phantom: "Phantom", solflare: "Solflare" };
+const WALLET_LABEL: Record<WalletName, string> = { phantom: "Phantom", solflare: "Solflare", walletconnect: "WalletConnect" };
 
 function short(a: string) {
   return `${a.slice(0, 4)}…${a.slice(-4)}`;
@@ -32,6 +37,8 @@ function WalletGlyph({ size = 18 }: { size?: number }) {
 
 export function WalletConnect() {
   const { address, connected, connecting, walletName, disconnect } = useSolanaWallet();
+  const { signOut } = useProfile();
+  const rep = useMyReputation();
   const [modalOpen, setModalOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -87,6 +94,36 @@ export function WalletConnect() {
               </span>
             </div>
 
+            {/* Where you stand, right in the account menu — the viewer's reputation has no other
+                door in the header, and this is where people look for "my stuff". */}
+            <Link className={styles.repRow} href="/me" onClick={() => setMenuOpen(false)}>
+              <span className={styles.repFigure}>
+                <span className={`${styles.repTotal} num`}>{rep.total}</span>
+                <span className={styles.repUnit}>points</span>
+              </span>
+              <span className={styles.repText}>
+                {rep.top ? (
+                  <>
+                    <span className={styles.repLead}>
+                      {rep.bestTier ? rep.bestTier.name : "No tier yet"} with {rep.makers.length}{" "}
+                      {rep.makers.length === 1 ? "maker" : "makers"}
+                    </span>
+                    <span className={styles.repSub}>
+                      {rep.top.next ? `${rep.top.next.threshold - rep.top.rep} to ${rep.top.next.name} with ${rep.top.name}` : `Top tier with ${rep.top.name}`}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className={styles.repLead}>No reputation yet</span>
+                    <span className={styles.repSub}>Every $1 you donate earns a point</span>
+                  </>
+                )}
+              </span>
+              <svg className={styles.repArrow} width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </Link>
+
             <button type="button" className={styles.menuItem} onClick={copyAddress}>
               {copied ? <CheckGlyph /> : <CopyGlyph />}
               {copied ? "Copied" : "Copy address"}
@@ -105,7 +142,12 @@ export function WalletConnect() {
               type="button"
               className={`${styles.menuItem} ${styles.menuDanger}`}
               onClick={() => {
+                // Disconnect = sign out on this device: clear the ownership proof for this wallet
+                // (capture the address before disconnect nulls it), drop the connection and the local
+                // profile — so reconnecting asks the wallet to sign again. The DB copy is untouched.
+                clearProof(address);
                 void disconnect();
+                signOut();
                 setMenuOpen(false);
               }}
             >

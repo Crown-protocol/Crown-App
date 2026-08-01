@@ -16,6 +16,8 @@
     "@dfinity/candid": "^3.4.3",
     "@dfinity/principal": "^3.4.3",
     "@libsql/client": "^0.17.4",
+    "@reown/appkit": "^1.8.23",
+    "@reown/appkit-adapter-solana": "^1.8.23",
     "@solana/spl-token": "^0.4.15",
     "@solana/web3.js": "^1.98.4",
     "bs58": "^6.0.0",

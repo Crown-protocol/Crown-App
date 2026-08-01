@@ -5,6 +5,10 @@ export type DataMode = "mock" | "chain";
 export interface Social {
   kind: "youtube" | "twitch" | "kick" | "x" | "tiktok" | "instagram" | "telegram" | "onlyfans";
   url: string;
+  // Stable per-row id, assigned when a row is added in an editor. React keys the socials list by it,
+  // so removing a middle row doesn't make the inputs reconcile by index (caret/focus bleed). Optional
+  // for legacy rows saved before this existed — those fall back to an index key.
+  id?: string;
 }
 
 // A named, colored reputation tier a streamer defines for their viewers.
@@ -18,7 +22,7 @@ export interface Tier {
 export interface Streamer {
   handle: string; // without "@"
   name: string;
-  bio: string;
+  bio?: string; // the "about" line shown on the public page
   address: string; // where donations arrive — a base58 Solana pubkey (validated at entry, lib/chain/config isValidAddress)
   socials: Social[];
   tiers: Tier[];
@@ -36,6 +40,10 @@ export interface Donation {
   date?: string; // ISO "2026-07-14" — the calendar day, for grouping/filtering in the cabinet
   source?: GameId | "direct"; // which mini-game it came through, or a plain donation
   fresh?: boolean;
+  // On-chain extras (present on real Settled rows from the indexer; absent on mock/local ones).
+  at?: number; // unix ms of the settle — a precise clock, not just the calendar day
+  sig?: string; // Solana tx signature — links the row to the block explorer
+  payer?: string; // donor's base58 wallet address (for anonymous donors, `from` is a short form of this)
 }
 
 export interface Campaign {
@@ -66,7 +74,18 @@ export interface PageWidget {
 
 export interface PageBackground {
   type: "color" | "gradient" | "image";
-  value: string; // hex for "color", preset id for "gradient", data URL for "image"
+  value: string; // hex for "color", "from|to" for "gradient", URL/data URL for "image"
+  // Image only — how the photo sits (a portrait photo can't fill both a phone and a desktop cleanly,
+  // so the streamer picks). Defaults to "cover" for anything saved before this existed.
+  //   cover — fill the screen, fixed in place (a vertical slice shows on wide desktops)
+  //   width — the whole photo, full-width at the top; page colour below
+  //   split — two photos: `value` on phones, `valueWide` on desktops
+  fit?: "cover" | "width" | "split";
+  valueWide?: string; // image "split" mode: the desktop photo
+  // Gradient only — how the two colours are laid out. Defaults keep old gradients working.
+  gradAngle?: number; // direction in degrees, 0-360 (default 160)
+  gradPos?: number; // where the colours meet, 0-100 (default 50 = centred)
+  gradSoft?: number; // blend width, 0-100 (0 = a hard flag edge, 100 = a smooth fade)
 }
 
 export interface PageDesign {
@@ -88,12 +107,21 @@ export interface TaskGameConfig {
 // allowed to suggest what, and how long a round runs. Not on-chain — a suggestion is just a
 // plain donation (front.md I §5); the spin itself is a front-end/backend concern, not a contract.
 export interface RouletteConfig {
-  minTier: string; // tier name required to suggest a game, "" = everyone can
+  minTier: string; // tier name required to suggest, "" = everyone can
   excludeTopTier: boolean; // if true, the streamer's highest tier can't suggest (e.g. they get asked directly instead)
-  genres: string[]; // allowed game genres for a suggestion, empty = all genres allowed
+  // What the wheel is ABOUT. The roulette isn't games-only — see lib/data/roulette-topics.ts for the
+  // ready-made topics (films, music, food, challenges, talk topics, creative work…). Absent on configs
+  // saved before topics existed; those read as "games", which is what they were.
+  topic?: string; // topic id
+  customCategories?: string[]; // the streamer's own categories, on top of (or instead of) the topic's
+  // How the wheel decides. "single" — one spin picks the winner. "elimination" — the wheel spins over
+  // and over, each spin knocking one out, last one standing wins (money protects: a well-backed
+  // suggestion is the least likely to be eliminated). Absent = single, which is what old rounds were.
+  format?: "single" | "elimination";
+  genres: string[]; // allowed categories for a suggestion, empty = all of them allowed
   minDonation: number; // $ — a suggestion needs at least this much to register
   roundMinutes: number; // how long the submission window stays open before the spin
-  playMinutes: number; // how long the streamer commits to playing the winning pick
+  playMinutes: number; // how long the streamer commits to the winning pick
 }
 
 // The Fundraiser page itself — the promise viewers are chipping in toward, plus everything
@@ -162,6 +190,7 @@ export interface AuctionDraft {
 // min bid). Not on-chain in mock mode; on chain they are fixed per auction at creation.
 export interface AuctionConfig {
   minBid: number; // $ — a single bid below this doesn't register
+  minIncrement?: number; // $ — the smallest amount you must beat the leader by (outbid step floor)
   biddingHours: number; // how long the bidding stays open
   performHours: number; // window to deliver the winning condition after the final
 }
@@ -171,13 +200,13 @@ export interface AuctionConfig {
 export interface Profile {
   handle: string;
   name: string;
-  bio: string;
+  bio?: string; // the "about" line on the public page (Settings edits it)
+  bioEnabled?: boolean; // whether it's shown
   address: string; // base58 Solana pubkey, or "" until the wallet step sets one
   socials: Social[];
   tiers: Tier[];
   avatarEnabled?: boolean;
   avatarUrl?: string; // data URL, mock upload
-  bioEnabled?: boolean;
   widgets?: PageWidget[];
   design?: PageDesign;
   task?: string; // legacy: the old author-page builder's task line — TaskDraft.headline supersedes it

@@ -5,8 +5,12 @@ import { Mono } from "@/components/Mono";
 import { StatTile } from "@/components/ops";
 import { DEFAULT_TASK_CONFIG } from "@/components/TaskGameSettings";
 import { readTasks, setTaskState, removeTask, taskTotals, type GameTask, type TaskState } from "@/lib/data/tasks";
+import { useGameSync } from "@/lib/data/gameSync";
+import { useGameChain } from "@/lib/chain/useGameChain";
+import { taskAction } from "@/lib/chain/gameFlows";
 import { useCrown } from "@/lib/data/DataProvider";
 import type { Profile } from "@/lib/data/types";
+import { usd } from "@/lib/money";
 import styles from "./GameOverview.module.css";
 
 // Pill tone + label per state: purple (attn) = needs your decision, white (ok) = live/kept,
@@ -28,15 +32,30 @@ export function TaskOverview({ profile, scope }: { profile: Profile; scope?: str
   const { feed, applyMockDonation } = useCrown();
   const [tasks, setTasks] = useState<GameTask[]>([]);
 
-  useEffect(() => setTasks(readTasks(handle)), [handle]);
+  // Shared game state: viewers' tasks from other browsers land via the nonce dep.
+  const syncNonce = useGameSync(handle);
+  useEffect(() => setTasks(readTasks(handle)), [handle, syncNonce]);
+
+  const chain = useGameChain("task");
+
+  // On-chain twin of a queue action: chain-born tasks (t.escrow set) get the canister call too —
+  // pending→active = accept, pending→refunded = decline. Mock rows just move in the queue.
+  function chainTwin(t: GameTask | undefined, state: TaskState) {
+    if (!t?.escrow || !chain.live || !chain.wallet) return;
+    const action = state === "active" ? "accept" : t.state === "pending" && state === "refunded" ? "decline" : null;
+    if (action) void taskAction(chain.wallet, t.escrow, action);
+  }
 
   function act(id: string, state: TaskState) {
+    chainTwin(tasks.find((x) => x.id === id), state);
     setTasks(setTaskState(handle, id, state));
   }
 
   // Complete: the escrow settles — money to the streamer, reputation to the viewer, a feed
   // entry with source "task" — and the row disappears from this queue.
   function complete(t: GameTask) {
+    // "Done" on a chain-born task = ready: the streamer claims delivery, the vote decides.
+    if (t.escrow && chain.live && chain.wallet) void taskAction(chain.wallet, t.escrow, "ready");
     applyMockDonation({ handle: profile.handle, amount: t.amount, name: t.from, message: t.text, source: "task" });
     setTasks(removeTask(handle, t.id));
   }
@@ -57,7 +76,7 @@ export function TaskOverview({ profile, scope }: { profile: Profile; scope?: str
       <div className="stat-grid">
         <StatTile k="Awaiting you" v={String(totals.pending)} />
         <StatTile k="Active" v={`${totals.active} / ${cfg.maxActiveTasks}`} />
-        <StatTile k="Earned" v={`${earned} $`} />
+        <StatTile k="Earned" v={usd(earned)} />
       </div>
 
       {shown.length === 0 ? (
@@ -66,7 +85,8 @@ export function TaskOverview({ profile, scope }: { profile: Profile; scope?: str
         <div className={styles.list}>
           {shown.map((t) => {
             const pill = STATE_PILL[t.state];
-            const resolved = t.state === "done" || t.state === "refunded";
+            // `done` rows are filtered out of `shown` above, so a resolved (dimmed) row here is a refund.
+            const resolved = t.state === "refunded";
             return (
               <div key={t.id} className={`${styles.row}${resolved ? ` ${styles.rowDone}` : ""}`}>
                 <Mono name={t.from} size={40} />
@@ -102,7 +122,7 @@ export function TaskOverview({ profile, scope }: { profile: Profile; scope?: str
                 </div>
                 <div className={styles.side}>
                   <span className={styles.amount}>
-                    <span className="num">{t.amount}</span> $
+                    {usd(t.amount)}
                   </span>
                   <span className={`pill ${pill.tone}`}>
                     <span className="dot" />

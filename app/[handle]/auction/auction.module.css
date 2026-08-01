@@ -236,3 +236,12 @@
   display: flex;
   flex-direction: column;
 }
+
+/* The outbid step + action button. On a narrow phone the long "Open the bidding · $x" label plus the
+   +$ step no longer fit on one line, so let it wrap — the button then takes the full width below the
+   step instead of pushing off-screen. */
+@media (max-width: 480px) {
+  .bidRow {
+    flex-wrap: wrap;
+  }
+}

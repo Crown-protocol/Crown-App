@@ -1,5 +1,6 @@
 "use client";
 
+import { usd } from "@/lib/money";
 import { useEffect, useRef, useState } from "react";
 import type { RouletteSuggestion } from "@/lib/data/roulette-mock";
 import styles from "./RouletteWheel.module.css";
@@ -80,7 +81,11 @@ export function RouletteWheel({
   slicesRef.current = slices;
 
   useEffect(() => {
-    if (!spinNonce || !spinToId || handled.current >= spinNonce) return;
+    // A new round resets the parent's nonce to 0. Clear `handled` too, otherwise the next spin's
+    // nonce (1) is still ≤ the last round's handled value and the guard below skips it forever —
+    // the wheel would stay stuck on "Spinning…". (The wheel doesn't unmount between rounds.)
+    if (!spinNonce) { handled.current = 0; return; }
+    if (!spinToId || handled.current >= spinNonce) return;
     const slice = slicesRef.current.find((x) => x.s.id === spinToId);
     if (!slice) return;
     handled.current = spinNonce;
@@ -155,7 +160,7 @@ export function RouletteWheel({
                 className={`${onSliceClick ? styles.clickable : styles.slice}${winnerId && winnerId !== sl.s.id ? ` ${styles.dimmed}` : ""}`}
                 onClick={onSliceClick ? () => onSliceClick(sl.s) : undefined}
               >
-                <title>{`${sl.s.title} — ${sl.s.pool} $ · ${Math.round((sl.angle / 360) * 100)}%`}</title>
+                <title>{`${sl.s.title} — ${usd(sl.s.pool)} · ${Math.round((sl.angle / 360) * 100)}%`}</title>
               </path>
             ))
           )}

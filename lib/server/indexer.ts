@@ -185,7 +185,7 @@ export async function notifyTelegram(addr: string, gross: number): Promise<void>
     if (!hit) return;
     const s = await readStore();
     const usd = Math.floor(gross / 1e6);
-    const queued = queueNotify(s, hit.handle.toLowerCase(), "donation", `A donation arrived — $${usd}`, "It's already in your wallet.");
+    const queued = await queueNotify(s, hit.handle.toLowerCase(), "donation", `A donation arrived — $${usd}`, "It's already in your wallet.");
     if (queued) await writeStore(s);
   } catch {}
 }

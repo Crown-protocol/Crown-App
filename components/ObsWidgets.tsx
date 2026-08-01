@@ -1,10 +1,37 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import QRCode from "qrcode";
 import { CrownMark, GameIcon } from "@/components/icons";
-import { CrownFill } from "@/components/CrownFill";
+import { FundraiserFill } from "@/components/FundraiserFill";
 import { OVERLAYS, type OverlayKind } from "@/lib/data/overlays";
 import styles from "./ObsWidgets.module.css";
+
+// The QR mockup renders a REAL scannable code (same recipe as the cabinet) — a fake pixel grid
+// reads as a fake product the moment someone points a camera at it. Since it IS scannable, it must
+// lead somewhere real: it used to encode a hardcoded crown.tv/@toffi, a handle that exists nowhere,
+// so anyone pointing a phone at the landing page got a dead link. It now encodes this deployment's
+// own origin (localhost while developing, the real domain in production) and @nova — a built-in
+// demo page that always resolves. The handle shown under it matches what the code actually holds.
+const QR_HANDLE = "nova";
+
+function QrMock() {
+  const [qr, setQr] = useState("");
+  useEffect(() => {
+    // window.origin, not a baked-in domain: the code a visitor scans belongs to the site they're on.
+    const base = window.location.origin || process.env.NEXT_PUBLIC_SITE_URL || "https://crown.tv";
+    QRCode.toDataURL(`${base}/@${QR_HANDLE}`, { margin: 0, width: 96, color: { dark: "#F1EFF7", light: "#00000000" } })
+      .then(setQr)
+      .catch(() => setQr(""));
+  }, []);
+  return (
+    <div className={styles.qr}>
+      <div className={styles.qrLabel}>Donate</div>
+      {qr ? <img src={qr} alt="" width={84} height={84} /> : <span className={styles.qrBox} />}
+      <div className={styles.qrHandle}>@{QR_HANDLE}</div>
+    </div>
+  );
+}
 
 const TOP_DONORS: [string, string][] = [
   ["toffi", "$120"],
@@ -13,7 +40,9 @@ const TOP_DONORS: [string, string][] = [
 ];
 
 // The actual widget mockups, drawn a bit larger — no captions, the widget is the whole point.
-function Widget({ kind }: { kind: OverlayKind }) {
+// Exported so the cabinet Widgets tab reuses these exact populated mockups as its card previews
+// (a live-scaled real overlay reads as a tiny unreadable speck in a 330px card).
+export function Widget({ kind }: { kind: OverlayKind }) {
   if (kind === "alerts") {
     return (
       <div className={styles.alert}>
@@ -25,7 +54,7 @@ function Widget({ kind }: { kind: OverlayKind }) {
             <span className={styles.alertName}>toffi</span>
             <span className={styles.amtPill}>$50</span>
           </div>
-          <span className={styles.alertMsg}>Beat the boss with no armor on 😈</span>
+          <span className={styles.alertMsg}>Beat the boss with no armor on</span>
         </div>
       </div>
     );
@@ -124,10 +153,66 @@ function Widget({ kind }: { kind: OverlayKind }) {
   if (kind === "fundraiser") {
     return (
       <div className={styles.fund}>
-        <CrownFill pct={0.72} size={58} />
+        {/* the NEW brand mark (hexagon badge) filling up — same figure as the real fundraiser page */}
+        <FundraiserFill pct={0.72} size={58} />
         <div className={styles.fundBody}>
           <div className={styles.fundPct}>72%</div>
           <div className={styles.fundNums}>$1,440 of $2,000</div>
+        </div>
+      </div>
+    );
+  }
+  if (kind === "ticker") {
+    return (
+      <div className={styles.ticker}>
+        {[
+          ["toffi", "$120"],
+          ["demon_x", "$85"],
+          ["mira.eth", "$60"],
+        ].map(([name, amt], i) => (
+          <span className={styles.tickerEntry} key={name}>
+            {i > 0 && <span className={styles.tickerDot} aria-hidden />}
+            <span className={styles.tickerName}>{name}</span>
+            <span className={styles.tickerAmt}>{amt}</span>
+          </span>
+        ))}
+        <span className={styles.tickerTotal}>Tonight $412</span>
+      </div>
+    );
+  }
+  if (kind === "qr") {
+    return <QrMock />;
+  }
+  if (kind === "session") {
+    return (
+      <div className={styles.session}>
+        <span className={styles.sessionDot} aria-hidden />
+        <span className={styles.sessionAmt}>$1,234</span>
+        <span className={styles.sessionSub}>this stream · 18 donations</span>
+      </div>
+    );
+  }
+  if (kind === "record") {
+    return (
+      <div className={styles.record}>
+        <div className={styles.recordHead}>Stream record</div>
+        <div className={styles.recordWho}>
+          <CrownMark /> Whale
+        </div>
+        <div className={styles.recordAmt}>$120</div>
+        <div className={styles.recordFoot}>beat it</div>
+      </div>
+    );
+  }
+  if (kind === "train") {
+    return (
+      <div className={styles.train}>
+        <div className={styles.trainX}>
+          TRAIN <b>×4</b>
+        </div>
+        <div className={styles.trainSum}>$63</div>
+        <div className={styles.trainFuse}>
+          <span />
         </div>
       </div>
     );

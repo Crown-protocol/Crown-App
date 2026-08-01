@@ -1,8 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useCrown, NotConfiguredError } from "@/lib/data/DataProvider";
 import { useWallet } from "@/lib/chain/useWallet";
+import { readDonorName, writeDonorName } from "@/lib/data/donorName";
+import { usd } from "@/lib/money";
 
 type Status = "idle" | "sending" | "done" | "error";
 
@@ -54,8 +56,27 @@ export function DonateForm({
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState("");
 
+  // Prefill the name the viewer saved on /me (or used on their last donation) — read after mount,
+  // localStorage doesn't exist during SSR. Still editable per-donation.
+  useEffect(() => {
+    const saved = readDonorName();
+    if (saved) setName(saved);
+  }, []);
+
   const busy = status === "sending";
+  // A submit must not re-fire while the request is in flight OR during the 2s "Done" window that
+  // follows a success (the button stays visible and would otherwise send a duplicate donation).
+  // "error" is intentionally excluded — the button reverts to "Donate" so the donor can retry.
+  const locked = status === "sending" || status === "done";
   const chainNeedsConnect = mode === "chain" && !wallet.connected;
+
+  // Reset timers are stored so they can't fire setState after unmount or stack up across submits.
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleIdle = (ms: number) => {
+    if (resetTimer.current) clearTimeout(resetTimer.current);
+    resetTimer.current = setTimeout(() => setStatus("idle"), ms);
+  };
+  useEffect(() => () => { if (resetTimer.current) clearTimeout(resetTimer.current); }, []);
 
   function pickPreset(p: number) {
     setActivePreset(p);
@@ -82,7 +103,7 @@ export function DonateForm({
   }
 
   async function onSubmit() {
-    if (busy) return;
+    if (locked) return;
     setError("");
 
     if (chainNeedsConnect) {
@@ -97,10 +118,12 @@ export function DonateForm({
     setStatus("sending");
     try {
       await donate({ handle, amount, name, message, slug }, wallet.address);
+      // Remember the name they donated under, so the next form (any maker) starts prefilled.
+      if (name.trim()) writeDonorName(name);
       setStatus("done");
-      setName("");
+      setName(readDonorName());
       setMessage("");
-      setTimeout(() => setStatus("idle"), 2000);
+      scheduleIdle(2000);
     } catch (e) {
       const { text, soft } = friendlyError(e);
       if (soft) {
@@ -108,7 +131,7 @@ export function DonateForm({
       } else {
         setStatus("error");
         setError(text);
-        setTimeout(() => setStatus("idle"), 10000);
+        scheduleIdle(10000);
       }
     }
   }
@@ -117,7 +140,7 @@ export function DonateForm({
   if (busy) label = "Sending…";
   else if (status === "done") label = "Done";
   else if (chainNeedsConnect) label = wallet.connecting ? "Opening wallet…" : "Connect wallet";
-  else label = (<>Donate <span className="num">{amount} $</span></>);
+  else label = (<>Donate <span className="num">{usd(amount)}</span></>);
 
   return (
     <div className="card form-card">
@@ -130,7 +153,7 @@ export function DonateForm({
             disabled={busy}
             onClick={() => pickPreset(p)}
           >
-            {p} $
+            {usd(p)}
           </button>
         ))}
         {customOpen ? (
@@ -167,7 +190,7 @@ export function DonateForm({
         <textarea id="don-msg" rows={2} placeholder="optional" value={message} disabled={busy} onChange={(e) => setMessage(e.target.value)} />
       </div>
 
-      <button type="button" className="btn" disabled={busy} onClick={onSubmit}>
+      <button type="button" className="btn" disabled={locked} onClick={onSubmit}>
         {label}
       </button>
 

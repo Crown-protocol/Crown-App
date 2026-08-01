@@ -79,6 +79,20 @@
     margin-top: 8px;
     padding: 14px;
   }
+  /* the round line (clock · pot) wraps instead of colliding on the narrowest phones */
+  .roundHead {
+    flex-wrap: wrap;
+    gap: 2px 12px;
+  }
+  /* comfortable tap targets, and the icon row wraps rather than pushing the page sideways */
+  .socials {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .socials a {
+    width: 44px;
+    height: 44px;
+  }
   .footer {
     margin-top: 18px;
   }
@@ -237,6 +251,10 @@
   display: flex;
   gap: 10px;
 }
+/* let the title field shrink so the genre select can't push it (and the card) past the screen */
+.suggestFields > :global(.field) {
+  min-width: 0;
+}
 .genreSelect {
   height: 48px;
   padding: 0 12px;
@@ -252,7 +270,7 @@
 }
 .customAmount {
   width: 110px;
-  height: 40px;
+  height: 44px;
   padding: 0 12px;
   border-radius: var(--r-pill);
   border: 1px solid var(--line);
@@ -310,4 +328,17 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+}
+
+/* Knocked out of an elimination round: dimmed and struck through, still readable so viewers can see
+   what already went — but visibly out of the running and not clickable. */
+.sOut {
+  opacity: 0.42;
+  cursor: default;
+}
+.sOut .sTitle {
+  text-decoration: line-through;
+}
+.sOut .sFill {
+  background: var(--line-strong);
 }

@@ -7,7 +7,8 @@ import { Mono } from "@/components/Mono";
 import { Spark } from "@/components/Spark";
 import { SearchIcon, SocialIcon, SOCIAL_KINDS, SOCIAL_LABEL } from "@/components/icons";
 import { MOCK_STREAMERS, MOCK_REALMS } from "@/lib/data/mock";
-import type { Social } from "@/lib/data/types";
+import { USDC_DECIMALS } from "@/lib/chain/config";
+import type { Profile, Social } from "@/lib/data/types";
 import styles from "./page.module.css";
 
 type Sort = "all" | "7d";
@@ -16,7 +17,7 @@ type Sort = "all" | "7d";
 const EXIT_MS = 700;
 
 function money(n: number) {
-  return `${n.toLocaleString("en-US")} $`;
+  return `$${n.toLocaleString("en-US")}`;
 }
 
 export default function DiscoverPage() {
@@ -50,8 +51,53 @@ export default function DiscoverPage() {
     queueChange(() => setPlatforms((prev) => (prev.includes(kind) ? prev.filter((k) => k !== kind) : [...prev, kind])));
   }
 
+  // REGISTERED makers come from the Crown DB — the demo seeds alone made every real registration
+  // invisible here. Their "received" totals are the honest mirrored donations (the indexer's book,
+  // /api/feed), which start at $0 for a fresh page — no invented numbers.
+  const [dbRows, setDbRows] = useState<{ handle: string; streamer: Profile; receivedAll: number; received7d: number; spark: number[] }[]>([]);
+  useEffect(() => {
+    let dead = false;
+    void (async () => {
+      try {
+        const [pr, fr] = await Promise.all([fetch("/api/profiles"), fetch("/api/feed?limit=200")]);
+        if (!pr.ok) return;
+        const { profiles } = (await pr.json()) as { profiles: Profile[] };
+        const sums = new Map<string, { all: number; d7: number }>();
+        if (fr.ok) {
+          const { donations } = (await fr.json()) as { donations: { streamer: string; gross: number; blockTime: number | null }[] };
+          const weekAgo = Date.now() / 1000 - 7 * 86400;
+          for (const d of donations ?? []) {
+            const cur = sums.get(d.streamer) ?? { all: 0, d7: 0 };
+            const dollars = d.gross / 10 ** USDC_DECIMALS;
+            cur.all += dollars;
+            if ((d.blockTime ?? 0) >= weekAgo) cur.d7 += dollars;
+            sums.set(d.streamer, cur);
+          }
+        }
+        if (dead) return;
+        setDbRows(
+          (profiles ?? [])
+            .filter((p) => !MOCK_STREAMERS[p.handle.toLowerCase()])
+            .map((p) => {
+              const sum = sums.get(p.address) ?? { all: 0, d7: 0 };
+              return {
+                handle: p.handle.toLowerCase(),
+                streamer: p,
+                receivedAll: Math.floor(sum.all),
+                received7d: Math.floor(sum.d7),
+                spark: Array(16).fill(0), // no mirrored history yet → a flat, honest line
+              };
+            })
+        );
+      } catch {}
+    })();
+    return () => {
+      dead = true;
+    };
+  }, []);
+
   const rows = useMemo(() => {
-    const withStreamer = MOCK_REALMS.map((r) => ({ ...r, streamer: MOCK_STREAMERS[r.handle] })).filter((r) => r.streamer);
+    const withStreamer = [...MOCK_REALMS.map((r) => ({ ...r, streamer: MOCK_STREAMERS[r.handle] })).filter((r) => r.streamer), ...dbRows];
     const q = query.trim().toLowerCase();
     const filtered = withStreamer.filter((r) => {
       const matchesQuery = !q || r.handle.includes(q) || r.streamer.name.toLowerCase().includes(q);
@@ -59,7 +105,7 @@ export default function DiscoverPage() {
       return matchesQuery && matchesPlatform;
     });
     return filtered.sort((a, b) => (sort === "all" ? b.receivedAll - a.receivedAll : b.received7d - a.received7d));
-  }, [query, sort, platforms]);
+  }, [query, sort, platforms, dbRows]);
 
   const platformCounts = useMemo(() => {
     const counts = Object.fromEntries(SOCIAL_KINDS.map((k) => [k, 0])) as Record<Social["kind"], number>;
@@ -68,8 +114,9 @@ export default function DiscoverPage() {
       if (!streamer) continue;
       for (const s of streamer.socials) counts[s.kind] += 1;
     }
+    for (const r of dbRows) for (const s of r.streamer.socials ?? []) counts[s.kind] += 1;
     return counts;
-  }, []);
+  }, [dbRows]);
 
   return (
     <main className={styles.wrap}>
@@ -79,7 +126,7 @@ export default function DiscoverPage() {
         <div className={styles.searchRow}>
           <div className="search">
             <SearchIcon width={22} height={22} />
-            <input type="text" placeholder="Search content makers…" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <input type="text" aria-label="Search content makers" placeholder="Search content makers…" value={query} onChange={(e) => setQuery(e.target.value)} />
           </div>
         </div>
 
@@ -98,7 +145,18 @@ export default function DiscoverPage() {
             </div>
 
             <div className={styles.filterGroup}>
-              <div className={styles.filterLabel}>Platforms</div>
+              <div className={styles.filterHead}>
+                <span className={styles.filterLabel}>Platforms</span>
+                {platforms.length > 0 && (
+                  <button
+                    type="button"
+                    className={styles.clearPlatforms}
+                    onClick={() => queueChange(() => setPlatforms([]))}
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
               <div className={styles.platformList}>
                 {SOCIAL_KINDS.map((kind) => (
                   <button

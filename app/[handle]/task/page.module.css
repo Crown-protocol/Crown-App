@@ -83,17 +83,8 @@
   margin: 0;
 }
 
-/* The primary action stays the flat accent, not the gradient: the gradient is reserved for the
-   site's 2–3 hero moments (design charter), and a whole page CTA in it read as loud here. */
-.send {
-  background: var(--accent);
-}
-.send:hover:not(:disabled) {
-  background: var(--accent-hover);
-}
-.send:active:not(:disabled) {
-  background: var(--accent-down);
-}
+/* The task CTA uses the plain gradient .btn like every other game page's primary action — no flat
+   override here, so the four donate pages read as one. */
 
 /* What this task does to your standing with them — the amount above IS the gain ($1 = 1 point). */
 .rep {
@@ -224,5 +215,14 @@
   }
   .desc {
     font-size: 14px;
+  }
+  /* comfortable tap targets, and never let a long row of icons push the page sideways */
+  .socials {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .socials a {
+    width: 44px;
+    height: 44px;
   }
 }

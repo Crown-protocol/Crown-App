@@ -1,0 +1,60 @@
+/* The "?" chip sits inline in a label, so the label keeps its baseline and the row doesn't grow. */
+.wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  margin-left: 6px;
+}
+
+.dot {
+  width: 16px;
+  height: 16px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--text-3);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: help;
+  flex: none;
+  transition: color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+.dot:hover,
+.dot[aria-expanded="true"] {
+  color: var(--text-1);
+  border-color: var(--text-3);
+}
+.dot:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-neutral);
+}
+
+/* The bubble floats above the row so it never reflows the form. Anchored to the "?" and clamped to
+   a readable width; `left: 0` keeps it inside the editor column rather than centring off the edge. */
+.pop {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: -8px;
+  z-index: 20;
+  width: max-content;
+  max-width: 260px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-2);
+  padding: 9px 12px;
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+  text-transform: none;
+  letter-spacing: normal;
+  box-shadow: var(--shadow-float);
+  pointer-events: none;
+}

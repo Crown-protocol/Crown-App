@@ -20,6 +20,44 @@
   border-radius: 34px;
   box-shadow: 0 0 0 1px var(--line-strong), var(--shadow-float);
 }
+
+/* Wrapper that hugs the phone frame but does NOT clip, so the decorative side buttons can protrude
+   past the bezel (the frame keeps overflow:hidden for its rounded screen). */
+.phoneWrap {
+  position: relative;
+  width: fit-content;
+  flex: none;
+  max-width: 100%;
+  /* No align-self here: let the preview column's `align-items: center` center the phone under the
+     Phone/Desktop toggle, exactly where the bare frame used to sit. */
+}
+/* A physical side button: a slim rounded metal bar sitting on the phone's edge, sticking out ~3px. */
+.sideBtn {
+  position: absolute;
+  width: 4px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #2a2a31, #0c0c10);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  pointer-events: none;
+  z-index: 1;
+}
+/* Left edge: a short mute switch above the longer volume rocker. */
+.mute {
+  left: -3px;
+  top: 16%;
+  height: 24px;
+}
+.volume {
+  left: -3px;
+  top: 25%;
+  height: 54px;
+}
+/* Right edge: the longer side/power button. */
+.power {
+  right: -3px;
+  top: 30%;
+  height: 64px;
+}
 /* The phone's top bezel: a real flex row, so the notch hanging from it costs layout space
    instead of sitting on top of the page. It carries the SCREEN's background, not the frame's —
    any other color turns the row itself into a visible black band across the phone, and the notch
@@ -100,4 +138,33 @@
   background: var(--bg-0);
   /* A preview, not an interactive surface — clicks belong to the builder, not the page. */
   pointer-events: none;
+  /* Hidden until it reports loaded, so the page fades in instead of flashing dark, then blank content. */
+  opacity: 0;
+  transition: opacity var(--dur-2) var(--ease);
+}
+.iframeReady {
+  opacity: 1;
+}
+
+/* Loading state over the phone/desktop screen while the iframe is still fetching the page —
+   a quiet centred spinner instead of a dark blank rectangle. */
+.loader {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-0);
+  pointer-events: none;
+}
+.spinner {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2.5px solid var(--line-strong);
+  border-top-color: var(--accent);
+  animation: lp-spin 0.7s linear infinite;
+}
+@keyframes lp-spin {
+  to { transform: rotate(360deg); }
 }

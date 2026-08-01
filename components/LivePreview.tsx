@@ -22,6 +22,13 @@ export function LivePreview({ src, device }: { src: string; device: "phone" | "d
   const roRef = useRef<ResizeObserver | null>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   const [contentH, setContentH] = useState(0);
+  const [loaded, setLoaded] = useState(false);
+
+  // A new src (device switch, or a fresh page) is loading again — hide it behind the loader until
+  // the iframe reports ready, so the frame never flashes a dark blank screen.
+  useEffect(() => {
+    setLoaded(false);
+  }, [src]);
 
   useEffect(() => {
     const el = screenRef.current;
@@ -43,6 +50,7 @@ export function LivePreview({ src, device }: { src: string; device: "phone" | "d
   }, []);
 
   const onLoad = useCallback(() => {
+    setLoaded(true);
     roRef.current?.disconnect();
     measureContent();
     const doc = iframeRef.current?.contentDocument;
@@ -62,11 +70,13 @@ export function LivePreview({ src, device }: { src: string; device: "phone" | "d
   const MIN_SCALE = device === "desktop" ? 0.52 : 0.3;
   const fitScale = box.w ? box.w / logicalW : 0;
   const scale = fitScale ? Math.max(fitScale, MIN_SCALE) : 0;
-  // Full content height once measured; until then, fall back to filling the frame so it never flashes empty.
-  const iframeH = contentH || (scale ? box.h / scale : 0);
+  // Full content height once measured, but never SHORTER than the frame: a page whose content ends
+  // early would otherwise leave a strip of the frame's own dark background under it — a bar that
+  // doesn't exist on the real page. At frame height the page's min-height:100vh paints it instead.
+  const iframeH = Math.max(contentH, scale ? box.h / scale : 0);
   const scaledH = iframeH * scale;
 
-  return (
+  const frame = (
     <div className={`${styles.frame} ${isDesktop ? styles.desktop : styles.phone}`}>
       {isDesktop ? (
         <div className={styles.browserBar}>
@@ -90,7 +100,7 @@ export function LivePreview({ src, device }: { src: string; device: "phone" | "d
               onLoad={onLoad}
               title="Live page preview"
               src={src}
-              className={styles.iframe}
+              className={`${styles.iframe} ${loaded ? styles.iframeReady : ""}`}
               style={{ width: logicalW, height: iframeH, transform: `scale(${scale})` }}
               scrolling="no"
               tabIndex={-1}
@@ -98,7 +108,26 @@ export function LivePreview({ src, device }: { src: string; device: "phone" | "d
             />
           </div>
         )}
+        {!loaded && (
+          <div className={styles.loader} aria-hidden>
+            <span className={styles.spinner} />
+          </div>
+        )}
       </div>
+    </div>
+  );
+
+  if (isDesktop) return frame;
+
+  // Purely decorative physical side buttons on the phone — mute + volume on the left, the side/power
+  // button on the right. Rendered on a non-clipping wrapper so they can protrude past the bezel; the
+  // frame itself keeps overflow:hidden for its rounded corners. Cabinet-only, since LivePreview is.
+  return (
+    <div className={styles.phoneWrap}>
+      <span className={`${styles.sideBtn} ${styles.mute}`} aria-hidden />
+      <span className={`${styles.sideBtn} ${styles.volume}`} aria-hidden />
+      <span className={`${styles.sideBtn} ${styles.power}`} aria-hidden />
+      {frame}
     </div>
   );
 }

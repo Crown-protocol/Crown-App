@@ -139,33 +139,6 @@
   max-width: 40ch;
   margin-top: 20px;
 }
-.heroCta {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  justify-content: center;
-  margin-top: 30px;
-}
-.ctaGhost {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 56px;
-  padding: 0 26px;
-  border-radius: var(--r-2);
-  background: transparent;
-  border: 1px solid var(--line-strong);
-  color: var(--text-1);
-  font-size: 17px;
-  font-weight: 600;
-  text-decoration: none;
-  transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
-}
-.ctaGhost:hover {
-  background: var(--bg-2);
-}
-
 /* ---- money-flow band: sits right under the hero, so keep it dark with a faint
    accent seam at the top to separate it from the phones above ---- */
 /* The "How it works" band: a plain hairline separating it from the hero, no wash. The seam is
@@ -236,9 +209,13 @@
   margin-bottom: 20px;
 }
 .gamesHead h2 {
-  font-size: 24px;
+  /* Was a flat 24px — markedly smaller than the neighbouring section titles (MoneyFlow 40px,
+     Reputation 46px), so a primary section read as a minor one. Scaled up to sit in the same family
+     while staying the quieter, left-aligned catalog header (it carries a subtitle + "See all", so it
+     shouldn't match the big centered hero titles outright). */
+  font-size: clamp(26px, 3vw, 34px);
   font-weight: 700;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
 }
 .gamesHead p {
   font-size: 15px;
@@ -296,4 +273,32 @@
 .repViz {
   display: flex;
   flex-direction: column;
+}
+
+/* ---- phone comfort: the 88px band padding and the big hero type are generous on a
+   desktop column but crowd/oversize on a phone. Trim vertical padding and gently scale
+   the hero so nothing wraps awkwardly. Desktop is untouched. ---- */
+@media (max-width: 640px) {
+  .bandInner {
+    padding: 56px 18px;
+  }
+  .heroBand .bandInner {
+    padding-top: 44px;
+  }
+  .seeAll {
+    /* the teaser's secondary link — give it a comfortable tap height on phones */
+    padding: 6px 0;
+  }
+}
+@media (max-width: 480px) {
+  .bandInner {
+    padding: 44px 16px;
+  }
+  .heroTitle {
+    font-size: clamp(34px, 11vw, 46px);
+  }
+  .heroSub {
+    font-size: 16px;
+    margin-top: 16px;
+  }
 }

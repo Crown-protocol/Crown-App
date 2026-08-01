@@ -10,13 +10,17 @@ import {
   getCurrentSession,
   type GameSession,
 } from "@/lib/data/gameSessions";
-import { readLots, readAuctionMeta, initAuction, leaderboard, lotSum, auctionTotals, PLATFORM_MIN_BID } from "@/lib/data/auction";
+import { readLots, readAuctionMeta, initAuction, setAuctionChain, leaderboard, lotSum, auctionTotals, PLATFORM_MIN_BID } from "@/lib/data/auction";
 import { readRound, readRoundMeta, initRound } from "@/lib/data/roulette";
-import { readStatus, raisedTotal } from "@/lib/data/fundraiser";
+import { readStatus, raisedTotal, writeStatus } from "@/lib/data/fundraiser";
+import { useGameChain } from "@/lib/chain/useGameChain";
+import { fundingCreateCollection, auctionCreate } from "@/lib/chain/gameFlows";
+import { DEFAULT_FUNDRAISER_CONFIG } from "@/components/FundraiserGameSettings";
 import { readTasks } from "@/lib/data/tasks";
 import { DEFAULT_AUCTION_CONFIG } from "@/components/AuctionGameSettings";
 import type { Tier } from "@/lib/data/types";
 import type { GameId } from "@/lib/data/games";
+import { usd } from "@/lib/money";
 
 // One line that tells the streamer what's inside a session without opening it.
 function summarize(s: GameSession): string {
@@ -25,26 +29,26 @@ function summarize(s: GameSession): string {
       const lots = readLots(s.scope);
       const t = auctionTotals(lots);
       const m = readAuctionMeta(s.scope);
-      if (m?.state === "settled") return `paid out · ${t.top ? lotSum(t.top) : 0} $`;
+      if (m?.state === "settled") return `paid out · ${usd(t.top ? lotSum(t.top) : 0)}`;
       if (m?.state === "refunded") return "refunded";
       if (m?.state === "cancelled") return "cancelled";
       if (m?.state === "performing") return "delivering the winning lot";
       if (m?.state === "voting") return "voting";
-      return t.accepted ? `${t.top ? lotSum(t.top) : 0} $ leading · ${t.accepted} lot${t.accepted > 1 ? "s" : ""}${t.pending ? ` · ${t.pending} to review` : ""}` : t.pending ? `${t.pending} lot${t.pending > 1 ? "s" : ""} to review` : "no lots yet";
+      return t.accepted ? `${usd(t.top ? lotSum(t.top) : 0)} leading · ${t.accepted} lot${t.accepted > 1 ? "s" : ""}${t.pending ? ` · ${t.pending} to review` : ""}` : t.pending ? `${t.pending} lot${t.pending > 1 ? "s" : ""} to review` : "no lots yet";
     }
     case "roulette": {
       const round = readRound(s.scope);
       const winner = readRoundMeta(s.scope)?.winner;
       if (winner) return `spun · ${winner.title} won`;
       const pot = round.reduce((sum, r) => sum + r.pool, 0);
-      return round.length ? `${pot} $ in the pot · ${round.length} suggestions` : "empty wheel";
+      return round.length ? `${usd(pot)} in the pot · ${round.length} suggestions` : "empty wheel";
     }
     case "fundraiser": {
       const st = readStatus(s.scope).state;
       const raised = raisedTotal(s.scope);
-      if (st === "delivered") return `delivered · ${raised} $`;
+      if (st === "delivered") return `delivered · ${usd(raised)}`;
       if (st === "refunded") return "refunded";
-      return `${raised} $ collected${st === "delivering" ? " · delivering" : ""}`;
+      return `${usd(raised)} collected${st === "delivering" ? " · delivering" : ""}`;
     }
     case "task": {
       const open = readTasks(s.scope).filter((t) => t.state === "pending" || t.state === "active");
@@ -61,6 +65,7 @@ function when(ts: number): string {
 // many as you like in parallel, each with its own board/round/queue and its own share link;
 // a finished game switches its session off by itself and stays here as the archive.
 export function GameSessions({
+  fundraiserGoal: profileGoal,
   handle,
   gameId,
   gameTitle,
@@ -68,6 +73,7 @@ export function GameSessions({
   onOpen,
   onCreated,
 }: {
+  fundraiserGoal?: number;
   handle: string;
   gameId: GameId;
   gameTitle: string;
@@ -75,6 +81,14 @@ export function GameSessions({
   onOpen: (sessionId: string) => void; // opening an existing session → its control room
   onCreated?: (sessionId: string) => void; // a fresh session → the Page tab, to set it up and share
 }) {
+  const [chainErr, setChainErr] = useState("");
+  // The chain gate for the two canister-backed creates (roulette has no canister by design).
+  const chain = useGameChain(gameId === "fundraiser" ? "fundraiser" : gameId === "auction" ? "auction" : "task");
+  // The collection's goal/duration come from the streamer's own fundraiser draft + config.
+  const profileCfg = () => {
+    const goal = profileGoal ?? DEFAULT_FUNDRAISER_CONFIG.minContribution * 200;
+    return { goal, days: DEFAULT_FUNDRAISER_CONFIG.fundingDays };
+  };
   const [sessions, setSessions] = useState<GameSession[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -96,11 +110,50 @@ export function GameSessions({
     return () => clearInterval(t);
   }, [refresh]);
 
-  function start() {
+  async function start() {
+    setChainErr("");
+    const floor = Math.max(PLATFORM_MIN_BID, Math.round(Number(minBid)) || PLATFORM_MIN_BID);
+
+    // Canister-live games are born ON the canister first — a session without its chain id
+    // would take real escrows it can never resolve. Mock stays untouched when gates are off.
+    let chainCollection: string | undefined;
+    let chainAuction: string | undefined;
+    if (chain.live && (gameId === "fundraiser" || gameId === "auction")) {
+      if (!chain.wallet) {
+        setChainErr("Connect your wallet — this game is live on the canister.");
+        return;
+      }
+      if (gameId === "fundraiser") {
+        const cfg = profileCfg();
+        const res = await fundingCreateCollection(chain.wallet, { goalDollars: cfg.goal, durationDays: cfg.days });
+        if (!res.ok) {
+          setChainErr(res.error);
+          return;
+        }
+        chainCollection = res.collectionHex;
+      }
+      if (gameId === "auction") {
+        const res = await auctionCreate(chain.wallet, {
+          durationHours: DEFAULT_AUCTION_CONFIG.biddingHours,
+          performHours: DEFAULT_AUCTION_CONFIG.performHours,
+          minEntryDollars: floor,
+        });
+        if (!res.ok) {
+          setChainErr(res.error);
+          return;
+        }
+        chainAuction = res.auctionHex;
+      }
+    }
+
     const s = createSession(handle, gameId, name);
     // The auction's opening price is fixed the moment it's born — the streamer's number,
     // clamped to the platform floor the admin set.
-    if (gameId === "auction") initAuction(s.scope, Math.max(PLATFORM_MIN_BID, Math.round(Number(minBid)) || PLATFORM_MIN_BID));
+    if (gameId === "auction") {
+      initAuction(s.scope, floor);
+      if (chainAuction) setAuctionChain(s.scope, chainAuction);
+    }
+    if (gameId === "fundraiser" && chainCollection) writeStatus(s.scope, { state: "collecting", chainCollection });
     // The roulette round's mode is fixed the same way: rank mode pins the tier gate forever.
     if (gameId === "roulette" && rankMode) initRound(s.scope, { mode: "rank", minTier: minTier || tiers[0]?.name });
     setName("");
@@ -142,12 +195,17 @@ export function GameSessions({
               </div>
             </div>
           )}
-          <button className="btn" type="button" onClick={start}>
+          <button className="btn" type="button" onClick={() => void start()}>
             Start
           </button>
+          {chainErr && (
+            <div className="footnote" style={{ color: "var(--error)" }}>
+              {chainErr}
+            </div>
+          )}
         </div>
         {gameId === "auction" && (
-          <div className="footnote">Platform minimum: {PLATFORM_MIN_BID} $ — set by the admin, no auction opens below it.</div>
+          <div className="footnote">Platform minimum: {usd(PLATFORM_MIN_BID)} — set by the admin, no auction opens below it.</div>
         )}
         {gameId === "roulette" && (
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
