@@ -70,6 +70,7 @@ function ImageGallery({
   library,
   onAddPhoto,
   onRemovePhoto,
+  wide = false,
 }: {
   selected: string;
   // A built-in preset carries BOTH device photos — urlWide rides along so one click sets the pair.
@@ -77,6 +78,8 @@ function ImageGallery({
   library: BgPhoto[];
   onAddPhoto: (url: string) => void;
   onRemovePhoto: (id: string, url: string) => void;
+  // The desktop half of split mode: a preset stands for its wide photo, not its tall one.
+  wide?: boolean;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -90,18 +93,23 @@ function ImageGallery({
   }
   return (
     <div className={styles.tileGrid}>
-      {BACKGROUND_IMAGE_PRESETS.map((img) => (
-        <button
-          key={img.id}
-          type="button"
-          aria-label={img.label}
-          className={`${styles.tile} ${selected === img.url ? styles.tileOn : ""}`}
-          style={{ backgroundImage: `url(${img.url})` }}
-          onClick={() => onSelect(img.url, img.urlWide)}
-        >
-          <span className={styles.tileLabel}>{img.label}</span>
-        </button>
-      ))}
+      {BACKGROUND_IMAGE_PRESETS.map((img) => {
+        // Each gallery previews — and selects — the photo for ITS device, so the tile the streamer
+        // clicked is the tile that lights up. Only the phone side carries the pair along.
+        const url = (wide ? img.urlWide : img.url) ?? img.url;
+        return (
+          <button
+            key={img.id}
+            type="button"
+            aria-label={img.label}
+            className={`${styles.tile} ${selected === url ? styles.tileOn : ""}`}
+            style={{ backgroundImage: `url(${url})` }}
+            onClick={() => onSelect(url, wide ? undefined : img.urlWide)}
+          >
+            <span className={styles.tileLabel}>{img.label}</span>
+          </button>
+        );
+      })}
       {library.map((p, i) => (
         <button
           key={p.id}
@@ -152,8 +160,10 @@ export function DesignTab({ design, onChange }: { design: PageDesign; onChange: 
   }
 
   function setFit(f: Fit) {
-    // entering split with no desktop photo yet: start it from the phone photo, so nothing is blank
-    setImg({ fit: f, ...(f === "split" && !bg.valueWide ? { valueWide: bg.value } : {}) });
+    // entering split with no desktop photo yet: start it from the phone photo, so nothing is blank —
+    // its paired wide shot when the phone one is a built-in preset, else the same image
+    const pair = BACKGROUND_IMAGE_PRESETS.find((p) => p.url === bg.value);
+    setImg({ fit: f, ...(f === "split" && !bg.valueWide ? { valueWide: pair?.urlWide ?? bg.value } : {}) });
   }
 
   function addPhoto(url: string) {
@@ -162,11 +172,12 @@ export function DesignTab({ design, onChange }: { design: PageDesign; onChange: 
   function removePhoto(id: string, url: string) {
     setLibrary(removeBgPhoto(id));
     const fallback = BACKGROUND_IMAGE_PRESETS[0]?.url ?? "";
+    const fallbackWide = BACKGROUND_IMAGE_PRESETS[0]?.urlWide ?? fallback;
     // a removed photo can't stay selected on either device
     if (bg.value === url || bg.valueWide === url) {
       setImg({
         ...(bg.value === url ? { value: fallback } : {}),
-        ...(bg.valueWide === url ? { valueWide: fallback } : {}),
+        ...(bg.valueWide === url ? { valueWide: fallbackWide } : {}),
       });
     }
   }
@@ -330,8 +341,9 @@ export function DesignTab({ design, onChange }: { design: PageDesign; onChange: 
               <>
                 <div className={styles.subHead}>Desktop photo</div>
                 <ImageGallery
+                  wide
                   selected={bg.valueWide ?? ""}
-                  onSelect={(url, urlWide) => setImg({ valueWide: urlWide ?? url })}
+                  onSelect={(url) => setImg({ valueWide: url })}
                   library={library}
                   onAddPhoto={addPhoto}
                   onRemovePhoto={removePhoto}

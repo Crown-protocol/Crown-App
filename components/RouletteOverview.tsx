@@ -5,7 +5,7 @@ import Link from "next/link";
 import { BarList, StatTile } from "@/components/ops";
 import { usd } from "@/lib/money";
 import { RouletteWheel } from "@/components/RouletteWheel";
-import { DEFAULT_ROULETTE_CONFIG } from "@/components/RouletteGameSettings";
+import { rouletteRules } from "@/lib/data/gameConfig";
 import { readRound, ensureRound, setRoundWinner, newRound, readRoundMeta, appendHistory, survivors, eliminationWeights, eliminate, type RoundMeta } from "@/lib/data/roulette";
 import { useGameSync } from "@/lib/data/gameSync";
 import { pickWeighted, roundRand, type RouletteSuggestion } from "@/lib/data/roulette-mock";
@@ -25,7 +25,8 @@ export function RouletteOverview({ profile, scope, shareQuery = "" }: { profile:
   const handle = scope ?? profile.handle;
   // Shared game state: pulls the server copy into localStorage; the 1s tick below re-reads it.
   useGameSync(handle);
-  const cfg = profile.rouletteConfig ?? DEFAULT_ROULETTE_CONFIG;
+  // This round's rules — the ones the session was opened with, not whatever the profile says today.
+  const cfg = rouletteRules(profile, handle);
 
   const [round, setRound] = useState<RouletteSuggestion[]>([]);
   const [meta, setMeta] = useState<RoundMeta | null>(null);

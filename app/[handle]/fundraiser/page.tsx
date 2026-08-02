@@ -12,7 +12,7 @@ import { FundraiserFill } from "@/components/FundraiserFill";
 import { SocialIcon, SOCIAL_LABEL, CopyIcon } from "@/components/icons";
 import { normalizeSocialLink } from "@/lib/data/social-links";
 import { usd } from "@/lib/money";
-import { DEFAULT_FUNDRAISER_CONFIG } from "@/components/FundraiserGameSettings";
+import { fundraiserRules } from "@/lib/data/gameConfig";
 import { withFundraiserDefaults, readCollected, addCollected, readStatus, type FundraiserStatus } from "@/lib/data/fundraiser";
 import { useGameChain } from "@/lib/chain/useGameChain";
 import { fundingChipIn } from "@/lib/chain/gameFlows";
@@ -91,7 +91,8 @@ export default function FundraiserPage({ params }: { params: { handle: string } 
     );
   }
 
-  const cfg = mine.fundraiserConfig ?? DEFAULT_FUNDRAISER_CONFIG;
+  // The rules THIS collection was opened with — its own goal and minimum, not the page's defaults.
+  const cfg = fundraiserRules(mine, scope);
   if (!pub) return <main className="page" />;
   if (!pub.scope) {
     return (
@@ -122,8 +123,10 @@ export default function FundraiserPage({ params }: { params: { handle: string } 
     );
   }
 
-  const pct = fr.goal > 0 ? Math.min(1, collected / fr.goal) : 0;
-  const reached = fr.goal > 0 && collected >= fr.goal;
+  // The goal belongs to the RUN, not to the page: cfg.goal is what this collection was opened for.
+  const goal = cfg.goal;
+  const pct = goal > 0 ? Math.min(1, collected / goal) : 0;
+  const reached = goal > 0 && collected >= goal;
   const chosen = amount ?? fr.presets[0];
   const customN = Math.round(Number(custom)) || 0;
   const finalAmount = custom ? customN : chosen;
@@ -195,12 +198,12 @@ export default function FundraiserPage({ params }: { params: { handle: string } 
         <FundraiserFill pct={pct} size={128} image={fr.fillImage} />
         <div className={`${styles.pct} num`}>{Math.round(pct * 100)}%</div>
         <div className={`${styles.sums} num`}>
-          {usd(collected)} <span>of {usd(fr.goal)}</span>
+          {usd(collected)} <span>of {usd(goal)}</span>
         </div>
         <div className={styles.left}>
           {reached
             ? `Goal reached · ${usd(collected)} raised`
-            : `${usd(Math.max(0, fr.goal - collected))} to go · ${cfg.fundingDays} ${cfg.fundingDays === 1 ? "day" : "days"} left`}
+            : `${usd(Math.max(0, goal - collected))} to go · ${cfg.fundingDays} ${cfg.fundingDays === 1 ? "day" : "days"} left`}
         </div>
 
         {reached ? (

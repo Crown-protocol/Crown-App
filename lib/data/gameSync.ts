@@ -22,6 +22,7 @@ export type SyncOp =
   | { type: "suggest"; title: string; genre: string; dPool: number; dBackers: number }
   | { type: "entry"; id: string; entry: Record<string, unknown> }
   | { type: "add"; delta: number }
+  | { type: "mergeById"; list: { id: string }[] }
   | { type: "replace"; value: unknown };
 
 const POLL_MS = 3000;

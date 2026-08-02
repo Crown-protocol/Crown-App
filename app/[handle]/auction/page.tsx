@@ -10,7 +10,7 @@ import { DonateTopBar } from "@/components/DonateTopBar";
 import { Mono } from "@/components/Mono";
 import { SocialIcon, SOCIAL_LABEL } from "@/components/icons";
 import { normalizeSocialLink } from "@/lib/data/social-links";
-import { DEFAULT_AUCTION_CONFIG } from "@/components/AuctionGameSettings";
+import { auctionRules } from "@/lib/data/gameConfig";
 import {
   withAuctionDefaults,
   readLots,
@@ -84,6 +84,7 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
   const [name, setName] = useState("");
   const [send, setSend] = useState<SendState>("idle");
   const [inc, setInc] = useState("1"); // the outbid step — +$1 by default, any +$x they like
+  const [openBid, setOpenBid] = useState(""); // the opening bid on an empty board — blank = the maker's floor
   const [voted, setVoted] = useState(false);
   const [view, setView] = useState<"bid" | "board">("bid"); // the top toggle: place a bid vs. the standing lots
   const [chainErr, setChainErr] = useState("");
@@ -122,7 +123,9 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
     );
   }
 
-  const cfg = mine.auctionConfig ?? DEFAULT_AUCTION_CONFIG;
+  // The rules THIS session was opened with — a bidder must see the step and the windows the run
+  // is actually running under, not the maker's current profile defaults.
+  const cfg = auctionRules(mine, scope);
   if (!pub) return <main className="page" />;
   if (!pub.scope) {
     return (
@@ -168,7 +171,10 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
   // The maker sets the SMALLEST allowed outbid step; a viewer may step up by more, never less.
   const minStep = Math.max(1, Math.round(cfg.minIncrement ?? 1));
   const step = Math.max(minStep, Math.round(Number(inc)) || minStep);
-  const bid = board.length ? topSum + step : minBid;
+  // Opening an empty board works the same way: the maker's price is a FLOOR, not a fixed ticket —
+  // a viewer who wants the lead from the first move can open above it. Blank = open at the floor.
+  const opening = Math.max(minBid, Math.round(Number(openBid)) || minBid);
+  const bid = board.length ? topSum + step : opening;
   const canSend = send === "idle" && bidding && text.trim().length > 0;
   const rep = getReputation(handle);
 
@@ -260,7 +266,12 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
                 <div className={au.empty}>No lots on the board yet — yours would open it.</div>
               ) : (
                 board.map((l, i) => (
-                  <div key={l.id} className={`${au.lot}${i === 0 ? " " + au.lotLead : ""}`}>
+                  // The board resolves top-down: each rank enters a beat after the one above it.
+                  <div
+                    key={l.id}
+                    className={`${au.lot}${i === 0 ? " " + au.lotLead : ""}`}
+                    style={{ animationDelay: `${Math.min(i, 7) * 45}ms` }}
+                  >
                     <span className={au.rank}>#{i + 1}</span>
                     <span className={au.lotBody}>
                       <span className={au.lotText}>{l.text}</span>
@@ -320,7 +331,7 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
                 </div>
                 <ReputationDelta rep={rep} gain={bid} tiers={mine.tiers} />
                 <div className={au.bidRow} style={{ display: "flex", gap: 10 }}>
-                  {board.length > 0 && (
+                  {board.length > 0 ? (
                     <div className="field" style={{ flex: "0 0 104px" }} title="Your outbid step">
                       <div className="affix has-pre">
                         <span className="affix-pre">+$</span>
@@ -338,6 +349,32 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
                             if (!n || n < minStep) setInc(String(minStep));
                           }}
                           style={{ paddingLeft: 38, height: 56 }}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    /* Empty board: the same knob, but on the whole bid instead of a step — the
+                       maker's price is the floor, and opening above it is allowed. */
+                    <div
+                      className="field"
+                      style={{ flex: "0 0 116px" }}
+                      title={`Your opening bid — ${mine.name}'s floor is ${usd(minBid)}`}
+                    >
+                      <div className="affix has-pre">
+                        <span className="affix-pre">$</span>
+                        <input
+                          type="number"
+                          min={minBid}
+                          aria-label="Opening bid"
+                          placeholder={String(minBid)}
+                          value={openBid}
+                          onChange={(e) => setOpenBid(e.target.value)}
+                          onBlur={() => {
+                            // Snap a below-floor entry up, so the shown amount and the actual bid agree.
+                            const n = Math.round(Number(openBid));
+                            if (!n || n < minBid) setOpenBid(String(minBid));
+                          }}
+                          style={{ height: 56 }}
                         />
                       </div>
                     </div>

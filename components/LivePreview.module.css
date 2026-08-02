@@ -84,6 +84,20 @@
   border-radius: var(--r-3);
 }
 
+/* Two-column builder only (its own breakpoint), where the preview column is PINNED as you scroll
+   the editor: a frame taller than the screen pushes the column's foot — the link + QR row — out of
+   reach for good, since a stuck column can't be scrolled back. Full size when there's room, a bit
+   shorter on a low laptop screen. Below the breakpoint the column is static and scrolls normally,
+   so both frames keep their full size there. */
+@media (min-width: 1181px) {
+  .phone {
+    width: min(278px, calc((100vh - 240px) * 9 / 18.5));
+  }
+  .desktop {
+    height: min(620px, calc(100vh - 240px));
+  }
+}
+
 .browserBar {
   display: flex;
   align-items: center;

@@ -50,9 +50,14 @@ function writeSessions(handle: string, gameId: GameId, list: GameSession[]) {
   try {
     localStorage.setItem(key(handle, gameId), JSON.stringify(list));
   } catch {}
-  // Share the registry (single-writer: only the streamer's cabinet creates/ends sessions) so a
-  // viewer's browser can resolve ?s=<id> to the right scope — see sessionsScope/pullSessions.
-  sendOp(sessionsScope(handle, gameId), "crown-game-sessions", { type: "replace", value: list });
+  // Share the registry so a viewer's browser can resolve ?s=<id> to the right scope — see
+  // sessionsScope/pullSessions.
+  //
+  // MERGE, never replace. This list comes from localStorage, and Log out wipes that store: a
+  // cabinet that hadn't pulled the registry back yet would send a list of one and delete every
+  // other session from the server — for the streamer and every viewer at once. Merging by id keeps
+  // whatever the server already knows and still records this session's own changes.
+  sendOp(sessionsScope(handle, gameId), "crown-game-sessions", { type: "mergeById", list });
 }
 
 // The registry's gamestate scope. The localStorage key is `crown-game-sessions:<handle>:<gameId>`

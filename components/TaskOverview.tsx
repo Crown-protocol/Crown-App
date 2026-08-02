@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Mono } from "@/components/Mono";
 import { StatTile } from "@/components/ops";
-import { DEFAULT_TASK_CONFIG } from "@/components/TaskGameSettings";
+import { taskRules } from "@/lib/data/gameConfig";
 import { readTasks, setTaskState, removeTask, taskTotals, type GameTask, type TaskState } from "@/lib/data/tasks";
 import { useGameSync } from "@/lib/data/gameSync";
 import { useGameChain } from "@/lib/chain/useGameChain";
@@ -28,7 +28,8 @@ const STATE_PILL: Record<TaskState, { tone: string; label: string }> = {
 // (source: "task"), so afterwards it lives where money lives — the Donations tab.
 export function TaskOverview({ profile, scope }: { profile: Profile; scope?: string }) {
   const handle = scope ?? profile.handle;
-  const cfg = profile.taskConfig ?? DEFAULT_TASK_CONFIG;
+  // This run's rules — the ones the session was opened with, not whatever the profile says today.
+  const cfg = taskRules(profile, handle);
   const { feed, applyMockDonation } = useCrown();
   const [tasks, setTasks] = useState<GameTask[]>([]);
 

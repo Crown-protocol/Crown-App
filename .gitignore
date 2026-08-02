@@ -16,5 +16,10 @@ npm-debug.log*
 # Crown DB (SQLite) — data lives on the server, never in git
 /data/
 
+# local dev server (run-local.sh) — runtime artefacts of one machine
+/.local-server.log
+/.local-server.pid
+
 # local debug scratch
 np.js
+.cdp-g.js

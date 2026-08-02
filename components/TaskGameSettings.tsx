@@ -13,7 +13,9 @@ export const DEFAULT_TASK_CONFIG: TaskGameConfig = {
   maxActiveTasks: 5,
 };
 
-const DEADLINE_OPTIONS = [
+// Exported so the session starter (GameSessions) offers exactly the same picks — one list, so the
+// standing rules and a single run's rules can never drift into different vocabularies.
+export const DEADLINE_OPTIONS = [
   { hours: 6, label: "6 hours" },
   { hours: 12, label: "12 hours" },
   { hours: 24, label: "24 hours" },

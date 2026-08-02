@@ -383,10 +383,24 @@ export function SettingsPanel({
           onCancel={() => setConfirm(null)}
           onConfirm={onLogOut}
           body={
-            <>
-              You&apos;ll be signed out and your wallet disconnected. <b>Your page, tiers and game settings stay exactly
-              as they are</b> — connect the same wallet again to pick up where you left off.
-            </>
+            // A demo page has no owning wallet, so "connect the same wallet again" is a promise this
+            // build cannot keep for it: there is nothing to connect, and sign-in resolves accounts by
+            // owner — a lookup that can never match a page nobody owns. Signing out of one is
+            // one-way, so say so BEFORE the click rather than leaving them on the registration wizard
+            // wondering where their page went.
+            isDemoAddress(draft.address) ? (
+              <>
+                <b>This is a one-way door.</b> This page was created in demo mode, so no wallet owns it — there is
+                nothing to sign back in with, and logging out here gives up access to it for good. The page itself
+                keeps working at <b>/@{draft.handle}</b>. Want an account you can return to? Connect a wallet and
+                register a page with it.
+              </>
+            ) : (
+              <>
+                You&apos;ll be signed out and your wallet disconnected. <b>Your page, tiers and game settings stay
+                exactly as they are</b> — connect the same wallet again to pick up where you left off.
+              </>
+            )
           }
         />
       )}

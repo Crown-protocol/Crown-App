@@ -7,7 +7,7 @@ import { auctionLotAction, auctionAction } from "@/lib/chain/gameFlows";
 import Link from "next/link";
 import { BarList, StatTile } from "@/components/ops";
 import { usd } from "@/lib/money";
-import { DEFAULT_AUCTION_CONFIG } from "@/components/AuctionGameSettings";
+import { auctionRules } from "@/lib/data/gameConfig";
 import {
   readLots,
   ensureAuction,
@@ -51,7 +51,8 @@ export function AuctionOverview({ profile, scope, shareQuery = "" }: { profile: 
   // early return below (calling it after that return changed the hook order the moment a round
   // loaded, which React treats as a crash).
   const chain = useGameChain("auction");
-  const cfg = profile.auctionConfig ?? DEFAULT_AUCTION_CONFIG;
+  // This auction's rules — the ones the session was opened with, not whatever the profile says today.
+  const cfg = auctionRules(profile, handle);
 
   const [lots, setLots] = useState<AuctionLot[]>([]);
   const [meta, setMeta] = useState<AuctionMeta | null>(null);

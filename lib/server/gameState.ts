@@ -10,9 +10,14 @@ import { db, now } from "./db";
 //   suggest — roulette accumulator: bump a title's pool/backers, or add the title
 //   entry   — auction top-up: append a LotEntry to one lot
 //   add     — numeric accumulator (fundraiser collected)
+//   mergeById — union a list by item id, caller's version winning (session registry)
 //   replace — authoritative overwrite (metas, the streamer's own state changes)
 // Concurrent viewers therefore can't stomp each other: appends and deltas
 // commute; only the single-writer keys (streamer metas) use replace.
+//
+// `replace` is the sharp one: it believes the caller's whole list. Use it only where the caller
+// provably holds the full state (a meta it just computed, a brand-new scope's empty seed). For
+// anything a client rebuilds from localStorage — which Log out wipes — reach for mergeById.
 // ──────────────────────────────────────────────────────────────────
 
 // Only these key families sync — anything else in a POST is rejected.
@@ -28,6 +33,11 @@ export const SYNCED_KEYS = [
   // second+ session only exists in the streamer's browser: a viewer's ?s=<id> link can't name
   // a scope the viewer has never heard of, and falls back to the legacy bare-handle state.
   "crown-game-sessions",
+  // The rules a session was opened with (lib/data/gameConfig.ts), keyed by game inside one blob
+  // per scope. Shared for the same reason the registry is: a viewer's browser has no copy of the
+  // maker's profile, so without it the public page falls back to platform defaults and could
+  // show a $5 minimum where this session set $50.
+  "crown-game-config",
 ] as const;
 
 const MAX_LIST = 500; // abuse cap: a scope's list never grows past this
@@ -38,6 +48,9 @@ export type GameOp =
   | { type: "suggest"; title: string; genre: string; dPool: number; dBackers: number }
   | { type: "entry"; id: string; entry: Record<string, unknown> }
   | { type: "add"; delta: number }
+  // Just `{ id }` — the merge only ever reads the id, and demanding an index signature here would
+  // reject every caller that passes a plain interface (GameSession) rather than a literal.
+  | { type: "mergeById"; list: { id: string }[] }
   | { type: "replace"; value: unknown };
 
 // The libsql client has no row locks and route handlers interleave at every
@@ -94,6 +107,36 @@ export function applyGameOp(scope: string, k: string, op: GameOp): Promise<unkno
       case "replace": {
         await writeKey(scope, k, op.value);
         return op.value;
+      }
+      case "mergeById": {
+        // The session registry, and the reason it is NOT a `replace`. The cabinet writes the list it
+        // holds in localStorage — and Log out wipes that store, so a browser that hadn't pulled the
+        // registry back yet would hand the server a list missing every existing session. `replace`
+        // took it at its word: the streamer's other games were deleted for everyone, on the server,
+        // the moment they started one new game in a freshly signed-in cabinet. That is unrecoverable
+        // and it is silent.
+        //
+        // Merging makes the write safe from any client, pulled or not: an entry the caller sends
+        // wins for its own id (that is how "End session" records endedAt), and an entry only the
+        // server knows about is kept. Sessions are therefore append-and-amend only — nothing here
+        // can remove one, which is exactly right while the product has no "delete session".
+        const incoming = Array.isArray(op.list) ? op.list : [];
+        if (incoming.length > MAX_LIST) throw new Error("list full");
+        const byId = new Map<string, Record<string, unknown>>();
+        const take = (arr: unknown[]) => {
+          for (const s of arr) {
+            if (!s || typeof s !== "object") continue;
+            const id = (s as { id?: unknown }).id;
+            if (typeof id !== "string" || !id) continue;
+            byId.set(id, s as Record<string, unknown>);
+          }
+        };
+        take(Array.isArray(current) ? current : []);
+        take(incoming); // caller's version of a session it names wins
+        const next = [...byId.values()].sort((a, b) => Number(b.createdAt ?? 0) - Number(a.createdAt ?? 0));
+        if (next.length > MAX_LIST) throw new Error("list full");
+        await writeKey(scope, k, next);
+        return next;
       }
       case "add": {
         const base = typeof current === "number" ? current : 0;

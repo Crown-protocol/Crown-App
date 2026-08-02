@@ -15,7 +15,7 @@ export const DEFAULT_AUCTION_CONFIG: AuctionConfig = {
 
 // Time is picked from sane presets (dropdowns), matching the other games — no raw hours field where a
 // typo becomes "1000h". Values are stored in HOURS.
-const BIDDING_OPTIONS = [
+export const BIDDING_OPTIONS = [
   { hours: 6, label: "6 hours" },
   { hours: 12, label: "12 hours" },
   { hours: 24, label: "24 hours" },
@@ -23,7 +23,7 @@ const BIDDING_OPTIONS = [
   { hours: 72, label: "3 days" },
   { hours: 168, label: "1 week" },
 ];
-const PERFORM_OPTIONS = [
+export const PERFORM_OPTIONS = [
   { hours: 24, label: "24 hours" },
   { hours: 48, label: "48 hours" },
   { hours: 72, label: "3 days" },

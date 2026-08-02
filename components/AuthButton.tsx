@@ -61,7 +61,9 @@ export function AuthButton({ label = "Create or log in", className = "btn", styl
       // hydrates itself from the same owner lookup on arrival (and the proof we just stored means it
       // won't re-prompt). Not touching the profile here keeps this button mounted so the redirect below
       // is guaranteed to fire.
-      setStep("Confirm the signature in your wallet — it proves the wallet is yours. It's free and moves no funds.");
+      // Nothing shown while the wallet prompt is up — clear the previous step rather than leaving
+      // "Checking your account…" on screen describing something that already finished.
+      setStep("");
       const proof = await proveOwnership(address, signMessage);
       if (proof === "declined") {
         setStep("");

@@ -19,7 +19,7 @@ export const DEFAULT_ROULETTE_CONFIG: RouletteConfig = {
 
 // Time is picked from sane presets (dropdowns), the same pattern as the other games — no raw number
 // field where a typo becomes "1000 min". Values are stored in MINUTES, matching the config.
-const ROUND_OPTIONS = [
+export const ROUND_OPTIONS = [
   { minutes: 5, label: "5 minutes" },
   { minutes: 10, label: "10 minutes" },
   { minutes: 15, label: "15 minutes" },
@@ -27,7 +27,7 @@ const ROUND_OPTIONS = [
   { minutes: 60, label: "1 hour" },
   { minutes: 120, label: "2 hours" },
 ];
-const PLAY_OPTIONS = [
+export const PLAY_OPTIONS = [
   { minutes: 30, label: "30 minutes" },
   { minutes: 60, label: "1 hour" },
   { minutes: 120, label: "2 hours" },

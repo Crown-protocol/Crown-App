@@ -28,7 +28,8 @@ import { RouletteOverview } from "@/components/RouletteOverview";
 import { AuctionPanel } from "@/components/AuctionPanel";
 import { AuctionOverview } from "@/components/AuctionOverview";
 import { GameSessions, SessionBar } from "@/components/GameSessions";
-import { getCurrentSession, activeSessions } from "@/lib/data/gameSessions";
+import { getCurrentSession, activeSessions, pullSessions, readSessions } from "@/lib/data/gameSessions";
+import { pullScope } from "@/lib/data/gameSync";
 import { NavIcon, GameIcon, ChevronDown } from "@/components/icons";
 import { usd } from "@/lib/money";
 import { MOCK_DASHBOARD, type DashboardPeriodKey } from "@/lib/data/mock";
@@ -128,6 +129,38 @@ export default function SpacePage() {
   // Bumps whenever a session is created/selected/ended, so everything reading the session
   // registry (a plain localStorage store) re-renders with the fresh pick.
   const [sessionNonce, setSessionNonce] = useState(0);
+
+  // ── Restore this device's games from the server ───────────────────────────────────────────────
+  // The session registry and every game's state are localStorage stores, and Log out deliberately
+  // wipes them (clearPageData) — so signing back in showed a cabinet with no mini-games and the
+  // streamer built every one of them again. They were never lost: the registry syncs to
+  // /api/gamestate under "<handle>:<gameId>" and each session's state under its own scope. Nothing
+  // in the CABINET pulled any of it back, though — every other surface does (the public game pages,
+  // the overlays, ViewerLive), which is why a page kept running for viewers while its own cabinet
+  // looked empty. Pull the same things ViewerLive pulls, then bump the nonce so the reads below
+  // pick them up. One shot per handle: the cabinet is the only writer of the registry, and each
+  // panel's own useGameSync keeps the live game state flowing after that.
+  const pulledFor = useRef<string | null>(null);
+  useEffect(() => {
+    const handle = profile?.handle;
+    if (!handle || pulledFor.current === handle) return;
+    pulledFor.current = handle;
+    let dead = false;
+    void (async () => {
+      const ids = GAMES.map((g) => g.id);
+      await Promise.all(ids.map((g) => pullSessions(handle, g)));
+      // Each session keeps its state under its OWN scope, so the registries alone would restore the
+      // tabs and leave every one of them empty. The bare handle is the legacy scope the first
+      // session ever adopts, and the scope of a page that predates sessions — always worth pulling.
+      const scopes = new Set<string>([handle]);
+      for (const g of ids) for (const s of readSessions(handle, g)) scopes.add(s.scope);
+      await Promise.all([...scopes].map((s) => pullScope(s)));
+      if (!dead) setSessionNonce((n) => n + 1);
+    })();
+    return () => {
+      dead = true;
+    };
+  }, [profile?.handle]);
 
   // "Games" accordion in the sidebar: which game is expanded and which of its tabs is selected.
   const [openGame, setOpenGame] = useState<GameId | null>(null);
@@ -497,11 +530,9 @@ export default function SpacePage() {
 
               {gameTab === "sessions" && (
                 <GameSessions
-                  handle={profile.handle}
+                  profile={profile}
                   gameId={game.id}
                   gameTitle={game.title}
-                  tiers={profile.tiers}
-                  fundraiserGoal={profile.fundraiser?.goal}
                   onOpen={() => {
                     setSessionNonce((n) => n + 1);
                     setGameTab("overview");

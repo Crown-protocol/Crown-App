@@ -690,9 +690,13 @@
 }
 
 /* ---- preview column ---- */
+/* The preview rides along as you scroll the editor — so picking a desktop photo at the foot of the
+   Design tab still shows you what it does. It has to stick BELOW the space topbar (position:sticky,
+   64px, opaque): a bare `top: 20px` parked the column underneath it, swallowing the Phone/Desktop
+   toggle whole and shaving the top off the frame. */
 .previewCol {
   position: sticky;
-  top: 20px;
+  top: calc(64px + 20px);
   display: flex;
   flex-direction: column;
   align-items: center;

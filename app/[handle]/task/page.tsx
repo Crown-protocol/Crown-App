@@ -11,7 +11,7 @@ import { Mono } from "@/components/Mono";
 import { SocialIcon, SOCIAL_LABEL } from "@/components/icons";
 import { normalizeSocialLink } from "@/lib/data/social-links";
 import { usd } from "@/lib/money";
-import { DEFAULT_TASK_CONFIG } from "@/components/TaskGameSettings";
+import { taskRules } from "@/lib/data/gameConfig";
 import { withTaskPageDefaults, readTasks, addTask, activeCount, type GameTask } from "@/lib/data/tasks";
 import { backgroundStyle, backgroundInk } from "@/lib/data/pagebuilder";
 import { useIsWide } from "@/lib/data/useIsWide";
@@ -93,7 +93,9 @@ export default function TaskPage({ params }: { params: { handle: string } }) {
     );
   }
 
-  const cfg = mine.taskConfig ?? DEFAULT_TASK_CONFIG;
+  // The rules THIS session was opened with — a viewer must see the minimum and the deadline the
+  // run is actually taking money under, not the maker's current profile defaults.
+  const cfg = taskRules(mine, scope);
   if (!pub) return <main className="page" />;
   if (!pub.scope) {
     return (
@@ -203,11 +205,23 @@ export default function TaskPage({ params }: { params: { handle: string } }) {
                 No tasks yet — yours would be the first.
               </div>
             ) : (
-              queue.map((t) => (
-                <div key={t.id} className={styles.task}>
+              queue.map((t, i) => (
+                // The list cascades in rather than appearing all at once, and settled tasks step
+                // back so whatever is running now leads the eye.
+                <div
+                  key={t.id}
+                  className={`${styles.task}${t.state === "active" ? ` ${styles.taskLive}` : ""}${
+                    t.state === "done" || t.state === "refunded" ? ` ${styles.taskPast}` : ""
+                  }`}
+                  style={{ animationDelay: `${Math.min(i, 7) * 45}ms` }}
+                >
                   <span className={styles.taskText}>{t.text}</span>
                   <span className={`${styles.taskAmt} num`}>{usd(t.amount)}</span>
-                  <span className={`pill ${t.state === "done" ? "ok" : t.state === "refunded" ? "bad" : "wait"}`}>
+                  <span
+                    className={`pill ${
+                      t.state === "done" ? "ok" : t.state === "refunded" ? "bad" : t.state === "active" ? "attn" : "wait"
+                    }`}
+                  >
                     <span className="dot" />
                     {t.state === "pending" ? "awaiting" : t.state === "active" ? "in progress" : t.state === "done" ? "done" : "refunded"}
                   </span>

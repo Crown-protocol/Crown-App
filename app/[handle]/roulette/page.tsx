@@ -11,7 +11,7 @@ import { Mono } from "@/components/Mono";
 import { SocialIcon, SOCIAL_LABEL } from "@/components/icons";
 import { normalizeSocialLink } from "@/lib/data/social-links";
 import { usd } from "@/lib/money";
-import { DEFAULT_ROULETTE_CONFIG } from "@/components/RouletteGameSettings";
+import { rouletteRules } from "@/lib/data/gameConfig";
 import { topicById, DEFAULT_TOPIC_ID } from "@/lib/data/roulette-topics";
 import { RouletteWheel } from "@/components/RouletteWheel";
 import { withRouletteDefaults, addSuggestion, readRound, ensureRound, readRoundMeta, setRoundWinner, newRound, survivors, eliminationWeights, eliminate, type RoundMeta } from "@/lib/data/roulette";
@@ -97,8 +97,10 @@ export default function RoulettePage({ params }: { params: { handle: string } })
   // double-spin. Single rounds key on the round clock; elimination adds the knock-out count, because
   // one elimination round legitimately spins many times.
   const spunFor = useRef<string | null>(null);
-  // Read the format straight off the maker's rules — the spin effects below run before `cfg` exists.
-  const isElimination = (maker?.rouletteConfig?.format ?? "single") === "elimination";
+  // The round's own meta is authoritative: initRound pins the format when the session opens, so a
+  // wheel already spinning can't change shape under the players. The session rules are the fallback
+  // for rounds that predate the meta — read here because the spin effects run before `cfg` exists.
+  const isElimination = (meta?.format ?? rouletteRules(maker, scope).format ?? "single") === "elimination";
 
   // Once a second: catch up with the storage — the streamer may have spun early from the
   // cabinet ("решение КМ") or started a new round; other tabs may have added suggestions.
@@ -126,7 +128,7 @@ export default function RoulettePage({ params }: { params: { handle: string } })
   // Время вышло: the clock hits zero with no verdict — the wheel spins itself.
   useEffect(() => {
     if (!now || !meta || meta.winner) return;
-    const minutes = maker?.rouletteConfig?.roundMinutes || DEFAULT_ROULETTE_CONFIG.roundMinutes;
+    const minutes = rouletteRules(maker, scope).roundMinutes;
     if (now < meta.startedAt + minutes * 60_000) return;
     const r = readRound(scope!);
     if (r.length === 0) {
@@ -186,7 +188,8 @@ export default function RoulettePage({ params }: { params: { handle: string } })
     );
   }
 
-  const cfg = mine.rouletteConfig ?? DEFAULT_ROULETTE_CONFIG;
+  // The rules THIS round was opened with — the minimum, the topic and the clock a viewer plays under.
+  const cfg = rouletteRules(mine, scope);
   // The wheel isn't games-only: speak the streamer's topic ("Suggest a film", "Tap a dish to back it").
   const noun = topicById(cfg.topic ?? DEFAULT_TOPIC_ID).noun;
   // Who's still in, and their knock-out odds (only meaningful in elimination).
@@ -327,7 +330,7 @@ export default function RoulettePage({ params }: { params: { handle: string } })
                 <span className="num">{usd(total)} in the pot</span>
               </div>
               {round.length ? (
-                round.map((s) => {
+                round.map((s, i) => {
                   const isOut = isElimination && (meta?.eliminated ?? []).includes(s.id);
                   // Single: the % is the chance of WINNING (pool share). Elimination: it's the chance of
                   // being knocked out next — inverted pools, so a big backer reads as a low number.
@@ -345,6 +348,7 @@ export default function RoulettePage({ params }: { params: { handle: string } })
                       key={s.id}
                       type="button"
                       className={`${styles.suggestion}${isOut ? " " + styles.sOut : ""}`}
+                      style={{ animationDelay: `${Math.min(i, 7) * 45}ms` }}
                       onClick={() => !isOut && back(s)}
                       disabled={isOut}
                       title={isOut ? `${s.title} is out` : `Back ${s.title}`}

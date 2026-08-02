@@ -17,14 +17,14 @@ export const DEFAULT_FUNDRAISER_CONFIG: FundraiserConfig = {
 };
 
 // Spec bounds: funding 1h–30d, delivery 1h–90d — the UI offers sane day-sized picks.
-const FUNDING_OPTIONS = [
+export const FUNDING_OPTIONS = [
   { days: 1, label: "1 day" },
   { days: 3, label: "3 days" },
   { days: 7, label: "1 week" },
   { days: 14, label: "2 weeks" },
   { days: 30, label: "30 days" },
 ];
-const DELIVERY_OPTIONS = [
+export const DELIVERY_OPTIONS = [
   { days: 7, label: "1 week" },
   { days: 14, label: "2 weeks" },
   { days: 30, label: "30 days" },

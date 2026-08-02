@@ -7,7 +7,7 @@ import { fundingAction } from "@/lib/chain/gameFlows";
 import { Mono } from "@/components/Mono";
 import { StatTile } from "@/components/ops";
 import { usd } from "@/lib/money";
-import { DEFAULT_FUNDRAISER_CONFIG } from "@/components/FundraiserGameSettings";
+import { fundraiserRules } from "@/lib/data/gameConfig";
 import {
   withFundraiserDefaults,
   readBackers,
@@ -26,8 +26,9 @@ import styles from "./GameOverview.module.css";
 // shared mock store (lib/data/fundraiser.ts).
 export function FundraiserOverview({ profile, scope }: { profile: Profile; scope?: string }) {
   const handle = scope ?? profile.handle;
-  const fr = withFundraiserDefaults(profile);
-  const cfg = profile.fundraiserConfig ?? DEFAULT_FUNDRAISER_CONFIG;
+  const fr = withFundraiserDefaults(profile); // the page copy (the promise); the numbers come from cfg
+  // This collection's rules — including its own goal, which every run sets for itself.
+  const cfg = fundraiserRules(profile, handle);
 
   const [raised, setRaised] = useState(0);
   const [backers, setBackers] = useState<Backer[]>([]);
@@ -41,7 +42,7 @@ export function FundraiserOverview({ profile, scope }: { profile: Profile; scope
     setStatus(readStatus(handle));
   }, [handle, syncNonce]);
 
-  const goal = fr.goal;
+  const goal = cfg.goal;
   const pct = Math.min(100, Math.round((raised / goal) * 100));
   // Where "Accept" unlocks: the min % of goal (or the full goal when partials are off).
   const acceptThreshold = cfg.allowBelowGoal ? Math.ceil((goal * cfg.minAcceptPct) / 100) : goal;
