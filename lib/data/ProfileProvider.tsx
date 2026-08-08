@@ -6,13 +6,13 @@ import { buildAuthMessage } from "@/lib/chain/authMessage";
 import { isDemoAddress } from "./session";
 import type { Profile } from "./types";
 
-// How publishing to the Crown DB went. "unsigned" = the wallet didn't sign (declined / not connected)
+// How publishing to the Cheer DB went. "unsigned" = the wallet didn't sign (declined / not connected)
 // so the server refused; "taken" = handle reserved or owned by someone else; "network" = unreachable.
 // `signed` says whether the wallet actually produced a signature for this save. A demo-address page
 // publishes fine WITHOUT one, so callers must not treat plain success as proof of wallet ownership.
 export type SaveResult = { ok: true; signed: boolean } | { ok: false; reason: "unsigned" | "taken" | "network" };
 
-const KEY = "crown-profile";
+const KEY = "cheer-profile";
 
 // How long editing must be idle before the signed publish fires. Long enough to type a name without a
 // popup per letter, short enough that leaving the screen still lands the change.
@@ -21,18 +21,18 @@ const PUBLISH_DELAY_MS = 2500;
 // Storage that belongs to the PAGE (game state, sessions, cached feed) and must go when the page is
 // deleted or signed out of. Everything else — wallet choice, mode toggle, the per-wallet login proofs,
 // the demo session — belongs to the browser/visitor and is left alone. This is an allow-list on
-// purpose: the old "wipe every crown-* except four" swept away `crown-login-proof:<other wallet>` and
-// `crown-demo-session`, logging OTHER wallets out of this device.
+// purpose: the old "wipe every cheer-* except four" swept away `cheer-login-proof:<other wallet>` and
+// `cheer-demo-session`, logging OTHER wallets out of this device.
 const PAGE_KEY_PREFIXES = [
-  "crown-tasks",
-  "crown-roulette",
-  "crown-auction",
-  "crown-fundraiser",
-  "crown-donations",
-  "crown-game-sessions",
-  "crown-current-session",
-  "crown-fresh-scope",
-  "crown-gamesync",
+  "cheer-tasks",
+  "cheer-roulette",
+  "cheer-auction",
+  "cheer-fundraiser",
+  "cheer-donations",
+  "cheer-game-sessions",
+  "cheer-current-session",
+  "cheer-fresh-scope",
+  "cheer-gamesync",
 ];
 
 function clearPageData() {
@@ -54,9 +54,18 @@ interface ProfileCtx {
   // must wait for it: `ready` flips as soon as the cached profile is read, and deciding then meant
   // slamming the gate a beat before the server said "yes, I know you".
   sessionChecked: boolean;
+  // Call after the server has just issued a session cookie (the sign-in signature). Without it
+  // `hasSession` stayed false until a full page reload, so the whole login flow depended on a hard
+  // navigation to look signed in — and every save in between fell back to asking the wallet again.
+  markSession: () => void;
   save: (p: Profile) => Promise<SaveResult>;
   // Same as save() but batched: local write is instant, the signed publish waits for edits to stop.
   saveDeferred: (p: Profile) => void;
+  // Where the LAST deferred publish stands. Editing screens read this so a background save that fails
+  // (offline, session expired, handle taken) surfaces instead of the confirm bar just vanishing.
+  publishState: "idle" | "saving" | "error";
+  // Re-run the publish for the current profile, allowing a wallet prompt (recovers an expired session).
+  retryPublish: () => Promise<SaveResult>;
   hydrate: (p: Profile) => void;
   signOut: () => void;
   reset: () => Promise<SaveResult>;
@@ -65,7 +74,7 @@ interface ProfileCtx {
 const Ctx = createContext<ProfileCtx | null>(null);
 
 // A streamer profile = "registration": localStorage is the cabinet's own copy,
-// the Crown DB (/api/profiles) is the server copy public pages resolve against.
+// the Cheer DB (/api/profiles) is the server copy public pages resolve against.
 export function ProfileProvider({ children }: { children: React.ReactNode }) {
   const wallet = useSolanaWallet();
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -100,9 +109,12 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       try {
         const res = await fetch("/api/profiles/me", { credentials: "same-origin", cache: "no-store" });
         if (!alive || !res.ok) return;
-        const json = (await res.json()) as { profile?: Profile | null };
-        if (!alive || !json?.profile) return;
-        setHasSession(true);
+        const json = (await res.json()) as { profile?: Profile | null; session?: boolean };
+        if (!alive) return;
+        // "Am I signed in?" is the server's `session` flag — NOT the presence of a page. A wallet can
+        // hold a valid cookie with no page yet, and that person is still signed in.
+        setHasSession(!!json.session);
+        if (!json.profile) return;
         // The session's account wins over the local copy: it's the one the server will accept writes
         // for, and a stale cached profile here is how you end up editing a page you no longer own.
         setProfile(json.profile);
@@ -167,11 +179,11 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, profile?.handle]);
 
-  // Saves locally at once (the cabinet never blocks on the network) AND publishes to the Crown DB —
+  // Saves locally at once (the cabinet never blocks on the network) AND publishes to the Cheer DB —
   // returning how the publish went, so callers that must not lie to the user (registration!) can react.
   // Editing screens can keep ignoring the result; a page that only lives in localStorage is invisible
   // to every other browser, so registration checks it.
-  // Publishes to the Crown DB. Asks the wallet for ONE signature, so callers must not run this per
+  // Publishes to the Cheer DB. Asks the wallet for ONE signature, so callers must not run this per
   // keystroke — see saveDeferred below.
   const publish = useCallback(
     (p: Profile, opts?: { allowWalletPrompt?: boolean }): Promise<SaveResult> => {
@@ -203,9 +215,9 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
           const ts = Math.floor(Date.now() / 1000);
           const sig = await wallet.signMessage(await buildAuthMessage("profile", p.handle, ts, p));
           if (sig) {
-            headers["x-crown-pubkey"] = wallet.address;
-            headers["x-crown-ts"] = String(ts);
-            headers["x-crown-signature"] = Buffer.from(sig).toString("base64");
+            headers["x-cheer-pubkey"] = wallet.address;
+            headers["x-cheer-ts"] = String(ts);
+            headers["x-cheer-signature"] = Buffer.from(sig).toString("base64");
             signed = true;
           }
         }
@@ -250,6 +262,9 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     pendingRef.current.timer = null;
     pendingRef.current.profile = null;
   }, []);
+  // Surfaced state of the last deferred publish, so the cabinet can show "couldn't save" instead of
+  // silently dropping a change after the confirm bar clears.
+  const [publishState, setPublishState] = useState<"idle" | "saving" | "error">("idle");
   const saveDeferred = useCallback(
     (p: Profile) => {
       setProfile(p);
@@ -257,16 +272,28 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem(KEY, JSON.stringify(p));
       } catch {}
       pendingRef.current.profile = p;
+      setPublishState("saving");
       if (pendingRef.current.timer) clearTimeout(pendingRef.current.timer);
       pendingRef.current.timer = setTimeout(() => {
         const latest = pendingRef.current.profile;
         pendingRef.current.timer = null;
         pendingRef.current.profile = null;
-        if (latest) void publish(latest);
+        if (!latest) return;
+        void publish(latest).then((res) => setPublishState(res.ok ? "idle" : "error"));
       }, PUBLISH_DELAY_MS);
     },
     [publish]
   );
+
+  // Manual retry after a failed background publish — allows a wallet prompt to recover an expired
+  // session (the deferred publish stays silent to avoid a popup mid-typing; a retry is user-initiated).
+  const retryPublish = useCallback(async (): Promise<SaveResult> => {
+    if (!profile) return { ok: false, reason: "network" };
+    setPublishState("saving");
+    const res = await publish(profile, { allowWalletPrompt: true });
+    setPublishState(res.ok ? "idle" : "error");
+    return res;
+  }, [profile, publish]);
 
   // Don't let a queued publish die with the page: flush it when the tab is hidden or closed, so edits
   // made a second before leaving still reach the server. Both listeners are named so BOTH get removed —
@@ -300,7 +327,14 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }, []);
 
-  // Log out on THIS device: forget the cached profile only. The server copy (the Crown DB) is left
+  // The sign-in flow just traded a wallet signature for a session cookie — record it here so the UI
+  // and every subsequent save know we're authenticated, without waiting for a reload to ask.
+  const markSession = useCallback(() => {
+    setHasSession(true);
+    setSessionChecked(true);
+  }, []);
+
+  // Log out on THIS device: forget the cached profile only. The server copy (the Cheer DB) is left
   // intact — signing back in re-fetches it by wallet owner — but locally we're back to "no profile",
   // so the next sign-in goes through the full flow (wallet + one-time ownership signature) again.
   // Distinct from reset(), which DELETES the page from the DB.
@@ -328,7 +362,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   const reset = useCallback(async (): Promise<SaveResult> => {
     cancelPending(); // never let a queued edit republish the page we're about to delete
     // Prefer the live React state; fall back to storage. Reading ONLY storage meant a corrupt or
-    // missing crown-profile made delete report success without ever touching the DB — the page stayed
+    // missing cheer-profile made delete report success without ever touching the DB — the page stayed
     // online while the UI said it was gone.
     let handle: string | null = profile?.handle ?? null;
     if (!handle) {
@@ -355,18 +389,25 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       const ts = Math.floor(Date.now() / 1000);
       const sig = await wallet.signMessage(await buildAuthMessage("delete", handle, ts, null));
       if (sig) {
-        headers["x-crown-pubkey"] = wallet.address;
-        headers["x-crown-ts"] = String(ts);
-        headers["x-crown-signature"] = Buffer.from(sig).toString("base64");
+        headers["x-cheer-pubkey"] = wallet.address;
+        headers["x-cheer-ts"] = String(ts);
+        headers["x-cheer-signature"] = Buffer.from(sig).toString("base64");
         signed = true;
       }
     }
-    // The server refuses an unsigned delete of an owned page; don't pretend it worked.
-    if (!signed) return { ok: false, reason: "unsigned" };
+    // A fresh signature is the strong proof, but it isn't the only one the server accepts: the
+    // session cookie was itself minted from a verified signature, so DELETE honours it too. Only
+    // bail out when we have NEITHER — a wallet that declined to sign and no session to fall back on
+    // (otherwise deleting from a reattaching-wallet cabinet demanded a popup the server didn't need).
+    if (!signed && !hasSession) return { ok: false, reason: "unsigned" };
 
     let res: Response;
     try {
-      res = await fetch(`/api/profiles/${encodeURIComponent(handle)}`, { method: "DELETE", headers });
+      res = await fetch(`/api/profiles/${encodeURIComponent(handle)}`, {
+        method: "DELETE",
+        headers,
+        credentials: "same-origin", // send the session cookie when there's no fresh signature
+      });
     } catch {
       return { ok: false, reason: "network" };
     }
@@ -385,12 +426,12 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     // The page is gone, so its leftovers go too — otherwise old tasks, an old roulette round and stale
     // donations resurface inside a NEWLY created page.
     clearPageData();
-    return { ok: true, signed: true };
-  }, [wallet, cancelPending, profile]);
+    return { ok: true, signed };
+  }, [wallet, cancelPending, profile, hasSession]);
 
   const value = useMemo<ProfileCtx>(
-    () => ({ ready, profile, registered: !!profile, hasSession, sessionChecked, save, saveDeferred, hydrate, signOut, reset }),
-    [ready, profile, hasSession, sessionChecked, save, saveDeferred, hydrate, signOut, reset]
+    () => ({ ready, profile, registered: !!profile, hasSession, sessionChecked, markSession, save, saveDeferred, publishState, retryPublish, hydrate, signOut, reset }),
+    [ready, profile, hasSession, sessionChecked, markSession, save, saveDeferred, publishState, retryPublish, hydrate, signOut, reset]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

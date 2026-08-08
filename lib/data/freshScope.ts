@@ -4,7 +4,7 @@
 // A "fresh" scope belongs to a session created after the first one: it must start EMPTY, so
 // every store checks the marker before falling back to its demo seeds.
 
-const FRESH_KEY = "crown-fresh-scope";
+const FRESH_KEY = "cheer-fresh-scope";
 
 export function markFresh(scope: string) {
   try {

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { CONFIRM_TITLE, CONFIRM_CANCEL } from "@/lib/data/dangerous";
 import styles from "./ConfirmDialog.module.css";
 
 /**
@@ -9,9 +10,14 @@ import styles from "./ConfirmDialog.module.css";
  * consequence, and two buttons where Cancel is the easy one to hit.
  *
  * Escape and a click on the scrim both cancel — the safe way out is always available.
+ *
+ * The title defaults to the ONE wording used everywhere in the product (lib/data/dangerous.ts), so
+ * every dangerous moment is recognised by shape before it is read. Callers supply the sentence
+ * underneath — what happens and to how much money — because a dialog that only ever says "are you
+ * sure?" teaches people to click through it without looking.
  */
 export function ConfirmDialog({
-  title,
+  title = CONFIRM_TITLE,
   body,
   confirmLabel,
   onConfirm,
@@ -20,7 +26,7 @@ export function ConfirmDialog({
   busyLabel,
   errorText,
 }: {
-  title: string;
+  title?: string; // defaults to the product-wide CONFIRM_TITLE — override only with a good reason
   body: React.ReactNode;
   confirmLabel: string;
   // May be async: the dialog stays open and shows progress until it resolves, so a destructive action
@@ -90,7 +96,7 @@ export function ConfirmDialog({
         )}
         <div className={styles.actions}>
           <button ref={cancelRef} type="button" className="btn-outline" disabled={busy} onClick={onCancel}>
-            Cancel
+            {CONFIRM_CANCEL}
           </button>
           <button
             type="button"

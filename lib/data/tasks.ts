@@ -1,6 +1,6 @@
 // Task game — the public task page's draft, the streamer's queue of paid tasks, and the
 // localStorage mock behind both. Data + store, no React. The real queue will come from
-// crown-app/api reading the escrows; until then this seeds the cabinet's Task → Overview tab
+// cheer-app/api reading the escrows; until then this seeds the cabinet's Task → Overview tab
 // and lets the page and its actions actually stick.
 
 import type { PageWidget, Profile, TaskDraft } from "./types";
@@ -66,7 +66,7 @@ export const MOCK_TASKS: GameTask[] = [
   { id: "t6", from: "guest_91", amount: 10, text: "Impossible speedrun in under a minute.", state: "refunded", when: "Yesterday" },
 ];
 
-const KEY = "crown-tasks";
+const KEY = "cheer-tasks";
 
 export function readTasks(handle: string): GameTask[] {
   try {
@@ -107,7 +107,7 @@ export function addTask(
   writeTasks(handle, next);
   // Share it: append commutes with other viewers' tasks; `seed` initialises the
   // server copy with the demo rows on the very first real action in a scope.
-  sendOp(handle, "crown-tasks", { type: "append", item: task as unknown as { id: string } & Record<string, unknown>, seed: next });
+  sendOp(handle, "cheer-tasks", { type: "append", item: task as unknown as { id: string } & Record<string, unknown>, seed: next });
   return next;
 }
 
@@ -122,7 +122,7 @@ export function removeTask(handle: string, id: string): GameTask[] {
   const next = readTasks(handle).filter((t) => t.id !== id);
   writeTasks(handle, next);
   // The streamer is the queue's single authority — their removals/state moves overwrite.
-  sendOp(handle, "crown-tasks", { type: "replace", value: next });
+  sendOp(handle, "cheer-tasks", { type: "replace", value: next });
   return next;
 }
 
@@ -130,7 +130,7 @@ export function removeTask(handle: string, id: string): GameTask[] {
 export function setTaskState(handle: string, id: string, state: TaskState): GameTask[] {
   const next = readTasks(handle).map((t) => (t.id === id ? { ...t, state } : t));
   writeTasks(handle, next);
-  sendOp(handle, "crown-tasks", { type: "replace", value: next });
+  sendOp(handle, "cheer-tasks", { type: "replace", value: next });
   return next;
 }
 

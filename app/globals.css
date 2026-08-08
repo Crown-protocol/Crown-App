@@ -7,7 +7,7 @@
   src: url('/fonts/InterVariable.woff2') format('woff2');
 }
 
-/* ============ tokens (Crown design charter) ============ */
+/* ============ tokens (Cheer design charter) ============ */
 :root {
   --bg-0: #141318;
   --bg-1: #1B1A21;
@@ -47,7 +47,7 @@
   --grad-top-down: #7A6BE4;
   /* Buttons: a light wash of the accent, not a block of it. Same top→near-white direction and the
      same dark ink; just a far gentler starting tint (see --grad-top for the full-strength accent,
-     which the crown, progress fills and chart bars still use). */
+     which the cheer, progress fills and chart bars still use). */
   --accent-grad: linear-gradient(180deg, #CFC7FB 0%, #EFECFD 100%);
   --accent-grad-hover: linear-gradient(180deg, #DCD6FC 0%, #F7F5FE 100%);
   --accent-grad-down: linear-gradient(180deg, #C1B7F8 0%, #E4DFFB 100%);
@@ -156,6 +156,17 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin
 .game-settings .card { display: flex; flex-direction: column; gap: 16px; }
 /* A standalone label above a control group (e.g. Roulette's category chips), not a .field label. */
 .game-settings .block-label { display: block; font-size: 14px; color: var(--text-2); margin-bottom: 10px; }
+/* The "these apply to future sessions" line: it frames every card below it, so it reads as a
+   preamble rather than a stray hint — indented off the left edge and given room to breathe. */
+.game-settings .rules-scope-note {
+  margin: 0;
+  padding: 12px 14px;
+  border-left: 2px solid var(--line-strong);
+  background: var(--bg-1);
+  border-radius: 0 var(--r-1) var(--r-1) 0;
+  line-height: 1.5;
+}
+.game-settings .rules-scope-note b { color: var(--text-2); font-weight: 600; }
 /* a hint that explains the toggle directly above it sits tight under it, not floating away */
 .toggle + .footnote { margin-top: -8px; }
 
@@ -206,6 +217,9 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin
    name or message token so a whale's handle can't push the whole public page sideways on a phone. */
 .feed-name { font-weight: 600; font-size: 16px; min-width: 0; overflow-wrap: anywhere; }
 .feed-sum { font-weight: 700; font-size: 17px; text-align: right; white-space: nowrap; }
+/* "×3" beside a merged total: quieter and smaller than the money, so it reads as a note about the
+   figure rather than part of it. */
+.feed-count { margin-left: 6px; font-size: 12px; font-weight: 600; color: var(--text-3); }
 .feed-msg { grid-column: 2; color: var(--text-2); font-size: 16px; min-width: 0; overflow-wrap: anywhere; }
 .feed-time { grid-column: 3; grid-row: 2; font-size: 14px; color: var(--text-2); text-align: right; white-space: nowrap; }
 .feed-ago { display: block; font-size: 12px; color: var(--text-3); }
@@ -260,15 +274,44 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin
 .don-stat-v { font-size: 25px; font-weight: 700; letter-spacing: -.01em; line-height: 1.1; color: var(--text-1); }
 .don-stat-k { margin-top: 3px; font-size: 13px; color: var(--text-3); }
 
-/* toolbar row 1: search grows, sort + export sit to the right */
-.don-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+/* toolbar row 1: search grows, sort + export sit to the right.
+   Its own panel, matching the filter rail below — the two toolbars and the feed then read as three
+   deliberate blocks instead of controls floating loose above a list. */
+.don-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+}
+/* The sort segmenter defaults to --bg-1, which is now the panel's own colour — it would dissolve
+   into it. Drop it to the recessed tone the search field and the selects already use, so every
+   control on this bar sits at the same depth. */
+.don-bar .seg { background: var(--bg-0); border-color: var(--line-strong); }
 .don-search-wrap {
   flex: 1 1 240px; min-width: 0; display: flex; align-items: center; gap: 10px;
   height: 44px; padding: 0 14px; background: var(--bg-0);
   border: 1px solid var(--line-strong); border-radius: var(--r-2); color: var(--text-3);
-  transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+  /* Scaling from the left edge: the field grows toward the sort buttons, and pinning the origin
+     keeps its left edge exactly where it was instead of drifting under the panel's padding. */
+  transform-origin: left center;
+  transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease), transform var(--dur-2) var(--ease);
 }
-.don-search-wrap:focus-within { border-color: rgba(235, 233, 244, .32); box-shadow: var(--ring-neutral); }
+/* A touch bigger while you're typing in it. 1% and no more: on a ~600px field that's 6px of growth
+   against the 10px gap to the sort segmenter, so the field comes forward without ever touching it —
+   and `transform` doesn't reflow the row, so nothing else moves. */
+.don-search-wrap:focus-within {
+  border-color: rgba(235, 233, 244, .32);
+  box-shadow: var(--ring-neutral);
+  transform: scale(1.01);
+}
+@media (prefers-reduced-motion: reduce) {
+  .don-search-wrap { transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease); }
+  .don-search-wrap:focus-within { transform: none; }
+}
 .don-search-wrap svg { flex: none; }
 .don-search { flex: 1; min-width: 0; height: 100%; border: none; background: transparent; color: var(--text-1); font: inherit; font-size: 15px; }
 .don-search:focus { outline: none; }
@@ -755,8 +798,13 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin
 /* The content flows below the sticky topbar; on desktop it makes room for the open drawer. */
 .space-body { min-height: calc(100vh - 64px); }
 @media (min-width: 901px) {
-  .space.nav-anim .space-body { transition: padding-left .28s var(--ease); }
+  /* The content follows the drawer. Drawer OPEN → reserve its 264px width, so the column centres in
+     the space that's left BESIDE the drawer. Drawer COLLAPSED → no reserve, so the column re-centres
+     across the whole screen. Toggling the drawer therefore slides the content over to stay centred in
+     whatever room it has — the `padding-left` transition makes that a smooth shift, not a jump. */
+  .space .space-body { padding-left: 0; }
   .space.nav-open .space-body { padding-left: 264px; }
+  .space.nav-anim .space-body { transition: padding-left .28s var(--ease); }
 }
 /* Dismiss scrim — phone only, behind the drawer, over the content. */
 .nav-scrim { display: none; }
@@ -783,7 +831,10 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin
    and the left rail goes neutral-bright instead of purple. */
 .nav-item.active { color: var(--text-1); background: var(--bg-2); }
 .nav-item.active::before { content: ''; position: absolute; left: -12px; top: 10px; bottom: 10px; width: 3px; background: var(--text-1); border-radius: 0 3px 3px 0; }
-.main { width: 100%; max-width: 1040px; margin: 0 auto; padding: 32px 32px 64px; display: flex; flex-direction: column; gap: 24px; animation: spaceIn .5s var(--ease) .12s both; }
+.main { width: 100%; max-width: 1040px; margin: 0 auto; padding: 32px 32px 72px; display: flex; flex-direction: column; gap: 40px; animation: spaceIn .5s var(--ease) .12s both; }
+/* A page heading introduces what follows, so it stays near it rather than floating in the middle
+   of the larger rhythm between sections. */
+.main > .main-head { margin-bottom: -16px; }
 /* Screens that genuinely need the room already free to the right, rather than letting the standard
    1040px cap steal it back: the page builder (its desktop preview needs real width) and the Widgets
    grid (which fits a third card per row here instead of shrinking the cards to squeeze one in). */
@@ -800,7 +851,18 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin
 .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
 .tile { min-width: 0; }
 .tile .v { font-size: 40px; font-weight: 700; letter-spacing: -.01em; line-height: 1.15; }
+/* Two tiles instead of three: each gets half the row, so the figure can carry the weight it deserves
+   — this is the money the maker came to see. Declared AFTER .tile .v (same specificity) so it wins,
+   and before the phone breakpoints so those still shrink it. */
+.tiles-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.tiles-2 .v { font-size: 48px; }
 .tile .k { font-size: 15px; color: var(--text-2); margin-top: 4px; }
+/* Demo numbers (admin toggle on): the figure goes red so it's never mistaken for real money.
+   Hovering shows the "demo numbers" title. A soft error-tinted border echoes it on the card edge. */
+.tile-demo .v { color: var(--error); }
+.tile-demo { border-color: var(--error-soft); }
+.chart-demo { border-color: var(--error-soft); }
+.chart-demo h2::after { content: " · demo"; color: var(--error); font-weight: 600; }
 .chart-card h2 { font-size: 19px; font-weight: 600; margin-bottom: 16px; }
 .chart { display: flex; align-items: flex-end; gap: 4px; height: 192px; padding-top: 32px; }
 .chart .col { flex: 1; height: 100%; position: relative; display: flex; align-items: flex-end; min-width: 0; }
@@ -1045,7 +1107,22 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin
 .toggle.on .track { background: var(--accent); }
 .toggle.on .track .knob { transform: translateX(16px); background: var(--accent-grad-ink); }
 .verdict { border: 1px dashed var(--line-strong); border-radius: var(--r-2); padding: 16px; font-size: 15px; color: var(--text-2); }
-.empty-log { border: 1px dashed var(--line-strong); border-radius: var(--r-2); padding: 40px; text-align: center; color: var(--text-2); }
+/* Empty states carry a light mark above the text: a bare sentence on a dashed box reads as a
+   screen that failed to load, while a deliberate glyph reads as "nothing here yet". Drawn in CSS
+   (a ring with a dot) so there's no asset to fetch and it tints with the surrounding text. */
+.empty-log {
+  border: 1px dashed var(--line-strong); border-radius: var(--r-2);
+  padding: 36px 40px; text-align: center; color: var(--text-2);
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+}
+.empty-log::before {
+  content: ''; width: 40px; height: 40px; border-radius: 50%;
+  background: var(--bg-2);
+  /* the dot sits in the middle of the ring */
+  background-image: radial-gradient(circle at 50% 50%, var(--text-3) 3.5px, transparent 3.6px);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  flex: none;
+}
 .btn-danger { background: transparent; border: 1px solid rgba(229, 114, 107, .5); color: var(--error); height: 48px; padding: 0 22px; border-radius: var(--r-2); font-size: 16px; font-weight: 600; cursor: pointer; }
 .btn-danger:hover { background: var(--error-soft); }
 .btn-danger:disabled { opacity: .5; cursor: default; }
@@ -1210,7 +1287,7 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin
   --line: rgba(235, 233, 244, 0.08);
   --line-strong: rgba(235, 233, 244, 0.16);
 }
-/* The fundraiser's EMPTY-vessel crown (the outline layer) draws with fixed pale strokes — on a
+/* The fundraiser's EMPTY-vessel cheer (the outline layer) draws with fixed pale strokes — on a
    light field they vanish; ink that layer only, the filled badge keeps its own colours.
    (CSS wins over SVG presentation attributes.) */
 .on-light [class*="FundraiserFill"] [class*="dim"] :is(path, circle)[stroke] {
@@ -1275,3 +1352,127 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin
   .cta-arrive { transition: opacity 0.2s var(--ease); transform: none; }
   .cta-arrive.here { transform: none; }
 }
+
+/* ── Donation status ────────────────────────────────────────────────────────────────────────────
+   A donation the donor has submitted but the chain hasn't confirmed. The row is dimmed rather than
+   hidden: the creator needs to see that something IS happening, without it being counted as money
+   they have. The amount reads "—" (see Feed.tsx) because the figure isn't known until settlement. */
+.feed-row-sending { opacity: 0.62; }
+.feed-row-sending .feed-sum { color: var(--text-3); }
+
+.feed-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-3);
+  letter-spacing: 0.02em;
+}
+.feed-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: feed-status-pulse 1.6s ease-in-out infinite;
+}
+@keyframes feed-status-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+/* Someone who set "reduce motion" gets the dot without the heartbeat. */
+@media (prefers-reduced-motion: reduce) {
+  .feed-status-dot { animation: none; opacity: 0.8; }
+}
+
+/* ── Donations: filter rail ─────────────────────────────────────────────────────────────────────
+   Same shape as /discover: a narrow column of filters beside the list. Four selects and two toggles
+   stacked above the feed pushed the donations themselves below the fold, and read as clutter on a
+   screen whose whole job is "show me the money that came in". */
+.don-body {
+  display: grid;
+  grid-template-columns: 232px 1fr;
+  /* Wide enough to read as a gutter between two separate things, not a column gap inside one. */
+  gap: 22px;
+  align-items: start;
+}
+.don-main { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+
+/* The filters are their own surface, not a strip of controls floating beside the feed. Bare on the
+   page background they shared a plane with the donation cards, so the eye read one wide block of
+   stuff; giving the rail its own panel (its own ground, border and padding) separates "the tools"
+   from "the money" at a glance. */
+.don-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 16px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  /* Follows the list while you scroll a long feed — the filters are useless at the top of a page
+     you've scrolled away from. */
+  position: sticky;
+  top: 24px;
+}
+.don-rail-group { display: flex; flex-direction: column; gap: 10px; }
+.don-rail-label {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+/* In the rail every control owns its own line: side-by-side selects in a 210px column would each
+   be too narrow to read their own labels. */
+.don-rail .don-select,
+.don-rail .don-drop,
+.don-rail .don-drop-btn { width: 100%; }
+.don-rail .don-toggles { flex-direction: column; align-items: flex-start; gap: 12px; margin-left: 0; }
+
+/* The date/amount popovers hang off a narrow rail: anchor them to the left edge and let them be
+   wider than their button rather than squeezing the calendar into 210px. */
+.don-rail .don-drop-menu { left: 0; right: auto; min-width: 240px; }
+
+/* Phone / narrow cabinet: the rail becomes a normal row above the list again — a 210px column plus
+   a feed doesn't fit, and a sticky sidebar on a phone just eats the screen. */
+@media (max-width: 900px) {
+  .don-body { grid-template-columns: 1fr; gap: 18px; }
+  .don-rail { position: static; flex-direction: row; flex-wrap: wrap; gap: 14px 18px; }
+  .don-rail-group { flex: 1 1 200px; }
+  .don-rail .don-toggles { flex-direction: row; gap: 18px; }
+}
+
+/* ── Blank state ──────────────────────────────────────────────────────────────────────────────
+   A screen with nothing on it yet (no session started). It used to be a left-aligned card pinned
+   under the heading, which read as a fragment of a page that failed to finish loading. Centred in
+   the space it has instead, with the game's own mark above the words, so the emptiness looks
+   deliberate and the one action is the obvious thing to do. */
+.blank-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; text-align: center;
+  /* Fill the room left under the page heading rather than hugging the top edge. */
+  min-height: min(52vh, 460px);
+  padding: 48px 24px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-3);
+}
+.blank-state h2 { font-size: 19px; font-weight: 600; color: var(--text-1); }
+.blank-state p { max-width: 46ch; font-size: 14.5px; line-height: 1.55; color: var(--text-3); }
+.blank-state .btn { margin-top: 6px; }
+/* The game's icon, sitting in a soft disc — a subject for the screen, not decoration. */
+.blank-mark {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 56px; height: 56px; border-radius: 50%;
+  background: var(--bg-2); color: var(--text-2);
+}
+
+/* The rules page, offered under the blank state's action. Deliberately quiet: reading how the game
+   works is the fallback, starting a session is still the point. Opens in a new tab so a maker who
+   just wanted to check something doesn't lose the screen they were on. */
+.blank-link {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  text-decoration: none;
+}
+.blank-link:hover { color: var(--text-1); }

@@ -38,7 +38,7 @@ export function notifyGameEvent(scope: string, key: string, op: GameOp): void {
 
       switch (key) {
         // ---- Task for donation: money is on the line, so these are the loud ones ----
-        case "crown-tasks": {
+        case "cheer-tasks": {
           if (op.type === "append") {
             const t = op.item as { amount?: number; text?: string; from?: string };
             await send(
@@ -60,7 +60,7 @@ export function notifyGameEvent(scope: string, key: string, op: GameOp): void {
         }
 
         // ---- Auction: a new lot is money offered; the close is a decision point ----
-        case "crown-auction-lots": {
+        case "cheer-auction-lots": {
           if (op.type === "append") {
             const l = op.item as { amount?: number; text?: string; from?: string };
             await send(
@@ -71,7 +71,7 @@ export function notifyGameEvent(scope: string, key: string, op: GameOp): void {
           }
           break;
         }
-        case "crown-auction-meta": {
+        case "cheer-auction-meta": {
           if (op.type === "replace") {
             const m = op.value as { state?: string; winnerId?: string };
             if (m?.state === "performing") {
@@ -84,13 +84,13 @@ export function notifyGameEvent(scope: string, key: string, op: GameOp): void {
         }
 
         // ---- Fundraiser: the goal and the delivery window ----
-        case "crown-fundraiser-collected": {
+        case "cheer-fundraiser-collected": {
           if (op.type === "add" && Number(op.delta) > 0) {
             await send("donation", `Someone chipped in ${usd(op.delta)}`, "Your fundraiser just moved.");
           }
           break;
         }
-        case "crown-fundraiser-status": {
+        case "cheer-fundraiser-status": {
           if (op.type === "replace") {
             const st = op.value as { state?: string; accepted?: number };
             if (st?.state === "delivering") {
@@ -109,13 +109,13 @@ export function notifyGameEvent(scope: string, key: string, op: GameOp): void {
         }
 
         // ---- Roulette: a suggestion is a donation; the verdict closes the round ----
-        case "crown-roulette-round": {
+        case "cheer-roulette-round": {
           if (op.type === "suggest" && Number(op.dPool) > 0) {
             await send("donation", `${usd(op.dPool)} on "${clip(op.title, 40)}"`, "A viewer backed a pick on your wheel.");
           }
           break;
         }
-        case "crown-roulette-meta": {
+        case "cheer-roulette-meta": {
           if (op.type === "replace") {
             const m = op.value as { winner?: { title?: string } | null };
             if (m?.winner?.title) {

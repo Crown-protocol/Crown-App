@@ -42,9 +42,9 @@ export function withFundraiserDefaults(profile: Profile): FundraiserDraft {
 
 // ---- mock "collected so far" (localStorage, like the rest of the mock backend) ----
 // The real number will come from the escrow set via the indexer; until then chip-ins on the
-// public page accumulate here so the crown actually fills up when you try it.
+// public page accumulate here so the cheer actually fills up when you try it.
 
-const COLLECTED_KEY = "crown-fundraiser-collected";
+const COLLECTED_KEY = "cheer-fundraiser-collected";
 
 export function readCollected(handle: string): number {
   try {
@@ -62,7 +62,7 @@ export function addCollected(handle: string, amount: number): number {
     localStorage.setItem(`${COLLECTED_KEY}:${handle}`, String(next));
   } catch {}
   // Share it as a DELTA: concurrent chip-ins from different browsers must sum.
-  sendOp(handle, "crown-fundraiser-collected", { type: "add", delta: Math.max(0, amount) });
+  sendOp(handle, "cheer-fundraiser-collected", { type: "add", delta: Math.max(0, amount) });
   return next;
 }
 
@@ -111,7 +111,7 @@ export function readBackers(handle: string): Backer[] {
   return list;
 }
 
-const STATUS_KEY = "crown-fundraiser-status";
+const STATUS_KEY = "cheer-fundraiser-status";
 const FUNDRAISER_STATES: FundraiserState[] = ["collecting", "delivering", "delivered", "refunded"];
 
 export function readStatus(handle: string): FundraiserStatus {
@@ -132,6 +132,6 @@ export function writeStatus(handle: string, status: FundraiserStatus): Fundraise
     localStorage.setItem(`${STATUS_KEY}:${handle}`, JSON.stringify(status));
   } catch {}
   // Single-writer key (the streamer's accept/deliver/refund) — authoritative overwrite.
-  sendOp(handle, "crown-fundraiser-status", { type: "replace", value: status });
+  sendOp(handle, "cheer-fundraiser-status", { type: "replace", value: status });
   return status;
 }

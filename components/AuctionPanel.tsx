@@ -9,7 +9,7 @@ const CONFIG: GameEditorConfig = {
   slug: "auction",
   title: "Auction",
   linkLabel: "Auction link",
-  qrFileName: "crown-auction-qr.png",
+  qrFileName: "cheer-auction-qr.png",
   headlineLabel: "Your pitch",
   headlinePlaceholder: "e.g. Highest bid picks what I do on Friday's stream",
   headlineMax: AU_HEADLINE_MAX,

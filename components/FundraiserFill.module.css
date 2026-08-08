@@ -32,7 +32,7 @@
 }
 
 /* empty state: a photo goes grey + darkened so the colour reveal reads; the badge's empty layer is
-   already a faint outline (CrownBadge outline mode), so it needs no extra dimming. */
+   already a faint outline (CheerBadge outline mode), so it needs no extra dimming. */
 .asPhoto .dim {
   filter: grayscale(1) brightness(0.7);
   opacity: 0.5;

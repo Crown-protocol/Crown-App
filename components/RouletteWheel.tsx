@@ -122,7 +122,7 @@ export function RouletteWheel({
     <div className={styles.wrap} style={{ width: size }}>
       <svg viewBox="0 0 200 200" className={styles.svg} aria-hidden>
         <defs>
-          {/* userSpaceOnUse + центр в оси вращения — градиент не «плывёт» при спине */}
+          {/* userSpaceOnUse + the centre on the rotation axis — keeps the gradient from drifting mid-spin */}
           <radialGradient id="wheel-lead" gradientUnits="userSpaceOnUse" cx="100" cy="100" r="94">
             <stop offset="0%" stopColor="#7A6BE4" />
             <stop offset="55%" stopColor="#8B7CF6" />

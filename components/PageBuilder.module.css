@@ -702,6 +702,19 @@
   align-items: center;
   gap: 14px;
 }
+/* When the session picker is present it pushes the device toggle + preview down. Pull the whole
+   column up by the space the picker adds so the preview stays high — level with the editor's tabs —
+   like it was before the picker existed. That space = the row's own height (34px control + 10px
+   margin-bottom) PLUS the column's 14px flex gap above the next item = 58px. Only when the row is
+   actually rendered (2+ sessions), and only in the side-by-side layout; below 1180px it's stacked. */
+.previewCol:has(.sessionRow) {
+  margin-top: -58px;
+}
+@media (max-width: 1180px) {
+  .previewCol:has(.sessionRow) {
+    margin-top: 0;
+  }
+}
 .deviceSeg {
   display: inline-flex;
   background: var(--bg-1);
@@ -730,6 +743,50 @@
 .deviceOn {
   background: var(--chart-grad);
   color: var(--chart-grad-ink);
+}
+
+/* ---- session picker: which run this preview and link point at ----
+   Only rendered with two or more live sessions. Quieter than the device toggle above it — that one
+   changes how you're looking, this one changes what you're looking at, and the names are the
+   maker's own words so they need room to breathe rather than a pill each. */
+.sessionRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.sessionLabel {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+/* A select, not a row of pills: session names are the maker's own ("Friday run", "Saturday run"),
+   so the row grew with every one of them and wrapped onto a second line once a few were live. */
+.sessionSelect {
+  flex: 1;
+  min-width: 0;
+  max-width: 260px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-2);
+  background: var(--bg-0);
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+.sessionSelect:hover {
+  border-color: var(--text-3);
+}
+.sessionSelect:focus-visible {
+  outline: none;
+  border-color: rgba(235, 233, 244, 0.32);
+  box-shadow: var(--ring-neutral);
 }
 
 /* ---- socials config row: platform picker + url field ----
@@ -889,15 +946,6 @@
 .widgetName:hover {
   color: var(--text-1);
 }
-/* What this widget is currently set to, so the card says something while collapsed. */
-.widgetMeta {
-  color: var(--text-3);
-  font-size: 13px;
-  font-weight: 400;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 /* Label above a group of controls inside an expanded widget. */
 .widgetFieldHead {
   font-size: 13px;
@@ -975,4 +1023,32 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .saveBar { animation: none; }
+}
+
+/* Why the confirm button is disabled, inside the save bar. The field it refers to is on the same
+   tab, so this is a nudge rather than a redirect. */
+.saveNeeds {
+  font-size: 13.5px;
+  color: var(--text-3);
+  padding-right: 4px;
+}
+
+/* "Required" beside the pitch heading, while it's still empty. Quiet — it states a fact, it isn't
+   an error: nothing has gone wrong, the page just isn't finished yet. */
+.required {
+  margin-left: 10px;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: var(--bg-2);
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+/* The empty pitch box carries a slightly brighter edge, so the eye lands on it first on a fresh
+   session. Not the error red — this is "fill me in", not "you broke something". */
+.bioInputNeeded {
+  border-color: var(--text-3);
 }

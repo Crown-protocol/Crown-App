@@ -2,14 +2,14 @@
 
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
-import { CrownMark, GameIcon } from "@/components/icons";
+import { CheerMark, GameIcon } from "@/components/icons";
 import { FundraiserFill } from "@/components/FundraiserFill";
 import { OVERLAYS, type OverlayKind } from "@/lib/data/overlays";
 import styles from "./ObsWidgets.module.css";
 
 // The QR mockup renders a REAL scannable code (same recipe as the cabinet) — a fake pixel grid
 // reads as a fake product the moment someone points a camera at it. Since it IS scannable, it must
-// lead somewhere real: it used to encode a hardcoded crown.tv/@toffi, a handle that exists nowhere,
+// lead somewhere real: it used to encode a hardcoded cheer.tv/@toffi, a handle that exists nowhere,
 // so anyone pointing a phone at the landing page got a dead link. It now encodes this deployment's
 // own origin (localhost while developing, the real domain in production) and @nova — a built-in
 // demo page that always resolves. The handle shown under it matches what the code actually holds.
@@ -19,14 +19,14 @@ function QrMock() {
   const [qr, setQr] = useState("");
   useEffect(() => {
     // window.origin, not a baked-in domain: the code a visitor scans belongs to the site they're on.
-    const base = window.location.origin || process.env.NEXT_PUBLIC_SITE_URL || "https://crown.tv";
+    const base = window.location.origin || process.env.NEXT_PUBLIC_SITE_URL || "https://cheer.tv";
     QRCode.toDataURL(`${base}/@${QR_HANDLE}`, { margin: 0, width: 96, color: { dark: "#F1EFF7", light: "#00000000" } })
       .then(setQr)
       .catch(() => setQr(""));
   }, []);
   return (
     <div className={styles.qr}>
-      <div className={styles.qrLabel}>Donate</div>
+      <div className={styles.qrLabel}>Cheer</div>
       {qr ? <img src={qr} alt="" width={84} height={84} /> : <span className={styles.qrBox} />}
       <div className={styles.qrHandle}>@{QR_HANDLE}</div>
     </div>
@@ -63,7 +63,7 @@ export function Widget({ kind }: { kind: OverlayKind }) {
     return (
       <div className={styles.alert}>
         <span className={styles.rankBadge} aria-hidden>
-          <CrownMark />
+          <CheerMark />
         </span>
         <div className={styles.alertBody}>
           <div className={styles.rankLine}>
@@ -197,7 +197,7 @@ export function Widget({ kind }: { kind: OverlayKind }) {
       <div className={styles.record}>
         <div className={styles.recordHead}>Stream record</div>
         <div className={styles.recordWho}>
-          <CrownMark /> Whale
+          <CheerMark /> Whale
         </div>
         <div className={styles.recordAmt}>$120</div>
         <div className={styles.recordFoot}>beat it</div>

@@ -4,7 +4,7 @@ import { CHAIN_ID, FACTORY_TWO_OUTCOME, FACTORY_STREAM, USDC_MINT } from "./conf
 import { i64le, u16le, u64le, usdcAta } from "./solana";
 
 // ──────────────────────────────────────────────────────────────────
-// Crown-Factory primitives: crown-salt, escrow PDA derivation, account
+// Cheer-Factory primitives: cheer-salt, escrow PDA derivation, account
 // decoding and the ed25519 verdict instruction. These are the building
 // blocks every game flow (tasks / funding / auction / subscription) rides
 // on. The game canisters have no public principals yet, so no UI calls
@@ -30,9 +30,9 @@ export interface TwoOutcomeBirth {
   nonce: bigint;
 }
 
-// crown-salt, two-outcome shape (factory-spec §2.1):
+// cheer-salt, two-outcome shape (factory-spec §2.1):
 // sha256(donor ‖ streamer ‖ gross u64LE ‖ deadline i64LE ‖ resolver ‖ fee_bps u16LE ‖ fee_wallet ‖ nonce u64LE)
-// Pinned vector (Crown-Factory/vectors): all-0x11 donor, all-0x22 streamer,
+// Pinned vector (Cheer-Factory/vectors): all-0x11 donor, all-0x22 streamer,
 // gross 1_000_000, deadline 1_900_000_000, all-0x33 resolver, fee 500,
 // all-0x44 fee wallet, nonce 7 → 149c82b09a080ef4c92921d13d974177bfea2dd546ef8b798627e3e4245afe6b
 export async function twoOutcomeSalt(b: TwoOutcomeBirth): Promise<Buffer> {
@@ -61,7 +61,7 @@ const CREATE_ESCROW_DISC = Buffer.from("fdd7a574246c4450", "hex");
 
 /**
  * The whole create-escrow transaction for the two-outcome factory, account order pinned from
- * Crown-Factory/shapes/two-outcome/solana `CreateEscrow` (Anchor derives the metas in struct
+ * Cheer-Factory/shapes/two-outcome/solana `CreateEscrow` (Anchor derives the metas in struct
  * order): donor(signer,w) · recipient · mint · escrow PDA(w) · donor_usdc(w) · escrow_usdc(w) ·
  * token · associated-token · system. Args after the discriminator mirror the instruction:
  * gross u64 · deadline i64 · resolver 32 · fee_bps u16 · fee_wallet 32 · nonce u64.
@@ -138,10 +138,10 @@ export function ed25519VerdictIx(resolverPubkey: Uint8Array, signature: Uint8Arr
 // Verdict message domains (byte-exact; outcome codes per the candid API:
 // settle → 0, cancel → 1).
 export function twoOutcomeVerdictMessage(factory: PublicKey, escrow: PublicKey, outcome: 0 | 1): Buffer {
-  return Buffer.concat([Buffer.from(`crown:two-outcome:${CHAIN_ID}`), factory.toBuffer(), escrow.toBuffer(), Buffer.from([outcome])]);
+  return Buffer.concat([Buffer.from(`cheer:two-outcome:${CHAIN_ID}`), factory.toBuffer(), escrow.toBuffer(), Buffer.from([outcome])]);
 }
 
 export function streamVerdictMessage(escrow: PublicKey, kind: "release" | "cancel", index = 0): Buffer {
-  const head = Buffer.concat([Buffer.from(`crown:stream:${CHAIN_ID}`), FACTORY_STREAM.toBuffer(), escrow.toBuffer()]);
+  const head = Buffer.concat([Buffer.from(`cheer:stream:${CHAIN_ID}`), FACTORY_STREAM.toBuffer(), escrow.toBuffer()]);
   return kind === "release" ? Buffer.concat([head, Buffer.from([0]), u16le(index)]) : Buffer.concat([head, Buffer.from([1])]);
 }

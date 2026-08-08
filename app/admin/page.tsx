@@ -3,12 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { SocialIcon, GameIcon, NavIcon, SearchIcon } from "@/components/icons";
-import { CrownBadge } from "@/components/CrownBadge";
+import { CheerBadge } from "@/components/CheerBadge";
 import { LaunchReadiness } from "@/components/LaunchReadiness";
 import { BotPanel } from "@/components/admin/BotPanel";
 import { BarsIcon, LineIcon } from "@/components/Chart";
 import { StatTile, BarList, GrowthChart, StatusPill, SortHeader, money, shortMoney, axisTicks } from "@/components/ops";
-import { useCrown } from "@/lib/data/DataProvider";
+import { useCheer } from "@/lib/data/DataProvider";
+import { useConfirm } from "@/components/useConfirm";
+import { dangerCopy } from "@/lib/data/dangerous";
 import { GAMES, type GameId } from "@/lib/data/games";
 import {
   OPS_STATS, OPS_GROWTH, OPS_GROWTH_BY_PLATFORM, OPS_GROWTH_BY_GAME, OPS_BY_PLATFORM, OPS_BY_SIZE, OPS_GAME_ADOPTION,
@@ -87,8 +89,8 @@ export default function OpsPage() {
       <nav className="admin-nav" aria-label="Admin panel sections">
         <div className="brand">
           <Link className="logo" href="/" aria-label="Go to homepage">
-            <CrownBadge size={26} />
-            Crown
+            <CheerBadge size={26} />
+            Cheer
           </Link>
         </div>
         <div className="brand brand-tag" style={{ paddingTop: 0 }}>
@@ -601,7 +603,7 @@ function Moderation() {
 
       <div className="mod-stack">
         <div>
-          <div className="panel-head"><div><h2>Check sandbox</h2><div className="ph-sub">Type in text — we'll run it through the same pipeline as the live path. Nothing is saved.</div></div></div>
+          <div className="panel-head"><div><h2>Check sandbox</h2><div className="ph-sub">Nothing is saved.</div></div></div>
           <div className="panel mod-sandbox">
             <div className="field">
               <label htmlFor="mod-text">Text to check</label>
@@ -697,7 +699,7 @@ function TestData() {
   const [stat, setStat] = useState<{ test: number; total: number; seedSize: number } | null>(null);
   const [busy, setBusy] = useState("");
   const [note, setNote] = useState("");
-  const [confirming, setConfirming] = useState(false);
+  const confirm = useConfirm();
 
   const load = useCallback(async () => {
     try {
@@ -728,7 +730,6 @@ function TestData() {
       setNote("Didn't work.");
     } finally {
       setBusy("");
-      setConfirming(false);
     }
   }
 
@@ -737,7 +738,7 @@ function TestData() {
       <div className="panel-head">
         <div>
           <h2>Test data</h2>
-          <div className="ph-sub">Demo pages for trying the panel out. Only these are ever deleted.</div>
+          <div className="ph-sub">Only these are ever deleted.</div>
         </div>
       </div>
 
@@ -746,44 +747,34 @@ function TestData() {
       </p>
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
-        <button type="button" className="btn-outline" disabled={!!busy} onClick={() => void run("seed")}>
+        {/* Both go through the one confirmation the rest of the product uses — this screen used to
+            roll its own inline "Yes, remove N" toggle, which read as a different kind of decision. */}
+        <button
+          type="button"
+          className="btn-outline"
+          disabled={!!busy}
+          onClick={() => confirm(dangerCopy.seedData(), () => void run("seed"))}
+        >
           {busy === "seed" ? "Adding…" : "Add test data"}
         </button>
-        {confirming ? (
-          <>
-            {/* btn-danger is 48px tall by default — match the outline buttons it sits beside. */}
-            <button
-              type="button"
-              className="btn-danger"
-              style={{ height: 40, padding: "0 16px", fontSize: 14 }}
-              disabled={!!busy}
-              onClick={() => void run("wipe")}
-            >
-              {busy === "wipe" ? "Removing…" : `Yes, remove ${stat?.test ?? 0}`}
-            </button>
-            <button type="button" className="btn-outline" disabled={!!busy} onClick={() => setConfirming(false)}>
-              Cancel
-            </button>
-          </>
-        ) : (
-          <button
-            type="button"
-            className="btn-outline"
-            disabled={!!busy || !stat?.test}
-            onClick={() => setConfirming(true)}
-          >
-            Remove test data
-          </button>
-        )}
+        <button
+          type="button"
+          className="btn-outline"
+          disabled={!!busy || !stat?.test}
+          onClick={() => confirm(dangerCopy.wipeData(stat?.test ?? 0), () => void run("wipe"), { danger: true })}
+        >
+          {busy === "wipe" ? "Removing…" : "Remove test data"}
+        </button>
       </div>
 
       {note && <p className="footnote" style={{ marginTop: 12 }}>{note}</p>}
+      {confirm.dialog}
     </div>
   );
 }
 
 function Settings() {
-  const { mode, setMode, ready } = useCrown();
+  const { mode, setMode, demoData, setDemoData, ready } = useCheer();
 
   return (
     <>
@@ -798,7 +789,6 @@ function Settings() {
         <div className="panel-head">
           <div>
             <h2>Data source</h2>
-            <div className="ph-sub">Switch the whole site between mock data and a live wallet, for testing.</div>
           </div>
         </div>
         {ready && (
@@ -813,15 +803,29 @@ function Settings() {
         )}
       </div>
 
-      <TestData />
-
-      <div className="panel placeholder" style={{ maxWidth: 640 }}>
-        <h2>Not wired up yet</h2>
-        Operator roles, access, and thresholds are on the plan. The panel runs on demo data: real data will come from crown-app/api and the reputation ledger.
-        <div style={{ marginTop: 16 }}>
-          <Link className="btn-outline" href="/">To the site</Link>
+      <div className="panel" style={{ maxWidth: 640 }}>
+        <div className="panel-head">
+          <div>
+            <h2>Demo numbers</h2>
+            <div className="ph-sub">
+              Off by default — the cabinet dashboard shows real totals and the creator catalog lists only real makers. Turn on
+              to seed sample numbers and demo streamers for screenshots. Demo figures show in red in the dashboard.
+            </div>
+          </div>
         </div>
+        {ready && (
+          <div className="seg" role="group" aria-label="Demo numbers">
+            <button type="button" className={!demoData ? "active" : ""} onClick={() => setDemoData(false)}>
+              Off
+            </button>
+            <button type="button" className={demoData ? "active" : ""} onClick={() => setDemoData(true)}>
+              On
+            </button>
+          </div>
+        )}
       </div>
+
+      <TestData />
     </>
   );
 }

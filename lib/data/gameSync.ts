@@ -20,17 +20,19 @@ import { useEffect, useState } from "react";
 export type SyncOp =
   | { type: "append"; item: { id: string } & Record<string, unknown>; seed?: unknown[] }
   | { type: "suggest"; title: string; genre: string; dPool: number; dBackers: number }
-  | { type: "entry"; id: string; entry: Record<string, unknown> }
+  // `seed` initialises the server copy with the board the entry was applied to — a demo scope serves
+  // its lots from memory, so without it the server holds an entry for a lot it has never seen.
+  | { type: "entry"; id: string; entry: Record<string, unknown>; seed?: unknown[] }
   | { type: "add"; delta: number }
   | { type: "mergeById"; list: { id: string }[] }
   | { type: "replace"; value: unknown };
 
 const POLL_MS = 3000;
-const EVENT = "crown-gamesync";
+const EVENT = "cheer-gamesync";
 
-// crown-fundraiser-collected is stored as a bare number string; everything else as JSON.
+// cheer-fundraiser-collected is stored as a bare number string; everything else as JSON.
 function toStorage(k: string, v: unknown): string {
-  return k === "crown-fundraiser-collected" ? String(v) : JSON.stringify(v);
+  return k === "cheer-fundraiser-collected" ? String(v) : JSON.stringify(v);
 }
 
 function adopt(scope: string, k: string, v: unknown): boolean {
@@ -52,6 +54,7 @@ export function sendOp(scope: string, k: string, op: SyncOp): void {
   void fetch("/api/gamestate", {
     method: "POST",
     headers: { "content-type": "application/json" },
+    credentials: "same-origin", // the owner's session cookie must ride along for `replace` ops (settle/close/refund)
     body: JSON.stringify({ scope, k, op }),
   })
     .then(async (r) => {
@@ -65,17 +68,27 @@ export function sendOp(scope: string, k: string, op: SyncOp): void {
 }
 
 export async function pullScope(scope: string): Promise<boolean> {
+  return (await pullScopeResult(scope)).changed;
+}
+
+/**
+ * Like pullScope, but says whether the server was actually REACHED — not just whether anything
+ * changed. A failed pull and a pull that found nothing new both mean "changed: false", and callers
+ * that gate money on having this run's rules must be able to tell those apart: the first means the
+ * rules on screen may not be the ones in escrow, the second means they are.
+ */
+export async function pullScopeResult(scope: string): Promise<{ ok: boolean; changed: boolean }> {
   try {
     const r = await fetch(`/api/gamestate?scope=${encodeURIComponent(scope)}`);
-    if (!r.ok) return false;
+    if (!r.ok) return { ok: false, changed: false };
     const { entries } = (await r.json()) as { entries: Record<string, unknown> };
     let changed = false;
     for (const [k, v] of Object.entries(entries ?? {})) {
       if (adopt(scope, k, v)) changed = true;
     }
-    return changed;
+    return { ok: true, changed };
   } catch {
-    return false;
+    return { ok: false, changed: false };
   }
 }
 
@@ -84,11 +97,30 @@ export async function pullScope(scope: string): Promise<boolean> {
 // in the deps of whatever effect reads the stores, and the page re-renders with
 // the other viewers' actions.
 export function useGameSync(scope: string | null): number {
+  return useGameSyncState(scope).nonce;
+}
+
+/**
+ * Same as useGameSync, plus whether the FIRST pull for this scope has come back.
+ *
+ * Rules are snapshotted per session and synced like any other key, but `readScopeRules` is
+ * synchronous and the pull is not — so until that first answer lands, a page resolves its rules
+ * from the maker's current profile defaults instead of the session's. Surfaces that take money use
+ * `synced` to hold off until they know they're showing this run's real terms.
+ *
+ * `synced` flips on the first completed pull whether or not it changed anything, and stays true; a
+ * failed pull leaves it false, which is what keeps an offline viewer from bidding under rules that
+ * may not be the ones in escrow.
+ */
+export function useGameSyncState(scope: string | null): { nonce: number; synced: boolean } {
   const [nonce, setNonce] = useState(0);
+  const [synced, setSynced] = useState(false);
 
   useEffect(() => {
     if (!scope) return;
     let dead = false;
+    // A new scope has not been pulled yet — never carry the previous one's answer over.
+    setSynced(false);
 
     const bump = () => {
       if (!dead) setNonce((n) => n + 1);
@@ -98,10 +130,18 @@ export function useGameSync(scope: string | null): number {
     };
     window.addEventListener(EVENT, onEvent);
 
-    void pullScope(scope).then((changed) => changed && bump());
-    const t = setInterval(() => {
-      void pullScope(scope).then((changed) => changed && bump());
-    }, POLL_MS);
+    const pull = () =>
+      pullScopeResult(scope).then(({ ok, changed }) => {
+        if (dead) return;
+        // Reaching the server at all is the signal: this browser now holds whatever the server has
+        // for this scope, snapshot included. A failed pull must NOT count — offline is exactly when
+        // the rules on screen are least likely to be the ones the session was opened with.
+        if (ok) setSynced(true);
+        if (changed) bump();
+      });
+
+    void pull();
+    const t = setInterval(() => void pull(), POLL_MS);
 
     return () => {
       dead = true;
@@ -110,5 +150,5 @@ export function useGameSync(scope: string | null): number {
     };
   }, [scope]);
 
-  return nonce;
+  return { nonce, synced };
 }

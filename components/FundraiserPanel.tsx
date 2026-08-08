@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { GamePageEditor, type GameEditorConfig } from "@/components/GamePageEditor";
 import { FundraiserGameSettings, DEFAULT_FUNDRAISER_CONFIG } from "@/components/FundraiserGameSettings";
-import { CrownBadge } from "@/components/CrownBadge";
+import { CheerBadge } from "@/components/CheerBadge";
 import { CropModal } from "@/components/CropModal";
 import { NumberInput } from "@/components/NumberInput";
 import { UploadIcon } from "@/components/icons";
@@ -15,7 +15,7 @@ const CONFIG: GameEditorConfig = {
   slug: "fundraiser",
   title: "Fundraiser",
   linkLabel: "Fundraiser link",
-  qrFileName: "crown-fundraiser-qr.png",
+  qrFileName: "cheer-fundraiser-qr.png",
   headlineLabel: "The promise",
   headlinePlaceholder: "e.g. I'll edit the travel video in one month instead of three",
   headlineMax: PLEDGE_MAX,
@@ -84,7 +84,7 @@ export function FundraiserPanel({ profile, onSave }: { profile: Profile; onSave:
                 {fr.fillImage ? (
                   <img src={fr.fillImage} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                 ) : (
-                  <CrownBadge size={44} />
+                  <CheerBadge size={44} />
                 )}
               </div>
               <div className={styles.avatarControls}>

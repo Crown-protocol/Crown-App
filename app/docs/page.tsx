@@ -9,14 +9,16 @@ import styles from "./page.module.css";
 export const metadata: Metadata = {
   title: "How it works",
   description:
-    "How Crown works: donations straight to your wallet, reputation that builds with each one, and the mini-games on top. Non-custodial and on-chain.",
+    "How Cheer works: donations straight to your wallet, reputation that builds with each one, and the mini-games on top. Non-custodial and on-chain.",
 };
 
 // The org that hosts the real contracts — kept in step with the footer's "Open & honest" column.
+// Still named Crown: the deployed program ids and the pinned salt are published under that name, so
+// renaming the repos would break verification against the chain. See the note in the Open section.
 const ORG = "https://github.com/Crown-protocol";
 
 const TOC = [
-  { id: "what", label: "What Crown is" },
+  { id: "what", label: "What Cheer is" },
   { id: "donations", label: "Donations" },
   { id: "reputation", label: "Reputation & tiers" },
   { id: "games", label: "The mini-games" },
@@ -34,9 +36,9 @@ export default function DocsPage() {
 
       <div className={styles.main}>
         <header className={styles.head}>
-          <h1>How Crown works</h1>
+          <h1>How Cheer works</h1>
           <p>
-            Crown is a donation page in dollars, plus mini-games your viewers run — with the money going straight to your
+            Cheer is a donation page in dollars, plus mini-games your viewers run — with the money going straight to your
             wallet. Here&apos;s the whole thing in plain language.
           </p>
         </header>
@@ -53,10 +55,10 @@ export default function DocsPage() {
 
           <div className={styles.content}>
             <section id="what">
-              <h2>What Crown is</h2>
+              <h2>What Cheer is</h2>
               <p>
-                Crown gives a content maker one page where viewers can support them. Every donation is in dollars and
-                lands <b>straight in the creator&apos;s own wallet</b> — Crown never touches the money. On top of plain
+                Cheer gives a content maker one page where viewers can support them. Every donation is in dollars and
+                lands <b>straight in the creator&apos;s own wallet</b> — Cheer never touches the money. On top of plain
                 donations sit four mini-games that turn a donation into a moment: a paid task, a game roulette, a
                 goal to chip in toward, an auction for your time.
               </p>
@@ -79,7 +81,7 @@ export default function DocsPage() {
               </p>
               <div className={styles.callout}>
                 <p>
-                  <b>Non-custodial.</b> Crown is glass between you and the contracts. It can&apos;t hold, move, or freeze
+                  <b>Non-custodial.</b> Cheer is glass between you and the contracts. It can&apos;t hold, move, or freeze
                   anyone&apos;s money — every transfer is a transaction from your own wallet.
                 </p>
               </div>
@@ -158,7 +160,7 @@ export default function DocsPage() {
               <p>
                 Every game that puts a promise on the line runs through <b>escrow</b>. When a viewer pays into a task, a
                 fundraiser, or an auction, the money locks in a contract — not in the creator&apos;s pocket, not in
-                Crown&apos;s. It only moves when the outcome is settled.
+                Cheer&apos;s. It only moves when the outcome is settled.
               </p>
               <ul>
                 <li>
@@ -218,12 +220,20 @@ export default function DocsPage() {
                   .
                 </li>
               </ul>
+              {/* Say it before anyone wonders whether they're looking at the right project: the repos
+                  are named Crown because that's what the deployed programs and their pinned salt are
+                  published under. Renaming them would break verification against the live chain. */}
+              <p className="footnote">
+                The contracts are published under the name <b>Crown</b> — the project&apos;s earlier name. They keep it
+                because the deployed program ids and their audit references point there; renaming them would break
+                anyone verifying the code against what&apos;s actually running on-chain.
+              </p>
             </section>
 
             <section id="faq">
               <h2>FAQ</h2>
-              <h3>Does Crown take a cut of my donations?</h3>
-              <p>Crown is non-custodial — it never holds your money, so it can&apos;t skim it. Donations settle straight to the creator&apos;s wallet on-chain.</p>
+              <h3>Does Cheer take a cut of my donations?</h3>
+              <p>Cheer is non-custodial — it never holds your money, so it can&apos;t skim it. Donations settle straight to the creator&apos;s wallet on-chain.</p>
               <h3>Do I need crypto to donate?</h3>
               <p>You donate in USDC — a dollar-pegged stablecoin — from a Solana wallet. A dollar in is a dollar the creator receives.</p>
               <h3>Can I get my money back?</h3>
@@ -238,7 +248,7 @@ export default function DocsPage() {
               <h2>Contact</h2>
               <p>
                 Questions, a bug, or a partnership? Find us on{" "}
-                <a href="https://x.com/Crownprotocol2" target="_blank" rel="noreferrer">
+                <a href="https://x.com/Cheerprotocol2" target="_blank" rel="noreferrer">
                   X
                 </a>{" "}
                 and{" "}
@@ -246,12 +256,12 @@ export default function DocsPage() {
                   Telegram
                 </a>
                 , or email{" "}
-                <a href="mailto:crowndonate@proton.me">crowndonate@proton.me</a>.
+                <a href="mailto:cheerdonate@proton.me">cheerdonate@proton.me</a>.
               </p>
             </section>
 
             <p className={styles.note}>
-              This is a plain-language guide to how Crown works today. The exact rules are the ones the contracts
+              This is a plain-language guide to how Cheer works today. The exact rules are the ones the contracts
               enforce — read them above.
             </p>
           </div>

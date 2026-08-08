@@ -1,7 +1,7 @@
 // The signed-mutation message format — shared by the browser (builds & signs)
 // and the server (rebuilds & verifies). One format for every mutating API:
 //
-//   crown-app:<action>:<subject>:<ts>:<bodyHashHex>
+//   cheer-app:<action>:<subject>:<ts>:<bodyHashHex>
 //
 // ts is unix seconds (server rejects anything older/newer than the window);
 // bodyHash pins the exact JSON payload so a captured signature can't be
@@ -18,5 +18,5 @@ export async function sha256Hex(text: string): Promise<string> {
 
 export async function buildAuthMessage(action: string, subject: string, ts: number, body: unknown): Promise<Uint8Array> {
   const bodyHash = body === null ? "-" : await sha256Hex(JSON.stringify(body));
-  return new TextEncoder().encode(`crown-app:${action}:${subject.toLowerCase()}:${ts}:${bodyHash}`);
+  return new TextEncoder().encode(`cheer-app:${action}:${subject.toLowerCase()}:${ts}:${bodyHash}`);
 }

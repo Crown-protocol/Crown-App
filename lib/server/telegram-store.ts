@@ -54,7 +54,7 @@ export const LINK_CODE_TTL_MS = 15 * 60 * 1000;
 
 const EMPTY: TgStore = { botUsername: null, pending: {}, links: {}, founders: [], outbox: [] };
 
-// ---- persistence: the Crown DB (was bot/data/store.json) ----
+// ---- persistence: the Cheer DB (was bot/data/store.json) ----
 // Same read-whole/write-whole contract the routes were built on, backed by
 // real tables. writeStore replaces state transactionally, so the outbox
 // drain pattern (read → splice → write) stays exactly as it was.
@@ -209,8 +209,8 @@ export async function queueMonthly(s: TgStore, chatId: number, name: string, han
   const { rows, headline } = await monthlyRows(handle);
   await enqueue({
     chatId,
-    caption: `<b>${esc(name)}, your month on Crown</b>\n${esc(headline)}`,
-    card: { t: "stats", label: "Summary", title: `${name}, your month on Crown`, rows },
+    caption: `<b>${esc(name)}, your month on Cheer</b>\n${esc(headline)}`,
+    card: { t: "stats", label: "Summary", title: `${name}, your month on Cheer`, rows },
   });
 }
 
@@ -225,8 +225,8 @@ async function queueQuickStats(s: TgStore, chatId: number, name: string, handle:
 async function queuePlatform(s: TgStore, chatId: number) {
   await enqueue({
     chatId,
-    caption: "<b>Crown — platform</b>",
-    card: { t: "stats", label: "Founders", title: "Crown — platform", rows: await platformRows() },
+    caption: "<b>Cheer — platform</b>",
+    card: { t: "stats", label: "Founders", title: "Cheer — platform", rows: await platformRows() },
   });
 }
 
@@ -284,7 +284,7 @@ export interface BotResult {
 }
 
 // No fallback: if FOUNDER_SECRET isn't set in the environment, the /founder command is simply
-// unavailable — a guessable default ("crown-founder") would let anyone claim founder mode.
+// unavailable — a guessable default ("cheer-founder") would let anyone claim founder mode.
 const FOUNDER_SECRET = process.env.FOUNDER_SECRET;
 
 // ● / ○ — state by shape, not emoji.
@@ -296,7 +296,7 @@ function settingsKeyboard(link: TgLink): TgButton[][] {
 }
 
 const HELP = [
-  "This chat gets what happens on your Crown page: things that need you, money moves, good news, summaries, problems.",
+  "This chat gets what happens on your Cheer page: things that need you, money moves, good news, summaries, problems.",
   "",
   "/settings — choose what arrives",
   "/stats — how it's going right now",
@@ -306,7 +306,7 @@ const HELP = [
   "/stop — disconnect",
 ].join("\n");
 
-const NOT_CONNECTED = "Not connected yet — open your Crown cabinet, Settings → Telegram, and tap Connect there.";
+const NOT_CONNECTED = "Not connected yet — open your Cheer cabinet, Settings → Telegram, and tap Connect there.";
 
 export async function handleEvent(ev: BotEvent): Promise<BotResult> {
   const s = await readStore();
@@ -379,7 +379,7 @@ export async function handleEvent(ev: BotEvent): Promise<BotResult> {
         await writeStore(s);
         reply(chatId, HELP);
       } else if (expired) {
-        reply(chatId, "That link has expired. Open your Crown cabinet → Settings → Telegram and tap Connect again.");
+        reply(chatId, "That link has expired. Open your Cheer cabinet → Settings → Telegram and tap Connect again.");
       } else if (found) {
         reply(chatId, `Already connected to ${found[1].name}'s page.\n\n${HELP}`);
       } else {
@@ -483,7 +483,9 @@ export async function writeOffset(offset: number): Promise<void> {
 // Heartbeat: the bot touches this every poll, so "is the bot running?" is a real question with a
 // real answer instead of "botUsername was set once, months ago".
 export async function touchBotSeen(): Promise<void> {
-  await setBotState("last_seen", String(now()));
+  // Stored in MILLISECONDS so botLastSeen() lines up with the consumers' `Date.now() - lastSeen`
+  // staleness check (BOT_STALE_MS). `now()` is seconds — mixing them made the bot read as always down.
+  await setBotState("last_seen", String(Date.now()));
 }
 
 export async function botLastSeen(): Promise<number> {
@@ -497,7 +499,9 @@ export async function botLastSeen(): Promise<number> {
 export async function acquireBotLease(instanceId: string, ttlMs = 60_000): Promise<boolean> {
   const c = await db();
   const raw = await botState("lease");
-  const nowMs = now();
+  // MILLISECONDS to match ttlMs (60_000ms). `now()` is seconds — that made the 60s lease last ~16.7h,
+  // so a crashed instance blocked its replacement for hours. Old seconds-valued rows read as expired.
+  const nowMs = Date.now();
   if (raw) {
     try {
       const lease = JSON.parse(raw) as { id: string; at: number };

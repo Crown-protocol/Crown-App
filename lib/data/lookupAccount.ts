@@ -12,7 +12,7 @@ export type AccountLookup =
   | { status: "none" }
   | { status: "error" };
 
-// Asks the Crown DB (/api/profiles/me) for the page this wallet OWNS. Retries a couple of times on
+// Asks the Cheer DB (/api/profiles/me) for the page this wallet OWNS. Retries a couple of times on
 // transient failures before giving up, because a single flaky request must not change where the user
 // is routed. Never throws.
 export async function lookupAccountByOwner(address: string | undefined | null): Promise<AccountLookup> {

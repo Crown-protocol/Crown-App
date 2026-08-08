@@ -13,7 +13,7 @@ npm-debug.log*
 /bot/data
 /bot/.env
 
-# Crown DB (SQLite) — data lives on the server, never in git
+# Cheer DB (SQLite) — data lives on the server, never in git
 /data/
 
 # local dev server (run-local.sh) — runtime artefacts of one machine

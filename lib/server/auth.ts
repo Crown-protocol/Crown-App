@@ -7,11 +7,11 @@ import { readSession } from "./session";
 
 // ──────────────────────────────────────────────────────────────────
 // Wallet-signature auth for mutating APIs. The wallet IS the account
-// (Crown has no passwords), so a mutation is authorized the same way a
+// (Cheer has no passwords), so a mutation is authorized the same way a
 // donation is: an ed25519 signature by the owner's key. Headers:
-//   x-crown-pubkey    — signer, base58
-//   x-crown-ts        — unix seconds (freshness window ±AUTH_WINDOW)
-//   x-crown-signature — base64 ed25519 over buildAuthMessage(...)
+//   x-cheer-pubkey    — signer, base58
+//   x-cheer-ts        — unix seconds (freshness window ±AUTH_WINDOW)
+//   x-cheer-signature — base64 ed25519 over buildAuthMessage(...)
 // ──────────────────────────────────────────────────────────────────
 
 export interface Signer {
@@ -19,9 +19,9 @@ export interface Signer {
 }
 
 export async function verifySignedRequest(req: NextRequest, action: string, subject: string, body: unknown): Promise<Signer | null> {
-  const pubkey = req.headers.get("x-crown-pubkey");
-  const tsRaw = req.headers.get("x-crown-ts");
-  const sigB64 = req.headers.get("x-crown-signature");
+  const pubkey = req.headers.get("x-cheer-pubkey");
+  const tsRaw = req.headers.get("x-cheer-ts");
+  const sigB64 = req.headers.get("x-cheer-signature");
   if (!pubkey || !tsRaw || !sigB64) return null;
 
   const ts = Number(tsRaw);

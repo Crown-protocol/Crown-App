@@ -70,7 +70,7 @@
     box-shadow: 0 0 0 1px var(--accent), 0 14px 34px -12px rgba(139, 124, 246, 0.62);
   }
 }
-/* a hairline crown-gold-free accent seam down the leading edge */
+/* a hairline cheer-gold-free accent seam down the leading edge */
 .lotLead::before {
   content: "";
   position: absolute;
@@ -154,6 +154,33 @@
 .lotLead .lotSum {
   font-size: 22px;
 }
+/* "Back this lot" — a quiet secondary next to the money, never competing with the bid button. */
+.chipBtn {
+  margin-top: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.chipBtn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text-1);
+}
+.chipBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.chipBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-neutral);
+}
 .lotMeta {
   font-size: 12px;
   color: var(--text-3);
@@ -170,41 +197,57 @@
 }
 
 /* The money strip above the bid form: the top bid, big and bright, and the clock beside it. */
+/* The headline pair: the money and the clock read as ONE object, so they share a baseline and a
+   type scale. They used to be 30px/800 against 20px/700 with the labels stacked underneath at
+   different heights — two unrelated widgets sharing a box. */
 .leadBar {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 16px 20px;
+  align-items: stretch;
+  gap: 0;
   border-radius: var(--r-3);
-  background:
-    radial-gradient(120% 140% at 0% 0%, rgba(192, 183, 250, 0.14), transparent 60%),
-    var(--bg-1);
-  border: 1px solid var(--line-strong);
+  /* Flat. A purple wash bleeding from the top-left plus a darkened right half meant light arriving
+     from two directions at once — the panel read as smudged rather than lit. The figures carry the
+     emphasis on their own; the surface just holds them, matching the inputs below. */
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  overflow: hidden;
 }
 .leadNum {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 18px 20px;
 }
 .leadAmt {
-  font-size: 30px;
-  font-weight: 800;
+  font-size: 32px;
+  font-weight: 700;
   line-height: 1;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
   color: var(--text-1);
+  font-variant-numeric: tabular-nums;
 }
+/* A hairline instead of a gap: the clock is the same object's second half, not a neighbour. */
 .leadClock {
+  /* Fixed width so the clock doesn't resize the money half as the digits tick down. */
+  flex: 0 0 34%;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 18px 20px;
+  border-left: 1px solid var(--line);
 }
 .leadTime {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--text-1);
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--text-2);
   line-height: 1;
+  letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums;
 }
 .leadClosed {
   font-size: 15px;
@@ -212,9 +255,9 @@
   color: var(--text-3);
 }
 .leadLabel {
-  font-size: 12px;
+  font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   color: var(--text-3);
 }
 
@@ -287,4 +330,34 @@
   .bidRow {
     flex-wrap: wrap;
   }
+}
+
+/* The bid row: a narrow amount field and the action, as one control pair. The step box used to sit
+   flush against a full-width button, so a small input and a large primary button shared an edge and
+   read as one broken widget. Aligned heights and a real gap fix that. */
+.bidRow {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+.bidRow > .field {
+  margin: 0;
+  /* Just wide enough for "+$" and a few digits. It was sized like a second button, which made the
+     pair read as two competing actions instead of one amount and one action. */
+  flex: 0 0 92px;
+}
+.bidRow input {
+  height: 56px;
+}
+.bidAction {
+  flex: 1;
+  height: 56px;
+}
+
+/* Network errors belong under the row, not wedged between the field and the button — inserting an
+   error there pushed the button onto its own line and broke the pairing. */
+.bidError {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--error);
 }

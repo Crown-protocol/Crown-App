@@ -18,6 +18,8 @@ import {
   type FundraiserStatus,
 } from "@/lib/data/fundraiser";
 import type { Profile } from "@/lib/data/types";
+import { useConfirm } from "@/components/useConfirm";
+import { dangerCopy } from "@/lib/data/dangerous";
 import styles from "./GameOverview.module.css";
 
 // The streamer's live view of the running fundraiser — the accept/deliver decisions the settings
@@ -26,6 +28,8 @@ import styles from "./GameOverview.module.css";
 // shared mock store (lib/data/fundraiser.ts).
 export function FundraiserOverview({ profile, scope }: { profile: Profile; scope?: string }) {
   const handle = scope ?? profile.handle;
+  // Accepting, delivering and refunding all decide what happens to other people's money.
+  const confirm = useConfirm();
   const fr = withFundraiserDefaults(profile); // the page copy (the promise); the numbers come from cfg
   // This collection's rules — including its own goal, which every run sets for itself.
   const cfg = fundraiserRules(profile, handle);
@@ -100,7 +104,12 @@ export function FundraiserOverview({ profile, scope }: { profile: Profile; scope
         {status.state === "collecting" && (
           <>
             <div className={styles.statusRow}>
-              <button type="button" className="btn" disabled={!canAccept} onClick={() => set({ state: "delivering", accepted: raised })}>
+              <button
+                type="button"
+                className="btn"
+                disabled={!canAccept}
+                onClick={() => confirm(dangerCopy.acceptRaise(raised), () => set({ state: "delivering", accepted: raised }))}
+              >
                 Accept {usd(raised)}
               </button>
             </div>
@@ -119,10 +128,18 @@ export function FundraiserOverview({ profile, scope }: { profile: Profile; scope
               Delivering — accepted {usd(status.accepted)}
             </span>
             <div className={styles.statusRow}>
-              <button type="button" className="btn" onClick={() => set({ state: "delivered" })}>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => confirm(dangerCopy.markDelivered(status.accepted ?? raised), () => set({ state: "delivered" }))}
+              >
                 Mark delivered
               </button>
-              <button type="button" className="btn-outline" onClick={() => set({ state: "refunded" })}>
+              <button
+                type="button"
+                className="btn-outline"
+                onClick={() => confirm(dangerCopy.refundRaise(status.accepted ?? raised), () => set({ state: "refunded" }), { danger: true })}
+              >
                 Refund everyone
               </button>
             </div>
@@ -177,6 +194,7 @@ export function FundraiserOverview({ profile, scope }: { profile: Profile; scope
         <b>Fixed by the contract, not a setting here:</b> deliver and the pot is yours; miss it — even with the goal met
         — and every backer is refunded exactly what they put in.
       </div>
+      {confirm.dialog}
     </div>
   );
 }

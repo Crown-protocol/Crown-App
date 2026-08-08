@@ -1,5 +1,5 @@
-/* Ported one-to-one from bobounty's CropModal; the source's gold accent maps to Crown's --accent
-   (purple), and the confirm button uses Crown's accent gradient instead of the source's green, to
+/* Ported one-to-one from bobounty's CropModal; the source's gold accent maps to Cheer's --accent
+   (purple), and the confirm button uses Cheer's accent gradient instead of the source's green, to
    stay inside the one-accent charter. Layout, sizes and behaviour are otherwise identical. */
 .overlay {
   position: fixed;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { safeId } from "@/lib/id";
 import QRCode from "qrcode";
 import { QrIcon, CopyIcon, PhoneIcon, DesktopIcon, DragHandleIcon, ChevronDown, SocialIcon, SOCIAL_LABEL, SOCIAL_KINDS, SOCIAL_BRAND } from "@/components/icons";
 import { LivePreview } from "@/components/LivePreview";
@@ -22,10 +23,10 @@ export function PageBuilder({ profile, onSave }: { profile: Profile; onSave: (p:
   const [openWidget, setOpenWidget] = useState<PageWidget["kind"] | null>(null);
 
   // Real, working URL on whatever host the app runs on (localhost in dev, the real domain in prod) —
-  // not a hardcoded "crown.tv". Resolved after mount to avoid an SSR/client hydration mismatch.
+  // not a hardcoded "cheer.tv". Resolved after mount to avoid an SSR/client hydration mismatch.
   const [origin, setOrigin] = useState("");
   useEffect(() => setOrigin(window.location.origin), []);
-  const link = `${origin || "https://crown.tv"}/@${p.handle}`;
+  const link = `${origin || "https://cheer.tv"}/@${p.handle}`;
 
   useEffect(() => {
     if (!qrOpen) return;
@@ -47,7 +48,7 @@ export function PageBuilder({ profile, onSave }: { profile: Profile; onSave: (p:
   }
 
   function addSocial() {
-    patch({ socials: [...p.socials, { kind: "twitch", url: "", id: crypto.randomUUID() }] });
+    patch({ socials: [...p.socials, { kind: "twitch", url: "", id: safeId() }] });
   }
 
   function updateSocial(i: number, next: Partial<Social>) {
@@ -274,7 +275,7 @@ export function PageBuilder({ profile, onSave }: { profile: Profile; onSave: (p:
                 {qrDataUrl ? (
                   <>
                     <img src={qrDataUrl} alt={`QR code for ${link}`} width={200} height={200} />
-                    <a className={styles.qrDownload} href={qrDataUrl} download="crown-qr.png">
+                    <a className={styles.qrDownload} href={qrDataUrl} download="cheer-qr.png">
                       Download PNG
                     </a>
                   </>

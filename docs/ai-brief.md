@@ -1,10 +1,10 @@
-# Crown — бриф для ИИ-ассистента
+# Cheer — бриф для ИИ-ассистента
 
 Этот файл — вводная для любого ИИ, подключающегося к проекту. Актуален на июль 2026.
 
 ## Что это
 
-**Crown** — dApp донатов для контент-мейкеров (стримеров): страница доната в долларах (USDC) + мини-игры, которыми управляют зрители. Ядро продукта: «Donations you can play». Деньги идут напрямую на кошелёк мейкера (Crown их не держит), игровые деньги лежат в эскроу до вердикта. $1 доната = 1 очко репутации зрителя у ЭТОГО мейкера (репутация не глобальная).
+**Cheer** — dApp донатов для контент-мейкеров (стримеров): страница доната в долларах (USDC) + мини-игры, которыми управляют зрители. Ядро продукта: «Donations you can play». Деньги идут напрямую на кошелёк мейкера (Cheer их не держит), игровые деньги лежат в эскроу до вердикта. $1 доната = 1 очко репутации зрителя у ЭТОГО мейкера (репутация не глобальная).
 
 Терминология: **«content maker»**, не «streamer» (в видимых текстах). Валюта в UI — доллары.
 
@@ -12,8 +12,8 @@
 
 - **Next.js 14 App Router**, TypeScript, почти всё — client components ("use client").
 - Стили: CSS Modules + токены в `app/globals.css` (`--bg-0..3`, `--text-1..3`, `--accent`, `--accent-grad`, радиусы `--r-*`, анимации `--dur-*`).
-- **БД**: libsql/SQLite — `data/crown.db` (в git НЕ входит). Схема и миграции: `lib/server/db.ts` (append-only массив MIGRATIONS, версия в meta.schema_version).
-- **Ончейн**: Solana **devnet**. Сплиттер донатов = Crown-Core, эскроу-фактори игр = Crown-Factory (репы организации). PDA crown-salt, ed25519-вердикты. Репутация зеркалится с ICP-канистры (crown-index), пока принципал не настроен — наш мирror `/api/reputation`.
+- **БД**: libsql/SQLite — `data/cheer.db` (в git НЕ входит). Схема и миграции: `lib/server/db.ts` (append-only массив MIGRATIONS, версия в meta.schema_version).
+- **Ончейн**: Solana **devnet**. Сплиттер донатов = Cheer-Core, эскроу-фактори игр = Cheer-Factory (репы организации). PDA cheer-salt, ed25519-вердикты. Репутация зеркалится с ICP-канистры (cheer-index), пока принципал не настроен — наш мирror `/api/reputation`.
 - EVM-код удалён (июль 2026), wagmi нет, адреса — base58 Solana.
 - Telegram-бот: `app/api/telegram/*`, локальный стор `bot/`.
 
@@ -21,19 +21,19 @@
 
 `DataProvider` (`lib/data/DataProvider.tsx`): `mode: "mock" | "chain"`.
 - Дефолт задаёт `NEXT_PUBLIC_DEFAULT_MODE` — **`.env.production` коммитится с `chain`** (прод никогда не откатится в мок молча). Локально `.env.local` тоже chain.
-- Личный выбор посетителя: `localStorage.crown-mode` — всегда старше дефолта.
+- Личный выбор посетителя: `localStorage.cheer-mode` — всегда старше дефолта.
 - mock: донат = симуляция 1.2с, фид/репутация в памяти. chain: реальная транзакция через сплиттер, слова доната — `/api/donations/intent`, индексер декорирует Settled-события.
 
 ## Модель данных и синк
 
 **Профили** (двухслойная):
-- Кабинетная копия: `localStorage.crown-profile` (`ProfileProvider`).
+- Кабинетная копия: `localStorage.cheer-profile` (`ProfileProvider`).
 - Серверная: `/api/profiles` (таблица profiles, полный JSON в `data`). Публичные страницы резолвят с сервера.
-- **Владение**: кошелёк = логин, паролей нет. Реальный payout-адрес ⇒ запись только с ed25519-подписью (`lib/server/auth.ts`, заголовки x-crown-pubkey/ts/signature, окно ±10 мин). Демо-страницы (адрес пустой или `CrownDemo…`) пишутся без подписи, но никогда не могут тронуть чужую владетельную страницу. Демо-хендлы из `MOCK_STREAMERS` (nova) **зарезервированы** (409).
+- **Владение**: кошелёк = логин, паролей нет. Реальный payout-адрес ⇒ запись только с ed25519-подписью (`lib/server/auth.ts`, заголовки x-cheer-pubkey/ts/signature, окно ±10 мин). Демо-страницы (адрес пустой или `CheerDemo…`) пишутся без подписи, но никогда не могут тронуть чужую владетельную страницу. Демо-хендлы из `MOCK_STREAMERS` (nova) **зарезервированы** (409).
 - Резолв на публичных страницах игр: `lib/data/usePublicProfile.ts` — свой localStorage → демо-сид → GET `/api/profiles/[handle]` → заглушка.
 
 **Игровые состояния** (общие для всех браузеров):
-- Клиентские сторы остаются синхронными читателями localStorage: `lib/data/tasks.ts`, `roulette.ts`, `fundraiser.ts`, `auction.ts` (ключи вида `crown-tasks:<scope>` и т.п., scope = handle или сессионный scope).
+- Клиентские сторы остаются синхронными читателями localStorage: `lib/data/tasks.ts`, `roulette.ts`, `fundraiser.ts`, `auction.ts` (ключи вида `cheer-tasks:<scope>` и т.п., scope = handle или сессионный scope).
 - Поверх — **синк**: `lib/data/gameSync.ts` (клиент) + `lib/server/gameState.ts` + `/api/gamestate` (сервер, таблица game_state (scope,k)→v).
 - Записи идут **операциями**, не блобами: `append` (задание/лот, дедуп по id, `seed` инициализирует сервер сидами), `suggest` (дельта пула рулетки по title — одновременные поддержки суммируются), `entry` (топап лота), `add` (дельта сбора), `replace` (только авторитетные действия стримера: принять/вернуть/новый раунд/статусы/голоса).
 - Страницы монтируют `useGameSync(scope)` — pull на маунте + полл каждые 3с, nonce в deps эффектов чтения. Подключено: 4 публичные страницы игр + 4 Overview кабинета.
@@ -46,7 +46,7 @@
 
 1. **Task for donation** — зритель ставит платное задание (эскроу): pending→active→done/refunded. Конфиг: minAmount, deadlineHours, requireApproval, maxActiveTasks.
 2. **Roulette** — зрители предлагают/поддерживают игры донатами, доля пула = шанс; спин по таймеру или «Spin now» из кабинета. Режим rank: предлагать бесплатно с тира N.
-3. **Fundraiser** — сбор на цель, корона-бейдж (`FundraiserFill`/`CrownBadge`) заливается снизу вверх; вердикт: доставил → деньги его, нет → возврат всем.
+3. **Fundraiser** — сбор на цель, корона-бейдж (`FundraiserFill`/`CheerBadge`) заливается снизу вверх; вердикт: доставил → деньги его, нет → возврат всем.
 4. **Auction** — лоты-условия (текст приватен до принятия), богатейший принятый лот побеждает; цепочка bidding→performing→voting→settled/refunded, голосуют держатели репутации.
 
 У каждой: публичная страница `/@handle/<game>` (вкладки GameTabs: форма/список), билдер-панель и Overview в кабинете, OBS-оверлеи (`/overlay/[handle]/[widget]`).
@@ -66,22 +66,22 @@ API: `/api/profiles` (+`/[handle]`), `/api/gamestate`, `/api/feed`, `/api/reputa
 - Подсказки — максимум одна короткая строка на секцию (владелец ненавидит многословие).
 - Никаких ссылок на несуществующие страницы, никаких выдуманных метрик.
 - Экраны с сайдбаром: панель слева, колонка контента по центру (`margin: 0 auto`).
-- Бренд-знак: `CrownBadge` — шестиугольник с короной-вырезом, режим `outline` для «пустого сосуда».
+- Бренд-знак: `CheerBadge` — шестиугольник с короной-вырезом, режим `outline` для «пустого сосуда».
 
 ## Верификация (гонять после изменений)
 
 - `npx tsc --noEmit` — 0 ошибок обязательно.
 - `node scripts/verify-db.mjs` — 20 проверок пайплайна БД/подписей (против прод-сборки 4 помечаются SKIPPED — тест-вставка индексера dev-only; НЕ красный).
 - `node scripts/verify-chain.mjs` — devnet: дискриминаторы, PDA, программы, USDC-минт.
-- E2E — Playwright (`playwright-core` + `/snap/bin/chromium`, ставить в scratchpad/tmp). Паттерны: чистый контекст = зритель без localStorage; `crown-mode=mock` через addInitScript для мок-флоу; ввод через `page.click` + `keyboard.type` (page.fill не всегда дружит с React до гидрации).
+- E2E — Playwright (`playwright-core` + `/snap/bin/chromium`, ставить в scratchpad/tmp). Паттерны: чистый контекст = зритель без localStorage; `cheer-mode=mock` через addInitScript для мок-флоу; ввод через `page.click` + `keyboard.type` (page.fill не всегда дружит с React до гидрации).
 
 ## Правила работы в этом репо
 
 - **Один сервер, только localhost:3000.** Держателя порта искать `ss -ltnp | grep ':3000'`. Прод-сборки — в изолированный dist: `NEXT_DIST_DIR=".next-release" npx next build && NEXT_DIST_DIR=".next-release" npx next start -p 3000`.
 - **Параллельные ИИ-агенты** правят это же дерево одновременно. Перед сборкой поллить tsc; чужие красные строки чинить минимально и только если блокируют; свои изменения перепроверять после «Note: file was modified».
-- Git: ремоут `crownnew` = **github.com/Crown-protocol/Crown-App** (основной), `origin` = AxiomAI2/Ccrown (старый). Ветка main.
+- Git: ремоут `cheernew` = **github.com/Cheer-protocol/Cheer-App** (основной), `origin` = AxiomAI2/Ccheer (старый). Ветка main.
 - В git НЕ входят: `data/` (БД), `.env.local`, `.next-*`, `bot/.env`, `bot/data`.
-- Контакт проекта: **crowndonate@proton.me** (футер лендинга).
+- Контакт проекта: **cheerdonate@proton.me** (футер лендинга).
 
 ## Известные ограничения (честные)
 

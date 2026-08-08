@@ -33,11 +33,11 @@ const KIND_TITLE: Record<MetaKind, string> = {
 
 // Since profile bios are gone, this generated line IS the share description — one sentence per surface.
 const KIND_DESC: Record<MetaKind, (n: string) => string> = {
-  page: (n) => `Support ${n} on Crown — donations land straight in their wallet, and every dollar builds your reputation with them.`,
-  task: (n) => `Set ${n} a paid task on Crown. They do it, or you're refunded automatically.`,
-  roulette: (n) => `Back what ${n} plays next — donate toward a pick and the wheel decides. On Crown.`,
-  fundraiser: (n) => `Chip in to ${n}'s goal on Crown — refunded in full if it isn't delivered.`,
-  auction: (n) => `Bid for ${n}'s time on Crown — outbid the board; the winner pays only once it's delivered.`,
+  page: (n) => `Support ${n} on Cheer — donations land straight in their wallet, and every dollar builds your reputation with them.`,
+  task: (n) => `Set ${n} a paid task on Cheer. They do it, or you're refunded automatically.`,
+  roulette: (n) => `Back what ${n} plays next — donate toward a pick and the wheel decides. On Cheer.`,
+  fundraiser: (n) => `Chip in to ${n}'s goal on Cheer — refunded in full if it isn't delivered.`,
+  auction: (n) => `Bid for ${n}'s time on Cheer — outbid the board; the winner pays only once it's delivered.`,
 };
 
 // One page's worth of share metadata: title, the generated description, canonical URL, and the
@@ -53,11 +53,11 @@ export function makerMetadata(maker: PublicMaker, kind: MetaKind, pathSuffix = "
     alternates: { canonical: path },
     openGraph: {
       type: "website",
-      siteName: "Crown",
+      siteName: "Cheer",
       url: path,
       title,
       description,
-      images: [{ url: ogUrl, width: 1200, height: 630, alt: `${maker.name} on Crown` }],
+      images: [{ url: ogUrl, width: 1200, height: 630, alt: `${maker.name} on Cheer` }],
     },
     twitter: {
       card: "summary_large_image",

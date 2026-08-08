@@ -29,7 +29,7 @@ const warned = new Set<string>();
 async function checkTaskDeadlines(): Promise<void> {
   const c = await db();
   const rows = await c.execute({
-    sql: `SELECT scope, v FROM game_state WHERE k = 'crown-tasks'`,
+    sql: `SELECT scope, v FROM game_state WHERE k = 'cheer-tasks'`,
   });
   const s = await readStore();
 
@@ -119,7 +119,7 @@ export function startTelegramScheduler(): void {
       await checkTaskDeadlines();
       await sendMonthlyDigests();
     } catch (e) {
-      console.error("[crown] telegram scheduler:", e instanceof Error ? e.message : e);
+      console.error("[cheer] telegram scheduler:", e instanceof Error ? e.message : e);
     }
   };
   void tick();

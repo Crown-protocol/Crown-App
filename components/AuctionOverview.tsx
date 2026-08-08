@@ -6,6 +6,8 @@ import { useGameChain } from "@/lib/chain/useGameChain";
 import { auctionLotAction, auctionAction } from "@/lib/chain/gameFlows";
 import Link from "next/link";
 import { BarList, StatTile } from "@/components/ops";
+import { useConfirm } from "@/components/useConfirm";
+import { dangerCopy } from "@/lib/data/dangerous";
 import { usd } from "@/lib/money";
 import { auctionRules } from "@/lib/data/gameConfig";
 import {
@@ -47,6 +49,8 @@ export function AuctionOverview({ profile, scope, shareQuery = "" }: { profile: 
   const handle = scope ?? profile.handle;
   // Shared game state: pulls the server copy into localStorage; the 1s tick below re-reads it.
   useGameSync(handle);
+  // Accepting, returning, closing and cancelling all move other people's money and can't be undone.
+  const confirm = useConfirm();
   // A hook — must run every render in the same order, so it lives ABOVE the `if (!meta) return null`
   // early return below (calling it after that return changed the hook order the moment a round
   // loaded, which React treats as a crash).
@@ -157,10 +161,28 @@ export function AuctionOverview({ profile, scope, shareQuery = "" }: { profile: 
                   </div>
                   <div style={{ fontSize: 15 }}>“{l.text}”</div>
                   <div style={{ display: "flex", gap: 10 }}>
-                    <button className="btn" type="button" onClick={() => { chainLot(l, "accept"); setLots(setLotState(handle, l.id, "accepted")); }}>
+                    <button
+                      className="btn"
+                      type="button"
+                      onClick={() =>
+                        confirm(dangerCopy.acceptLot(lotSum(l)), () => {
+                          chainLot(l, "accept");
+                          setLots(setLotState(handle, l.id, "accepted"));
+                        })
+                      }
+                    >
                       Accept
                     </button>
-                    <button className="btn-outline" type="button" onClick={() => { chainLot(l, "return-lot"); setLots(setLotState(handle, l.id, "returned")); }}>
+                    <button
+                      className="btn-outline"
+                      type="button"
+                      onClick={() =>
+                        confirm(dangerCopy.returnLot(lotSum(l)), () => {
+                          chainLot(l, "return-lot");
+                          setLots(setLotState(handle, l.id, "returned"));
+                        })
+                      }
+                    >
                       Turn down
                     </button>
                   </div>
@@ -201,10 +223,19 @@ export function AuctionOverview({ profile, scope, shareQuery = "" }: { profile: 
             )}
 
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button className="btn" type="button" disabled={board.length === 0} onClick={onCloseBidding}>
+              <button
+                className="btn"
+                type="button"
+                disabled={board.length === 0}
+                onClick={() => confirm(dangerCopy.closeBidding(totals.top ? lotSum(totals.top) : 0), onCloseBidding)}
+              >
                 Close the bidding now
               </button>
-              <button className="btn-outline" type="button" onClick={onCancel}>
+              <button
+                className="btn-outline"
+                type="button"
+                onClick={() => confirm(dangerCopy.cancelAuction(totals.pot), onCancel, { danger: true })}
+              >
                 Cancel the auction
               </button>
             </div>
@@ -299,6 +330,7 @@ export function AuctionOverview({ profile, scope, shareQuery = "" }: { profile: 
           <div className="footnote">A new auction clears the board and restarts the clock. This one is recorded in History.</div>
         </div>
       )}
+      {confirm.dialog}
     </div>
   );
 }

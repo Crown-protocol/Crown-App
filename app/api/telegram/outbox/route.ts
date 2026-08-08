@@ -8,13 +8,13 @@ import { readStore, writeStore, touchBotSeen } from "@/lib/server/telegram-store
 // Only an acked row leaves the queue, so a bot crash or a Telegram 429 costs a retry, not the
 // message. See lib/server/telegram-outbox.ts for the state machine.
 //
-// FAIL-CLOSED: without CROWN_BOT_SECRET configured the pipe is disabled entirely. It used to be
+// FAIL-CLOSED: without CHEER_BOT_SECRET configured the pipe is disabled entirely. It used to be
 // "check the secret only if one is set", which silently made this endpoint public whenever the env
 // var didn't reach the process — letting anyone read every queued card and destroy the queue.
-const BOT_SECRET = process.env.CROWN_BOT_SECRET;
+const BOT_SECRET = process.env.CHEER_BOT_SECRET;
 
 function unauthorized(req: Request): boolean {
-  return !BOT_SECRET || req.headers.get("x-crown-bot") !== BOT_SECRET;
+  return !BOT_SECRET || req.headers.get("x-cheer-bot") !== BOT_SECRET;
 }
 
 export async function GET(req: Request) {

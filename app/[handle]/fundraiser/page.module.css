@@ -1,4 +1,4 @@
-/* Public fundraiser page — one centered column, the crown as the central figure.
+/* Public fundraiser page — one centered column, the cheer as the central figure.
    Backdrop comes from the streamer's fundraiser design; accents stay on-charter. */
 .page {
   min-height: 100vh;
@@ -197,4 +197,45 @@
   .footer {
     margin-top: 18px;
   }
+}
+
+/* Rules disclosure. Closed by default: the goal and the chip-in are what this page is for, and a
+   wall of terms above them would bury both. Open, it explains what escrow does with the money. */
+.rulesBlock {
+  width: 100%;
+  margin-top: 4px;
+}
+.rulesToggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 13px 15px;
+  border-radius: var(--r-2);
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.rulesToggle:hover {
+  border-color: var(--line-strong);
+  color: var(--text-1);
+}
+.rulesChev {
+  flex: none;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--text-3);
+  transition: transform var(--dur-1) var(--ease);
+}
+.rulesChevOpen {
+  transform: rotate(90deg);
+}
+.rulesBody {
+  padding: 16px 2px 2px;
 }

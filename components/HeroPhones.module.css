@@ -160,18 +160,20 @@
   padding: 22px 24px 0;
   gap: 14px;
 }
-/* The left phone's right edge is tucked ~40px behind the center one, so its GEOMETRIC centre sits
-   under the overlap — content centred on the shell's axis (symmetric padding) reads shifted, because
-   ~40px of screen on the right is hidden and only the left part is seen. Centre on the VISIBLE zone
-   instead: shift the column left by ~half the hidden width (extra right padding, less left) so the
-   card sits optically centred in the part of the phone you can actually see. */
+/* Each side phone tucks ~60px of its inner edge behind the centre one, so a screen padded evenly
+   would put its content half-hidden. Pull the column out of the overlap — extra padding on the
+   covered side — and the card lands centred inside the part of the phone you can actually see, with
+   its own contents centred on it (see .taskCard / .frCard). */
+/* Measured, not guessed: the phone screen is 285px and ~53px of its inner edge sits under the centre
+   phone, leaving a 233px visible strip. With 24px on the open side, 76px on the covered side puts the
+   card's centre at 117px — exactly half of 233. */
 .gameLeft {
-  padding-left: 22px;
-  padding-right: 62px;
+  padding-left: 24px;
+  padding-right: 76px;
 }
 .gameRight {
-  padding-left: 72px;
-  padding-right: 18px;
+  padding-left: 76px;
+  padding-right: 24px;
 }
 .eyebrow {
   font-size: 11px;
@@ -213,6 +215,12 @@
 }
 
 /* ---- LEFT: Task for donation ---- */
+/* Centred like the roulette phone beside it: the eyebrow, the quote, the amount and the escrow line
+   all sit on the card's own axis. Left-aligned text inside a centred card read as a mistake next to
+   the centre phone, which centres everything. */
+.left .eyebrow {
+  text-align: center;
+}
 .taskCard {
   background: var(--bg-0);
   border: 1px solid var(--line-strong);
@@ -220,12 +228,14 @@
   padding: 14px;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 12px;
 }
 .taskQuote {
   font-size: 14px;
   line-height: 1.4;
   color: var(--text-1);
+  text-align: center;
 }
 .taskMeta {
   display: flex;
@@ -323,17 +333,19 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ---- RIGHT: Fundraiser, dark (crown fills bottom-up, like the real page) ---- */
+/* ---- RIGHT: Fundraiser, dark (cheer fills bottom-up, like the real page) ---- */
 /* The fundraiser is the one CENTER-composed phone, so it must not inherit .gameRight's
    asymmetric 72/18 padding (that's for the LEFT-aligned side phones, whose text needs pushing
    off the occluded inner edge). Centered content in an asymmetric box floats off-axis and reads
    lopsided. Symmetric padding puts the column on the phone's true centre; its widest element
-   (the crown, ~154px) still clears the ~52px overlap, and the CTA sits below the center phone. */
+   (the cheer, ~154px) still clears the ~52px overlap, and the CTA sits below the center phone. */
 .frGame {
   align-items: center;
   text-align: center;
-  padding-left: 20px;
-  padding-right: 20px;
+  /* Mirror of .gameLeft: this phone's LEFT edge is the one tucked behind the centre, so the wide
+     padding goes there and the content lands centred in the visible strip. */
+  padding-left: 76px;
+  padding-right: 24px;
 }
 .frPledge {
   font-size: 15px;
@@ -342,13 +354,13 @@
   color: var(--text-1);
   letter-spacing: -0.01em;
 }
-/* The hero fundraiser figure (HeroFundraiserFill): two stacked crown badges (empty outline + the
+/* The hero fundraiser figure (HeroFundraiserFill): two stacked cheer badges (empty outline + the
    filled mark clipped to the collected fraction) plus a waterline at the fill level. */
 .frFill {
   position: relative;
   display: block;
   margin: 4px 0 2px;
-  /* a soft accent pool under the crown so it reads as a lit trophy, not a flat grey shape */
+  /* a soft accent pool under the cheer so it reads as a lit trophy, not a flat grey shape */
   filter: drop-shadow(0 0 22px rgba(139, 124, 246, 0.28)) drop-shadow(0 8px 18px rgba(0, 0, 0, 0.4));
 }
 .frFillLayer {

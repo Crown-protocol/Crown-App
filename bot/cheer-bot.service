@@ -1,34 +1,36 @@
 [Unit]
-# Crown Telegram bot. Runs alongside the site, not inside it: it long-polls Telegram and drains the
+# Cheer Telegram bot. Runs alongside the site, not inside it: it long-polls Telegram and drains the
 # site's delivery queue. Install as a USER unit (no root needed):
 #
-#   cp bot/crown-bot.service ~/.config/systemd/user/
+#   cp bot/cheer-bot.service ~/.config/systemd/user/
 #   systemctl --user daemon-reload
-#   systemctl --user enable --now crown-bot
-#   systemctl --user status crown-bot     # is it alive
-#   journalctl --user -u crown-bot -f     # what is it doing
+#   systemctl --user enable --now cheer-bot
+#   systemctl --user status cheer-bot     # is it alive
+#   journalctl --user -u cheer-bot -f     # what is it doing
 #
-# The bot refuses to start without CROWN_BOT_SECRET (the server is fail-closed), and refuses to run
+# The bot refuses to start without CHEER_BOT_SECRET (the server is fail-closed), and refuses to run
 # a second copy while another holds the lease — so an accidental double start stops itself instead
 # of double-delivering every notification.
-Description=Crown Telegram bot
+Description=Cheer Telegram bot
 After=network-online.target
+# Stop retrying after 5 failures in 60s. These live in [Unit]: in [Service] systemd ignores them,
+# which is why a port clash produced thousands of restart attempts instead of a clean failure.
+StartLimitIntervalSec=60
+StartLimitBurst=5
 Wants=network-online.target
 
 [Service]
 Type=simple
 WorkingDirectory=%h/Crown-App
-# --env-file loads bot/.env (token + shared secret); CROWN_SITE defaults to localhost:3000.
+# --env-file loads bot/.env (token + shared secret); CHEER_SITE defaults to localhost:3000.
 # Full path: node lives in nvm's version directory, which systemd does not have on its PATH.
 ExecStart=/home/kiper/.nvm/versions/node/v20.20.2/bin/node --env-file=bot/.env bot/bot.mjs
 Environment=PATH=/home/kiper/.nvm/versions/node/v20.20.2/bin:/usr/local/bin:/usr/bin:/bin
 # A crash must come back on its own — that was the whole problem: nothing restarted the bot, and
 # notifications simply stopped with no symptom anywhere.
 Restart=always
-RestartSec=3
+RestartSec=5
 # Don't hammer Telegram if it's crash-looping on a bad config.
-StartLimitIntervalSec=60
-StartLimitBurst=5
 StandardOutput=journal
 StandardError=journal
 

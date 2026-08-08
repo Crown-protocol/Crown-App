@@ -3,9 +3,9 @@ import path from "path";
 import fs from "fs";
 
 // ──────────────────────────────────────────────────────────────────
-// The Crown database: one SQLite file, embedded in the app (libsql —
+// The Cheer database: one SQLite file, embedded in the app (libsql —
 // prebuilt binaries, no compile step, the .db is a plain SQLite file any
-// tool can open). This is the "crown-app server" side of the plan: the
+// tool can open). This is the "cheer-app server" side of the plan: the
 // mirror of on-chain money (feed, reputation) plus everything the chain
 // deliberately does NOT store — profiles, game texts (canisters keep
 // hashes only), telegram links, notifications.
@@ -15,8 +15,8 @@ import fs from "fs";
 // message/name to a signature (intent), never invent a donation.
 // ──────────────────────────────────────────────────────────────────
 
-const DB_DIR = process.env.CROWN_DB_DIR || path.join(process.cwd(), "data");
-const DB_FILE = path.join(DB_DIR, "crown.db");
+const DB_DIR = process.env.CHEER_DB_DIR || path.join(process.cwd(), "data");
+const DB_FILE = path.join(DB_DIR, "cheer.db");
 
 // Schema versions, applied in order inside one transaction each. Append-only:
 // released versions never change — add v2, v3… for future shape changes.
@@ -40,8 +40,11 @@ const MIGRATIONS: string[][] = [
     // The mirror of the splitter's Settled events (the open book, our copy).
     // payer — the wallet the book credits (escrow re-attributed to its donor
     // when the escrow account is still readable); raw_payer — as emitted.
+    // Keyed per Settled EVENT, not per transaction: one tx can pay several recipients, and each
+    // payment is its own donation. See the v5 migration for the history.
     `CREATE TABLE IF NOT EXISTS donations (
-      signature TEXT PRIMARY KEY,
+      signature TEXT NOT NULL,
+      ev_index INTEGER NOT NULL DEFAULT 0,
       slot INTEGER NOT NULL,
       block_time INTEGER,
       payer TEXT NOT NULL,
@@ -51,7 +54,8 @@ const MIGRATIONS: string[][] = [
       source TEXT NOT NULL DEFAULT 'direct',
       donor_name TEXT,
       message TEXT,
-      created_at INTEGER NOT NULL
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (signature, ev_index)
     )`,
     `CREATE INDEX IF NOT EXISTS idx_don_streamer_time ON donations(streamer, block_time DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_don_payer ON donations(payer)`,
@@ -69,7 +73,7 @@ const MIGRATIONS: string[][] = [
     )`,
 
     // Folded (payer, streamer) → Σ gross, maintained transactionally with
-    // donation inserts. Same semantics as crown-index's book; the canister
+    // donation inserts. Same semantics as cheer-index's book; the canister
     // stays the authority when it ships — this mirror answers instantly.
     `CREATE TABLE IF NOT EXISTS reputation (
       payer TEXT NOT NULL,
@@ -166,6 +170,48 @@ const MIGRATIONS: string[][] = [
       updated_at INTEGER NOT NULL
     )`,
   ],
+  // v5 — one donation row per Settled EVENT, not per transaction. The splitter can emit several
+  // Settled events in a single tx (paying more than one recipient); with `signature` as the whole
+  // primary key, insertDonation saw the signature already stored and silently dropped every event
+  // after the first — those streamers lost both the donation and the reputation. The key is now
+  // (signature, ev_index), so each event is its own row and re-scanning a signature stays
+  // idempotent. SQLite cannot alter a primary key in place, hence the rebuild-and-copy; rows that
+  // already exist become ev_index 0, which is what they always were.
+  [
+    `CREATE TABLE donations_v5 (
+      signature TEXT NOT NULL,
+      ev_index INTEGER NOT NULL DEFAULT 0,
+      slot INTEGER NOT NULL,
+      block_time INTEGER,
+      payer TEXT NOT NULL,
+      raw_payer TEXT NOT NULL,
+      streamer TEXT NOT NULL,
+      gross INTEGER NOT NULL,
+      source TEXT NOT NULL DEFAULT 'direct',
+      donor_name TEXT,
+      message TEXT,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (signature, ev_index)
+    )`,
+    `INSERT INTO donations_v5 (signature, ev_index, slot, block_time, payer, raw_payer, streamer, gross, source, donor_name, message, created_at)
+       SELECT signature, 0, slot, block_time, payer, raw_payer, streamer, gross, source, donor_name, message, created_at FROM donations`,
+    `DROP TABLE donations`,
+    `ALTER TABLE donations_v5 RENAME TO donations`,
+    `CREATE INDEX IF NOT EXISTS idx_don_streamer_time ON donations(streamer, block_time DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_don_payer ON donations(payer)`,
+  ],
+  // v6 — one-time sign-in signatures. A sign-in signature is only fresh for AUTH_WINDOW_SECONDS, but
+  // within that window it could be replayed to mint extra sessions. We record the base64 signature of
+  // each consumed login the moment it mints a session; a second POST with the same bytes is rejected.
+  // `expires_at` (seconds) lets a sweep drop rows once they're stale — a signature past its freshness
+  // window can't be replayed anyway, so the table stays tiny.
+  [
+    `CREATE TABLE IF NOT EXISTS consumed_sigs (
+      sig TEXT PRIMARY KEY,
+      expires_at INTEGER NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_consumed_expires ON consumed_sigs(expires_at)`,
+  ],
 ];
 
 let client: Client | null = null;
@@ -185,6 +231,31 @@ function connect(): Client {
     }
   }
   return client;
+}
+
+// Connection settings, applied once before the first query. SQLite's defaults are tuned for a
+// single-user desktop file, not for a web server where an API route, the indexer and the telegram
+// scheduler all write at the same moment:
+//
+//   journal_mode=WAL  — readers no longer block behind a writer. Under the default `delete` journal
+//                       every page load competed with whatever was mid-write.
+//   busy_timeout=5s   — the default is ZERO: a second concurrent write failed instantly with
+//                       SQLITE_BUSY, which nothing in the app catches, so it reached the person as a
+//                       500. Now a writer waits its turn instead of giving up.
+//   synchronous=NORMAL — the safe pairing with WAL: durable across app crashes, and the daily
+//                       VACUUM INTO snapshot is what covers the machine-loses-power case.
+//   foreign_keys=ON   — enforced rather than assumed.
+//
+// No-op on remote (Turso manages its own storage).
+async function configure(c: Client): Promise<void> {
+  if (process.env.LIBSQL_URL) return;
+  for (const pragma of ["PRAGMA journal_mode = WAL", "PRAGMA busy_timeout = 5000", "PRAGMA synchronous = NORMAL", "PRAGMA foreign_keys = ON"]) {
+    try {
+      await c.execute(pragma);
+    } catch {
+      // A pragma that this build refuses is not worth taking the server down for.
+    }
+  }
 }
 
 // Online backup (safe while writes are in flight): SQLite's VACUUM INTO
@@ -221,7 +292,10 @@ async function migrate(c: Client): Promise<void> {
 // The one entry point: a connected, fully-migrated client.
 export async function db(): Promise<Client> {
   const c = connect();
-  if (!migrated) migrated = migrate(c);
+  // Settings first, then migrations: the migration itself is a write, and it should run under the
+  // same WAL/busy-timeout rules as everything after it. Both are memoised on one promise, so every
+  // caller after the first just awaits it.
+  if (!migrated) migrated = configure(c).then(() => migrate(c));
   await migrated;
   return c;
 }

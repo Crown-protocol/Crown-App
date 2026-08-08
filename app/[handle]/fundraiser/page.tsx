@@ -3,12 +3,15 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePublicProfile } from "@/lib/data/usePublicProfile";
-import { useCrown } from "@/lib/data/DataProvider";
+import { useCheer } from "@/lib/data/DataProvider";
 import { Logo } from "@/components/Logo";
 import { ReputationDelta } from "@/components/ReputationDelta";
+import { useConfirm } from "@/components/useConfirm";
+import { dangerCopy } from "@/lib/data/dangerous";
 import { DonateTopBar } from "@/components/DonateTopBar";
 import { Mono } from "@/components/Mono";
 import { FundraiserFill } from "@/components/FundraiserFill";
+import { GameRules, fundraiserLines } from "@/components/games/GameRules";
 import { SocialIcon, SOCIAL_LABEL, CopyIcon } from "@/components/icons";
 import { normalizeSocialLink } from "@/lib/data/social-links";
 import { usd } from "@/lib/money";
@@ -17,7 +20,7 @@ import { withFundraiserDefaults, readCollected, addCollected, readStatus, type F
 import { useGameChain } from "@/lib/chain/useGameChain";
 import { fundingChipIn } from "@/lib/chain/gameFlows";
 import { resolvePublicSession, pullSessions } from "@/lib/data/gameSessions";
-import { useGameSync } from "@/lib/data/gameSync";
+import { useGameSyncState } from "@/lib/data/gameSync";
 import { backgroundStyle, backgroundInk } from "@/lib/data/pagebuilder";
 import { useIsWide } from "@/lib/data/useIsWide";
 import styles from "./page.module.css";
@@ -25,15 +28,15 @@ import styles from "./page.module.css";
 type SendState = "idle" | "sending" | "done";
 
 // The public fundraiser page — what a viewer opens from the streamer's link or QR. The content
-// maker is resolved by handle from the Crown DB (usePublicProfile), so the page renders for any
-// visitor; chip-ins accumulate in localStorage (the mock backend) so the crown fills up when you
+// maker is resolved by handle from the Cheer DB (usePublicProfile), so the page renders for any
+// visitor; chip-ins accumulate in localStorage (the mock backend) so the cheer fills up when you
 // try it, until the indexer owns that total.
 export default function FundraiserPage({ params }: { params: { handle: string } }) {
   const handle = decodeURIComponent(params.handle).replace(/^@/, "");
-  // Resolve the content maker by handle from the Crown DB, so a viewer sees this page in any
+  // Resolve the content maker by handle from the Cheer DB, so a viewer sees this page in any
   // browser — not just the owner whose localStorage holds the profile.
   const { profile: maker, status } = usePublicProfile(handle);
-  const { getReputation } = useCrown();
+  const { getReputation } = useCheer();
   const isWide = useIsWide();
 
   // Session resolution: ?s=<id> picks a specific session; one live session resolves itself;
@@ -57,14 +60,18 @@ export default function FundraiserPage({ params }: { params: { handle: string } 
   const [collected, setCollected] = useState(0);
   const [frStatus, setFrStatus] = useState<FundraiserStatus>({ state: "collecting" });
   const [chainErr, setChainErr] = useState("");
+  // Rules live behind a disclosure here rather than a tab: this page is one column built around the
+  // progress ring, and splitting it into tabs would hide the goal — the thing people came to see.
+  const [rulesOpen, setRulesOpen] = useState(false);
   const chain = useGameChain("fundraiser");
+  const confirm = useConfirm(); // money leaves the wallet here — never on a single click
   const [amount, setAmount] = useState<number | null>(null);
   const [custom, setCustom] = useState("");
   const [send, setSend] = useState<SendState>("idle");
   const [copied, setCopied] = useState(false);
 
   // Shared game state: other viewers' chip-ins land in `collected` via the nonce dep.
-  const syncNonce = useGameSync(scope);
+  const { nonce: syncNonce, synced } = useGameSyncState(scope);
 
   useEffect(() => {
     if (!scope) return;
@@ -129,10 +136,32 @@ export default function FundraiserPage({ params }: { params: { handle: string } 
   const reached = goal > 0 && collected >= goal;
   const chosen = amount ?? fr.presets[0];
   const customN = Math.round(Number(custom)) || 0;
-  const finalAmount = custom ? customN : chosen;
+  const wanted = custom ? customN : chosen;
+  // What's still missing. A collection stops AT the goal, so this is the ceiling on any one
+  // contribution — nobody should be able to put $500 into a run that needs $10.
+  const remaining = goal > 0 ? Math.max(0, goal - collected) : Infinity;
+  // Clamp, don't reject: the person picked $50 for a goal that needs $10, and taking $10 is what
+  // they meant. Un-clamped, the extra went into real escrow while the progress bar capped at 100%
+  // and hid it — money held against a target that was already met, invisible on the page that took
+  // it. The button below shows the clamped figure, so what's charged is what's shown.
+  const finalAmount = Math.min(wanted, remaining);
+  const clamped = finalAmount < wanted;
   // Once the goal is met the collection is done — no more chip-ins (strict where money is): the
   // streamer moves to delivering, so we stop taking money instead of silently overfunding.
-  const canSend = send === "idle" && !reached && finalAmount >= cfg.minContribution;
+  //
+  // The goal is not the only way a collection closes. With `allowBelowGoal` the maker can accept at
+  // `minAcceptPct` and move to delivering while the bar still reads short of the target — and this
+  // page kept taking money into a collection that had already moved on. The run's own state is the
+  // authority; anything past "collecting" is closed.
+  const closed = reached || frStatus.state !== "collecting";
+  // `synced`: the goal and the minimum shown must be this collection's own, not the maker's current
+  // (editable) defaults — money going into a run under the wrong terms is the failure to avoid.
+  // The minimum is a floor on what's worth accepting, not a reason to refuse the last few dollars:
+  // with a $5 minimum and $2 left to go, clamping to $2 would fail this check and leave a dead
+  // button with nothing on screen explaining why. Once the remainder is smaller than the minimum,
+  // the remainder IS the valid amount — anything more would overshoot the goal.
+  const enoughToSend = finalAmount >= Math.min(cfg.minContribution, remaining);
+  const canSend = send === "idle" && !closed && synced && finalAmount > 0 && enoughToSend;
   const rep = getReputation(handle);
 
   async function chipIn() {
@@ -191,7 +220,7 @@ export default function FundraiserPage({ params }: { params: { handle: string } 
           </div>
         </Link>
 
-        <h1 className={styles.pledge}>{fr.pledge.trim() || "Help me hit the goal"}</h1>
+        {fr.pledge.trim() && <h1 className={styles.pledge}>{fr.pledge}</h1>}
         {fr.descriptionEnabled && fr.description && <p className={styles.desc}>{fr.description}</p>}
         <p className={styles.refundNote}>Delivered — the money is theirs. Not delivered — everyone gets it back.</p>
 
@@ -206,12 +235,14 @@ export default function FundraiserPage({ params }: { params: { handle: string } 
             : `${usd(Math.max(0, goal - collected))} to go · ${cfg.fundingDays} ${cfg.fundingDays === 1 ? "day" : "days"} left`}
         </div>
 
-        {reached ? (
+        {closed ? (
           <div className={`card ${styles.chipInCard}`}>
-            <div className={styles.reachedTitle}>Goal reached 🎉</div>
+            <div className={styles.reachedTitle}>{reached ? "Goal reached 🎉" : "Collection closed"}</div>
             <div className="footnote">
-              Collection is closed — {mine.name} has what they need and is on it. Backers are refunded automatically if
-              it isn&apos;t delivered.
+              {reached
+                ? `Collection is closed — ${mine.name} has what they need and is on it.`
+                : `${mine.name} accepted what was raised and is on it — this collection has stopped taking money.`}{" "}
+              Backers are refunded automatically if it isn&apos;t delivered.
             </div>
           </div>
         ) : fr.widgets.find((w) => w.kind === "donate")?.enabled ? (
@@ -239,15 +270,42 @@ export default function FundraiserPage({ params }: { params: { handle: string } 
                 onChange={(e) => setCustom(e.target.value)}
               />
             </div>
+            {/* Say why the number changed. Silently charging less than the button was clicked for is
+                the kind of surprise that reads as a bug even when it's the right thing to do. */}
+            {clamped && !closed && (
+              <div className="footnote">
+                Only {usd(remaining)} left to reach the goal — that&apos;s all this takes.
+              </div>
+            )}
             <ReputationDelta rep={rep} gain={finalAmount} tiers={mine.tiers} />
-            <button type="button" className="btn" disabled={!canSend} onClick={() => void chipIn()}>
-              {send === "sending" ? "Sending…" : send === "done" ? "In escrow ✓" : `Chip in ${usd(finalAmount)}`}
-            </button>
-            <div className="footnote">
-              {send === "done"
-                ? "Held in escrow until delivery — refunded automatically if it doesn't happen."
-                : `From ${usd(cfg.minContribution)}. Your money sits in escrow, not in anyone's pocket.`}
-            </div>
+            {/* Real escrow needs BOTH the canister live AND an on-chain collection to chip into —
+                the same condition chipIn() gates the real path on. Anything else is the preview. */}
+            {(() => {
+              const realEscrow = chain.live && !!frStatus.chainCollection;
+              return (
+                <>
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={!canSend}
+                    onClick={() => confirm(realEscrow ? dangerCopy.fundraiser(finalAmount) : dangerCopy.demoGame(finalAmount), () => void chipIn())}
+                  >
+                    {send === "sending" ? "Sending…" : send === "done" ? (realEscrow ? "In escrow ✓" : "Preview ✓") : `Chip in ${usd(finalAmount)}`}
+                  </button>
+                  <div className="footnote">
+                    {send === "done"
+                      ? realEscrow
+                        ? "Held in escrow until delivery — refunded automatically if it doesn't happen."
+                        : "Preview only — no money moved and nothing is in escrow. This is how chipping in will look once it's live."
+                      : !synced
+                        ? "Checking this collection's terms…"
+                        : realEscrow
+                          ? `From ${usd(cfg.minContribution)}. Your money sits in escrow, not in anyone's pocket.`
+                          : `From ${usd(cfg.minContribution)}. Preview — the on-chain escrow isn't live here yet.`}
+                  </div>
+                </>
+              );
+            })()}
           </div>
         ) : (
           <div className={`card ${styles.chipInCard}`}>
@@ -256,6 +314,20 @@ export default function FundraiserPage({ params }: { params: { handle: string } 
             </div>
           </div>
         )}
+
+        <div className={styles.rulesBlock}>
+          <button type="button" className={styles.rulesToggle} aria-expanded={rulesOpen} onClick={() => setRulesOpen((v) => !v)}>
+            <span>Rules — what happens to your money</span>
+            <span className={`${styles.rulesChev}${rulesOpen ? " " + styles.rulesChevOpen : ""}`} aria-hidden>
+              ›
+            </span>
+          </button>
+          {rulesOpen && (
+            <div className={styles.rulesBody}>
+              <GameRules lines={fundraiserLines(cfg, mine.name)} mine={mine} />
+            </div>
+          )}
+        </div>
 
         {fr.widgets.find((w) => w.kind === "socials")?.enabled && (
           <div className={styles.socials}>
@@ -284,6 +356,7 @@ export default function FundraiserPage({ params }: { params: { handle: string } 
           <Logo />
         </div>
       </div>
+      {confirm.dialog}
     </main>
   );
 }

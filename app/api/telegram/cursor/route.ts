@@ -9,10 +9,10 @@ import { readOffset, writeOffset, acquireBotLease } from "@/lib/server/telegram-
 // replayed a day of updates on every crash, or dropped an update when the site call failed), and so
 // a second bot instance — the normal state during a deploy — is told to stand down instead of
 // double-delivering everything and putting Telegram into a 409 hot loop.
-const BOT_SECRET = process.env.CROWN_BOT_SECRET;
+const BOT_SECRET = process.env.CHEER_BOT_SECRET;
 
 function unauthorized(req: Request): boolean {
-  return !BOT_SECRET || req.headers.get("x-crown-bot") !== BOT_SECRET;
+  return !BOT_SECRET || req.headers.get("x-cheer-bot") !== BOT_SECRET;
 }
 
 export async function GET(req: Request) {

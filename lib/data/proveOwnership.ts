@@ -8,7 +8,7 @@ import { buildAuthMessage } from "@/lib/chain/authMessage";
 // We remember success per (address) in localStorage, so subsequent loads on the same device — and the
 // silent auto-reconnect — never prompt again. A brand-new device has an empty store, so it asks once
 // more, exactly as expected.
-const KEY_PREFIX = "crown-login-proof:";
+const KEY_PREFIX = "cheer-login-proof:";
 
 function proofKey(address: string): string {
   return KEY_PREFIX + address;
@@ -63,12 +63,15 @@ export function clearProof(address?: string | null) {
   } catch {}
 }
 
-export type ProveResult = "ok" | "already" | "declined" | "unavailable";
+export type ProveResult = "ok" | "already" | "declined" | "unavailable" | "no-session";
 
 // Ask the wallet to prove ownership, unless it already did on this device.
 //   • "already"     — a valid proof is already stored; no prompt shown.
 //   • "ok"          — the wallet signed and the signature verified; proof stored.
 //   • "declined"    — the user dismissed the wallet prompt (or it returned nothing).
+//   • "no-session"  — signed fine, but the server issued no session (rate limit, sessions disabled,
+//                     offline). NOT stored as a proof: pretending otherwise leaves someone looking
+//                     signed in while every save is refused.
 //   • "unavailable" — the wallet can't sign messages / no address.
 // The caller decides what to do with a decline (we let the user stay out rather than fake a login).
 // Does the server currently recognise us? Asks the same endpoint the app uses to restore an account
@@ -102,14 +105,14 @@ export async function proveOwnership(
   const ts = Math.floor(Date.now() / 1000);
   // The wallet shows this text verbatim, so write it FOR THE PERSON staring at the popup: what it is,
   // that it costs nothing, and which account it proves. The canonical machine line
-  // (crown-app:login:<addr>:<ts>:-) stays as the last line so the format is still greppable, but a
+  // (cheer-app:login:<addr>:<ts>:-) stays as the last line so the format is still greppable, but a
   // bare technical string on its own read as "why is my wallet asking me to sign something?".
   const shortAddr = address.length > 12 ? `${address.slice(0, 4)}…${address.slice(-4)}` : address;
   const human =
-    "Crown — sign in\n\n" +
+    "Cheer — sign in\n\n" +
     "Signing proves this wallet is yours. It is not a transaction: no funds move and no fees are paid.\n\n" +
     `Wallet: ${shortAddr}\n` +
-    `Site: ${typeof window !== "undefined" ? window.location.host : "crown"}\n\n`;
+    `Site: ${typeof window !== "undefined" ? window.location.host : "cheer"}\n\n`;
   const canonical = new TextDecoder().decode(await buildAuthMessage("login", address, ts, null));
   const msg = new TextEncoder().encode(human + canonical);
   const sig = await signMessage(msg);
@@ -127,10 +130,14 @@ export async function proveOwnership(
 
   // Trade this one signature for an editing session: the server sets an httpOnly cookie, and from now
   // on ordinary saves (renaming, colours, sliders) authenticate with it instead of a fresh wallet
-  // popup per change. Best-effort — if it fails the app still works, saves just fall back to signing.
+  // popup per change. The answer MATTERS: rate-limited (429) or sessions disabled (503) means no
+  // cookie was set, and swallowing that used to hand back "ok" — the person looked signed in while
+  // every later save quietly 403'd. Report it instead, so the caller can say "try again".
+  let sessionIssued = false;
   try {
-    await fetch("/api/session", {
+    const res = await fetch("/api/session", {
       method: "POST",
+      credentials: "same-origin",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         pubkey: address,
@@ -139,7 +146,11 @@ export async function proveOwnership(
         signature: btoa(String.fromCharCode(...sig)),
       }),
     });
-  } catch {}
+    sessionIssued = res.ok;
+  } catch {
+    sessionIssued = false;
+  }
+  if (!sessionIssued) return "no-session";
 
   rememberProof(address);
   return "ok";

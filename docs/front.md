@@ -1,8 +1,8 @@
-# Crown Front
+# Cheer Front
 
 **v0.1 · The site and only the site · No money, no keys**
 
-The front end is outside the trusted perimeter (`crown-core/docs/project-map.md` §3): it can lie, so it cannot be trusted with anything. All money moves via transactions from the user's wallet; all reputation is read from the canister. The front end is glass between the person and the contracts.
+The front end is outside the trusted perimeter (`cheer-core/docs/project-map.md` §3): it can lie, so it cannot be trusted with anything. All money moves via transactions from the user's wallet; all reputation is read from the canister. The front end is glass between the person and the contracts.
 
 Parts: [I. Specification](#i-specification) · [II. Design](#ii-design) · [III. Build Plan](#iii-build-plan) · [IV. Post-front](#iv-post-front)
 
@@ -29,7 +29,7 @@ Ten routes. Each has one job. A new surface only appears via an explicit owner d
 
 **`/games` is a catalog of game types, not a way to manage them.** A list of everything that exists on the platform (data — `lib/data/games.ts`, `GAMES`); the UI iterates the registry instead of hardcoding games. Managing a specific game for a streamer (enable it, create a round, get the link) lives in the cabinet `/space → Games` (§6) and on the campaign page `/@handle/<slug>` (§5). No game is built yet — all are "Soon" (an honest disabled state, not a fake placeholder).
 
-**`/discover` is a v2 rebuild of a pre-charter "realm directory" concept.** The old version used per-user accent colors and "crowned"/"the crown" wording — both retired (§7 Glossary: one purple accent only, no gold). The rebuild keeps the shape (search, sort, platform filters, sparkline, top donor) but renames the copy ("received", "top donor") and drops per-card color. Data comes from `MOCK_REALMS`/`MOCK_STREAMERS` (`lib/data/mock.ts`) — no new backend surface.
+**`/discover` is a v2 rebuild of a pre-charter "realm directory" concept.** The old version used per-user accent colors and "cheered"/"the cheer" wording — both retired (§7 Glossary: one purple accent only, no gold). The rebuild keeps the shape (search, sort, platform filters, sparkline, top donor) but renames the copy ("received", "top donor") and drops per-card color. Data comes from `MOCK_REALMS`/`MOCK_STREAMERS` (`lib/data/mock.ts`) — no new backend surface.
 
 **The `/` landing page speaks to one person — the streamer.** Viewers don't visit the homepage; they arrive via a direct link. The landing page's pillars: money arrives straight in your wallet (payouts don't exist) · 3% and that's it · you don't need to trust us — it's all open, verify it · create a page in a minute.
 
@@ -40,13 +40,13 @@ Mode is a property of the **data type**, not the app. `DataProvider` serves each
 | Data | Source | Mode |
 |---|---|---|
 | donation, escrow | contracts, via a transaction from the user's wallet | `chain` |
-| reputation | crown-index canister, query | `icp` |
+| reputation | cheer-index canister, query | `icp` |
 | donation feed | `Settled` events via RPC | `chain` |
 | profiles, handle→address, tiers, campaigns, donation messages and names | nowhere to store them yet | `mock` → `api` |
 
 Migration rule: `mock` switches to `api` **per data type**; the provider's interface doesn't move. Components don't know where the data came from.
 
-**A donation message doesn't live on the blockchain.** `Splitter.donate(streamer, gross)` doesn't take text; it's absent from `Settled`. The message, the viewer's name, and the campaign config are off-chain, tied to the transaction hash. That's exactly the spec for `crown-app/api`: one small database — messages, names, campaigns. Until it exists, all of this lives in `mock`; a donation with no message works with no server at all.
+**A donation message doesn't live on the blockchain.** `Splitter.donate(streamer, gross)` doesn't take text; it's absent from `Settled`. The message, the viewer's name, and the campaign config are off-chain, tied to the transaction hash. That's exactly the spec for `cheer-app/api`: one small database — messages, names, campaigns. Until it exists, all of this lives in `mock`; a donation with no message works with no server at all.
 
 ## 3. Money: what the front end must and must not do
 
@@ -121,7 +121,7 @@ No `Viewers` section — not part of this product. A viewer's reputation and tie
 
 Top bar: logo · avatar + name · "My page" (opens the public page, through a viewer's eyes). **There's no balance in the top bar and there won't be** — nothing to show, the money is the streamer's.
 
-**The form builder lives inside a game — currently "Task for donation"** (pulled forward from IV's deferred "page and widget customization" — live streamer requests arrived earlier than expected). It's the streamer's tool for that game: build the form viewers fill in, then share the link + QR (both sit above the editor); viewers open a separate page and act there — the builder never takes money. Two inner tabs: **My page** (avatar/description on-off toggles, an ordered list of widgets — donate form, social icons — each with its own on-off toggle and reorder) and **Design** (a gallery of ready-made **themes** for one-click looks, plus manual background: color / gradient / image). No accent-color theme picker — the donate button and every interactive element stay Crown purple everywhere, per §II.1's one-accent rule; themes differ by backdrop only. A live preview with a **Phone/Desktop** toggle sits beside the editor so the streamer checks both before sharing.
+**The form builder lives inside a game — currently "Task for donation"** (pulled forward from IV's deferred "page and widget customization" — live streamer requests arrived earlier than expected). It's the streamer's tool for that game: build the form viewers fill in, then share the link + QR (both sit above the editor); viewers open a separate page and act there — the builder never takes money. Two inner tabs: **My page** (avatar/description on-off toggles, an ordered list of widgets — donate form, social icons — each with its own on-off toggle and reorder) and **Design** (a gallery of ready-made **themes** for one-click looks, plus manual background: color / gradient / image). No accent-color theme picker — the donate button and every interactive element stay Cheer purple everywhere, per §II.1's one-accent rule; themes differ by backdrop only. A live preview with a **Phone/Desktop** toggle sits beside the editor so the streamer checks both before sharing.
 
 `/create` wizard: profile (name + `@handle`, link preview) → socials (official domains only, ≤5) → wallet → tiers. One mandatory step — wallet; default is "use the connected wallet," manual entry is a secondary option with a warning: money will go straight there and only there. Tiers are skippable (default $10/100/1000). Minimum to get your own page: name + wallet, under a minute.
 
@@ -129,7 +129,7 @@ Socials go through normalization: a link is only accepted from a platform's offi
 
 ## 7. Glossary
 
-The old terminology (Realm, Reign, Crowning, "to crown") is retired. "Tiers" is adopted and stays. Until a full brand vocabulary exists:
+The old terminology (Realm, Reign, Cheering, "to cheer") is retired. "Tiers" is adopted and stays. Until a full brand vocabulary exists:
 
 - in the UI — plain words: streamer page, donation, reputation, tiers, campaign;
 - in code — neutral names: `StreamerPage`, `Reputation`, `DonateForm`, `Campaign`. Brand words, once they exist, get swapped in via a string dictionary, not a refactor;
@@ -163,12 +163,12 @@ The accent isn't one flat purple — filled accent surfaces are painted with a v
 | `--accent` (flat) | `#C0B7FA` (midpoint of `#8B7CF6`→`#F4F2FE`) | chips, dots, borders, links, active states, small tints |
 | `--accent-hover` / `--accent-down` | `#CFC7FC` / `#B0A5F9` | flat-accent hover / press |
 | `--accent-soft` | `rgba(192,183,250,.16)` | focus rings, faint tinted backdrops |
-| `--accent-grad` | `linear-gradient(180deg, #8B7CF6 0%, #F4F2FE 100%)` | primary buttons, the fundraiser **crown fill** (`CrownFill`) |
+| `--accent-grad` | `linear-gradient(180deg, #8B7CF6 0%, #F4F2FE 100%)` | primary buttons, the fundraiser **cheer fill** (`CheerFill`) |
 | `--accent-grad-hover` / `--accent-grad-down` | `…#CFC7FC→#FFF` / `…#B0A5F9→#EBE7FB` | button hover / press |
 | `--accent-grad-ink` | `#0F0E14` | text/icons on any accent-gradient surface |
 | `--chart-grad` | `linear-gradient(180deg, #8B7CF6 0%, #ffffff 100%)` | chart bars/line (runs to pure white) |
 
-SVG can't take a CSS `linear-gradient()` as a `fill`, so components that fill with the accent (e.g. `CrownFill`) declare a matching `<linearGradient>` `#8B7CF6→#F4F2FE` in `<defs>` and reference it — same stops as `--accent-grad`.
+SVG can't take a CSS `linear-gradient()` as a `fill`, so components that fill with the accent (e.g. `CheerFill`) declare a matching `<linearGradient>` `#8B7CF6→#F4F2FE` in `<defs>` and reference it — same stops as `--accent-grad`.
 
 Rules:
 
@@ -198,7 +198,7 @@ The boundary runs within pages: on a streamer's page, the hero is viewer-facing,
 
 ## 4. Identity
 
-- Mascot: candidate — a crown-creature (like Anthropic's crab, Discord's Clyde). A simple shape, legible at 16px. Appears in the viewer-facing register, never next to money.
+- Mascot: candidate — a cheer-creature (like Anthropic's crab, Discord's Clyde). A simple shape, legible at 16px. Appears in the viewer-facing register, never next to money.
 - Easter eggs with love — in game and section names. UI copy stays functional.
 
 ---
@@ -222,7 +222,7 @@ The F3↔F5 order can swap if testnet addresses take a while: campaigns and the 
 
 **What to ask the backend for, one artifact:** a testnet address file — splitter, USDC, canister (for F3–F4); later the factory (for F8). The front end stands up its own resolver for development (a keyed service that signs `keccak(chainid, escrow, outcome)`); the production one is the backend's territory.
 
-**What's accumulating for `crown-app/api`** (blocks nothing before public launch): donation messages and names (tied to the transaction hash), campaign configs, a `handle → address` index for search. One database, one small service. Until then — `mock`.
+**What's accumulating for `cheer-app/api`** (blocks nothing before public launch): donation messages and names (tied to the transaction hash), campaign configs, a `handle → address` index for search. One database, one small service. Until then — `mock`.
 
 ---
 
@@ -239,7 +239,7 @@ Built it — delete the line.
 | What | Why not now | Trigger |
 |---|---|---|
 | `/u/<address>` — a public viewer page | not part of the "donation → reputation" loop | once viewers start sharing profiles |
-| `/ops`, `/admin` — moderation, metrics | no backend, no users, nothing to moderate | alongside `crown-app/api` and moderation |
+| `/ops`, `/admin` — moderation, metrics | no backend, no users, nothing to moderate | alongside `cheer-app/api` and moderation |
 | light theme | the product is honestly dark; the audience lives in OBS/Discord | after launch, on complaints |
 | short redirect links for campaigns | `/@handle/<slug>` is enough and it's anti-phishing | if links turn out too long for chat |
 
@@ -247,7 +247,7 @@ Built it — delete the line.
 
 | What | Why not now | Trigger |
 |---|---|---|
-| streamer live/offline status | polling the Twitch/YouTube API — a separate service | alongside `crown-app/api` |
+| streamer live/offline status | polling the Twitch/YouTube API — a separate service | alongside `cheer-app/api` |
 | onramp: a viewer with no crypto buys USDC by card | a third-party widget, jurisdictional questions | before public launch — the main barrier for viewers |
 | Solana path | the core is only deployed to an EVM testnet | backend deploy to devnet |
 | ENS/wallet names in the feed | cosmetic layer over addresses | after F4 |
@@ -261,6 +261,6 @@ Built it — delete the line.
 
 | What | Fork in the road | When to decide |
 |---|---|---|
-| where `crown-app/api` lives | its own service next to Next.js (API routes) vs. a separate repo per the project map | before public launch; doesn't matter at the mock stage |
+| where `cheer-app/api` lives | its own service next to Next.js (API routes) vs. a separate repo per the project map | before public launch; doesn't matter at the mock stage |
 | launch network | Base / Arbitrum / Optimism — all have Cancun (`TSTORE`) | alongside the backend, before mainnet |
 | does the platform pay gas for the viewer | the "you need ETH for gas" UX barrier | alongside onramp |

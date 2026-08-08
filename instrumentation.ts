@@ -7,10 +7,10 @@ export async function register() {
 
   // Unhandled failures must land in the server log, not vanish.
   process.on("unhandledRejection", (reason) => {
-    console.error("[crown] unhandled rejection:", reason instanceof Error ? reason.stack : reason);
+    console.error("[cheer] unhandled rejection:", reason instanceof Error ? reason.stack : reason);
   });
   process.on("uncaughtException", (err) => {
-    console.error("[crown] uncaught exception:", err.stack ?? err);
+    console.error("[cheer] uncaught exception:", err.stack ?? err);
   });
 
   const { startIndexerLoop } = await import("./lib/server/indexer");

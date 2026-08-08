@@ -125,13 +125,13 @@ export function GameCover({ id }: { id: GameId }) {
   }
 
   if (id === "fundraiser") {
-    // A big crown vessel filling bottom-up toward the goal line — a glowing trophy, not a flat icon.
-    const crown = "M4 44 L4 13 L17 25 L26 5 L35 25 L48 13 L48 44 Z";
+    // A big cheer vessel filling bottom-up toward the goal line — a glowing trophy, not a flat icon.
+    const cheer = "M4 44 L4 13 L17 25 L26 5 L35 25 L48 13 L48 44 Z";
     const top = 5;
     const bottom = 44;
     const fill = (bottom - top) * 0.66; // filled height
     const S = 4.3;
-    const ox = CX - (26 * S); // centre the 52-wide crown
+    const ox = CX - (26 * S); // centre the 52-wide cheer
     const oy = CY - 24 * S;
     const goalY = oy + top * S;
     return (
@@ -140,25 +140,25 @@ export function GameCover({ id }: { id: GameId }) {
         <Field id="fr" />
         {/* accent pool the trophy sits in */}
         <ellipse cx={CX} cy={oy + bottom * S + 10} rx="96" ry="20" fill="#8B7CF6" opacity="0.20" filter="url(#halo-fr)" />
-        {/* goal line at the crown's tips */}
+        {/* goal line at the cheer's tips */}
         <line x1={CX - 118} y1={goalY} x2={CX + 118} y2={goalY} stroke="rgba(235,233,244,.3)" strokeWidth="2" strokeDasharray="7 7" />
         <text x={CX + 122} y={goalY + 4} fill="rgba(235,233,244,.4)" fontSize="13" fontFamily="system-ui, sans-serif" fontWeight="600">
           goal
         </text>
         <g transform={`translate(${ox} ${oy}) scale(${S})`} filter="url(#sh-fr)">
-          <clipPath id="crown-clip-fr">
-            <path d={crown} />
+          <clipPath id="cheer-clip-fr">
+            <path d={cheer} />
           </clipPath>
           {/* empty vessel */}
-          <path d={crown} fill="#191824" />
+          <path d={cheer} fill="#191824" />
           {/* fill */}
-          <rect x="0" y={bottom - fill} width="52" height={fill} clipPath="url(#crown-clip-fr)" fill="url(#ramp-fr)" />
+          <rect x="0" y={bottom - fill} width="52" height={fill} clipPath="url(#cheer-clip-fr)" fill="url(#ramp-fr)" />
           {/* waterline highlight */}
-          <rect x="0" y={bottom - fill} width="52" height="1.4" clipPath="url(#crown-clip-fr)" fill="#EDEAFE" opacity="0.7" />
+          <rect x="0" y={bottom - fill} width="52" height="1.4" clipPath="url(#cheer-clip-fr)" fill="#EDEAFE" opacity="0.7" />
           {/* sheen on the filled part */}
-          <rect x="0" y={bottom - fill} width="24" height={fill} clipPath="url(#crown-clip-fr)" fill="url(#sheen-fr)" />
+          <rect x="0" y={bottom - fill} width="24" height={fill} clipPath="url(#cheer-clip-fr)" fill="url(#sheen-fr)" />
           {/* outline */}
-          <path d={crown} fill="none" stroke="rgba(235,233,244,.6)" strokeWidth="1.1" strokeLinejoin="round" />
+          <path d={cheer} fill="none" stroke="rgba(235,233,244,.6)" strokeWidth="1.1" strokeLinejoin="round" />
         </g>
       </svg>
     );

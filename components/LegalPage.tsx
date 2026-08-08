@@ -4,7 +4,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import styles from "./LegalPage.module.css";
 
 // Shared shell for the two legal pages (Terms, Privacy) so they can't drift apart. Plain first-party
-// copy describing how Crown actually works — a plain-language summary, not a substitute for the full
+// copy describing how Cheer actually works — a plain-language summary, not a substitute for the full
 // legal text a production launch would attach.
 export function LegalPage({ title, updated, children }: { title: string; updated: string; children: ReactNode }) {
   return (
@@ -15,7 +15,7 @@ export function LegalPage({ title, updated, children }: { title: string; updated
         <p className={styles.updated}>Last updated {updated}</p>
         {children}
         <p className={styles.note}>
-          This is a plain-language summary of how Crown works today, not a substitute for full legal terms.
+          This is a plain-language summary of how Cheer works today, not a substitute for full legal terms.
         </p>
       </article>
       <SiteFooter />

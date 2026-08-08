@@ -16,7 +16,7 @@ const HERO_ROUND: RouletteSuggestion[] = [
 ];
 
 // Three fanned phone mockups for the hero — one per mini-game, mirroring the REAL public pages
-// (same headline/wheel/pot-card, same crown-fill fundraiser) so the hero shows the actual
+// (same headline/wheel/pot-card, same cheer-fill fundraiser) so the hero shows the actual
 // product, not a lookalike. Each phone links to that game's own page in the catalog (/games/<id>,
 // games.ts hasPage) — what the game IS — rather than to one seeded streamer's live page, which
 // is a demo, not an explanation.
@@ -112,7 +112,7 @@ export function HeroPhones() {
         </div>
       </Link>
 
-      {/* RIGHT — Fundraiser, dark (mirrors the real page: crown fills bottom-up by pct) */}
+      {/* RIGHT — Fundraiser, dark (mirrors the real page: cheer fills bottom-up by pct) */}
       <Link href="/games/fundraiser" aria-label="See the Fundraiser game" className={`${styles.phone} ${styles.side} ${styles.right}`}>
         <span className={styles.notch} />
         <div className={`${styles.screen} ${styles.screenDark}`}>

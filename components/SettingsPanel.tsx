@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { safeId } from "@/lib/id";
 import { createPortal } from "react-dom";
 import QRCode from "qrcode";
 import { UploadIcon, CopyIcon, QrIcon, SocialIcon, SOCIAL_LABEL, SOCIAL_KINDS, SOCIAL_BRAND } from "@/components/icons";
@@ -9,6 +10,8 @@ import { isValidAddress } from "@/lib/chain/config";
 import { isDemoAddress } from "@/lib/data/session";
 import { TierEditor } from "@/components/TierEditor";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { dangerCopy } from "@/lib/data/dangerous";
+import { useProfile } from "@/lib/data/ProfileProvider";
 import pageBuilderStyles from "@/components/PageBuilder.module.css";
 import styles from "./SettingsPanel.module.css";
 import type { Profile, Social } from "@/lib/data/types";
@@ -45,8 +48,10 @@ export function SettingsPanel({
   onDelete: () => void | Promise<{ ok: boolean; reason?: string } | void>;
   onLogOut: () => void;
 }) {
+  const { publishState, retryPublish } = useProfile();
   const fileRef = useRef<HTMLInputElement>(null);
   const [confirm, setConfirm] = useState<"logout" | "delete" | null>(null);
+  const [retrying, setRetrying] = useState(false);
   const [copied, setCopied] = useState<"link" | "payout" | null>(null);
   const [qrOpen, setQrOpen] = useState(false);
   const [qr, setQr] = useState("");
@@ -85,8 +90,12 @@ export function SettingsPanel({
 
   function confirmChanges() {
     if (!changes || !draftPayoutValid) return;
-    onSave(draft);
-    setBase(draft);
+    // Persist the TRIMMED payout address — validation trims, so a pasted address with a trailing
+    // space/newline shows valid; saving it raw would put "7xKX… " in the DB and break the QR/tx.
+    const clean: Profile = { ...draft, address: draftPayout };
+    setDraft(clean);
+    onSave(clean);
+    setBase(clean);
   }
 
   function discardChanges() {
@@ -98,7 +107,7 @@ export function SettingsPanel({
   const [host, setHost] = useState("");
   useEffect(() => setHost(window.location.host), []);
   const pageUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/@${profile.handle}`;
-  const pageLabel = `${host || "crown.tv"}/@${profile.handle}`;
+  const pageLabel = `${host || "cheer.tv"}/@${profile.handle}`;
 
   useEffect(() => {
     if (!qrOpen) return;
@@ -129,7 +138,7 @@ export function SettingsPanel({
   }
 
   function addSocial() {
-    patch({ socials: [...draft.socials, { kind: "twitch", url: "", id: crypto.randomUUID() }] });
+    patch({ socials: [...draft.socials, { kind: "twitch", url: "", id: safeId() }] });
   }
   function updateSocial(i: number, next: Partial<Social>) {
     patch({ socials: draft.socials.map((s, j) => (j === i ? { ...s, ...next } : s)) });
@@ -141,25 +150,18 @@ export function SettingsPanel({
   const payoutDemo = isDemoAddress(draftPayout);
   const loginDiffers = !!walletAddress && !payoutDemo && walletAddress !== draftPayout;
 
-  // Backup: the SAVED page (not the draft) as a JSON download — what's actually live is yours.
-  function exportProfile() {
-    const blob = new Blob([JSON.stringify(base, null, 2)], { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `crown-${profile.handle}.json`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  }
-
   const short = (a: string) => (a.length > 16 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a);
 
   return (
     <div className={styles.stack}>
+      {/* ── Profile: who you are + how you're found ── */}
+      <div className={styles.groupLabel}>Profile</div>
+
       {/* ── Your page ── */}
       <div className={`card ${styles.card}`}>
         <div className={styles.head}>
           <h2 className={styles.title}>Your page</h2>
-          <span className={styles.sub}>The link viewers get. The handle itself can&apos;t change once the page exists.</span>
+          <span className={styles.sub}>The handle can&apos;t change once the page exists.</span>
         </div>
 
         <div className={styles.identity}>
@@ -218,7 +220,6 @@ export function SettingsPanel({
       <div className={`card ${styles.card}`}>
         <div className={styles.head}>
           <h2 className={styles.title}>Socials</h2>
-          <span className={styles.sub}>Shown on your page — only links that verify as real profiles render.</span>
         </div>
         {draft.socials.map((s, i) => (
           <div className="social-row" key={s.id ?? `i${i}`}>
@@ -259,6 +260,9 @@ export function SettingsPanel({
             </button>
           </div>
         ))}
+        {draft.socials.length === 0 && (
+          <p className={styles.emptyHint}>No links yet.</p>
+        )}
         {draft.socials.length < SOCIAL_KINDS.length && (
           <button className="btn-outline" type="button" style={{ alignSelf: "flex-start" }} onClick={addSocial}>
             + Add link
@@ -266,11 +270,29 @@ export function SettingsPanel({
         )}
       </div>
 
-      {/* ── Payouts ── */}
+      {/* ── Tiers ── */}
       <div className={`card ${styles.card}`}>
         <div className={styles.head}>
-          <h2 className={styles.title}>Payouts</h2>
-          <span className={styles.sub}>Donations land here directly — Crown never holds them, so a wrong address can&apos;t be undone.</span>
+          <h2 className={styles.title}>Tiers</h2>
+          <span className={styles.sub}>1 point = $1 donated. Applies after you confirm below.</span>
+        </div>
+        <TierEditor key={resetKey} initialTiers={draft.tiers ?? []} onChange={(tiers) => patch({ tiers })} />
+      </div>
+
+      {/* ── Account: the money, the login, and the one destructive action ── */}
+      <div className={styles.groupLabel}>Account</div>
+
+      {/* ── Payouts — the money zone, visually set apart (see .cardMoney) ── */}
+      <div className={`card ${styles.card} ${styles.cardMoney}`}>
+        <div className={styles.head}>
+          <h2 className={styles.title}>
+            <svg className={styles.lockIcon} width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <rect x="4" y="11" width="16" height="9" rx="2" />
+              <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+            </svg>
+            Payouts
+          </h2>
+          <span className={styles.sub}>Donations land here directly — Cheer never holds them, so a wrong address can&apos;t be undone.</span>
         </div>
 
         <div className="field">
@@ -318,31 +340,10 @@ export function SettingsPanel({
         )}
       </div>
 
-      {/* ── Tiers ── */}
-      <div className={`card ${styles.card}`}>
-        <div className={styles.head}>
-          <h2 className={styles.title}>Tiers</h2>
-          <span className={styles.sub}>1 point = $1 donated. Applies after you confirm below.</span>
-        </div>
-        <TierEditor key={resetKey} initialTiers={draft.tiers ?? []} onChange={(tiers) => patch({ tiers })} />
-      </div>
-
-      {/* ── Data ── */}
-      <div className={`card ${styles.card}`}>
-        <div className={styles.head}>
-          <h2 className={styles.title}>Your data</h2>
-          <span className={styles.sub}>Everything that makes your page — name, tiers, game setups — in one file.</span>
-        </div>
-        <button className="btn-outline" type="button" style={{ alignSelf: "flex-start" }} onClick={exportProfile}>
-          Download backup (JSON)
-        </button>
-      </div>
-
       {/* ── Session & the one destructive action ── */}
       <div className={`card ${styles.card}`}>
         <div className={styles.head}>
           <h2 className={styles.title}>Session</h2>
-          <span className={styles.sub}>Your wallet is your login. Signing out changes nothing on your page.</span>
         </div>
         <div className={styles.rowSplit}>
           <button className="btn-outline" type="button" onClick={() => setConfirm("logout")}>
@@ -350,9 +351,11 @@ export function SettingsPanel({
           </button>
         </div>
         <div className={styles.divider} />
-        <div className={styles.rowSplit}>
-          <span className={styles.sub}>Erases the page here and from Crown — the public link dies. No undo.</span>
-          <button className={styles.danger} type="button" onClick={() => setConfirm("delete")}>
+        {/* Deliberately quiet: a small muted line, not a red button sitting next to Log out — deleting
+            the page is irreversible and must never be a casual click. It only reddens on hover. */}
+        <div className={styles.dangerRow}>
+          <span className={styles.dangerNote}>Erases the page here and from Cheer — the public link dies. No undo.</span>
+          <button className={styles.deleteLink} type="button" onClick={() => setConfirm("delete")}>
             Delete page
           </button>
         </div>
@@ -376,10 +379,33 @@ export function SettingsPanel({
           document.body
         )}
 
+      {/* The confirm bar clears optimistically, but the actual publish is deferred and can fail
+          (offline / expired session / handle taken). Surface it so a change is never silently lost. */}
+      {changes === 0 && publishState === "error" && mounted &&
+        createPortal(
+          <div className={`${styles.saveBar} ${styles.saveBarError}`}>
+            <span className={styles.saveBarNote}>Couldn&apos;t save your changes to the server.</span>
+            <button
+              className={styles.saveConfirm}
+              type="button"
+              disabled={retrying}
+              onClick={async () => {
+                setRetrying(true);
+                await retryPublish();
+                setRetrying(false);
+              }}
+            >
+              {retrying ? "Retrying…" : "Retry"}
+            </button>
+          </div>,
+          document.body
+        )}
+
       {confirm === "logout" && (
         <ConfirmDialog
-          title="Log out?"
-          confirmLabel="Log out"
+          /* No title override: every confirmation in the product shares one (lib/data/dangerous.ts),
+             so the dialog is recognised before it's read. Only the sentence below changes. */
+          confirmLabel={dangerCopy.logout().confirmLabel}
           onCancel={() => setConfirm(null)}
           onConfirm={onLogOut}
           body={
@@ -407,20 +433,19 @@ export function SettingsPanel({
 
       {confirm === "delete" && (
         <ConfirmDialog
-          title="Delete your page?"
-          confirmLabel="Delete page"
+          confirmLabel={dangerCopy.deletePage(draft.handle).confirmLabel}
           danger
           onCancel={() => setConfirm(null)}
           onConfirm={onDelete}
-          busyLabel="Deleting…"
+          busyLabel={dangerCopy.deletePage(draft.handle).busyLabel}
           errorText={(reason) =>
             reason === "unsigned"
               ? "Your wallet didn't sign the delete, so nothing was removed. Approve the signature request and try again."
-              : "Couldn't reach Crown to delete your page. Check your connection and try again."
+              : "Couldn't reach Cheer to delete your page. Check your connection and try again."
           }
           body={
             <>
-              Your page, tiers and game settings are erased — here and from Crown, so your public link
+              Your page, tiers and game settings are erased — here and from Cheer, so your public link
               stops working. <b>This can&apos;t be undone.</b>
             </>
           }

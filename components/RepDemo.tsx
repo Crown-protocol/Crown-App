@@ -113,7 +113,7 @@ export function RepDemo() {
       <div className={styles.controls}>
         {CHIPS.map((c) => (
           <button key={c} className={styles.chip} onClick={() => donate(c)} disabled={atTop}>
-            Donate ${c}
+            Cheer ${c}
           </button>
         ))}
         <button className={styles.reset} onClick={reset} disabled={shown === 0}>

@@ -71,6 +71,20 @@ export function topicById(id: string | undefined): RouletteTopic {
   return ROULETTE_TOPICS.find((t) => t.id === id) ?? ROULETTE_TOPICS[0];
 }
 
+// The word a suggestion IS, for all the public copy ("Suggest a <noun>", "back a <noun>").
+//
+// `topic` is now a free-text field the streamer types ("film", "track", "челлендж") — no more fixed
+// picker. Two bits of backward-compat keep old pages reading right:
+//   • a value that still matches a preset topic id (e.g. "films", saved before this change) resolves
+//     to that preset's noun ("film"), so those pages don't suddenly say "filmss";
+//   • empty / whitespace falls back to "game", the original default.
+export function topicNoun(topic: string | undefined): string {
+  const raw = (topic ?? "").trim();
+  if (!raw) return "game";
+  const preset = ROULETTE_TOPICS.find((t) => t.id === raw);
+  return preset ? preset.noun : raw;
+}
+
 // The categories actually offered for a config: the topic's own list, plus whatever custom ones the
 // streamer added. Custom topics live entirely on the custom list.
 export function categoriesFor(topicId: string | undefined, custom: string[] | undefined): string[] {

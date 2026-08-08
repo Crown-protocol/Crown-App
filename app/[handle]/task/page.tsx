@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePublicProfile } from "@/lib/data/usePublicProfile";
-import { useCrown } from "@/lib/data/DataProvider";
+import { useCheer } from "@/lib/data/DataProvider";
 import { Logo } from "@/components/Logo";
 import { ReputationDelta } from "@/components/ReputationDelta";
 import { DonateTopBar } from "@/components/DonateTopBar";
@@ -16,24 +16,27 @@ import { withTaskPageDefaults, readTasks, addTask, activeCount, type GameTask } 
 import { backgroundStyle, backgroundInk } from "@/lib/data/pagebuilder";
 import { useIsWide } from "@/lib/data/useIsWide";
 import { resolvePublicSession, pullSessions } from "@/lib/data/gameSessions";
-import { useGameSync } from "@/lib/data/gameSync";
+import { useGameSyncState } from "@/lib/data/gameSync";
 import { useGameChain } from "@/lib/chain/useGameChain";
+import { useConfirm } from "@/components/useConfirm";
+import { dangerCopy } from "@/lib/data/dangerous";
 import { taskStartOnChain } from "@/lib/chain/gameFlows";
 import { GameTabs } from "@/components/games/GameTabs";
+import { GameRules, taskLines } from "@/components/games/GameRules";
 import styles from "./page.module.css";
 
 type SendState = "idle" | "sending" | "done";
 
 // The public task page — what a viewer opens from the link or QR to set a paid task. The content
-// maker is resolved by handle from the Crown DB (usePublicProfile), so the page renders for any
+// maker is resolved by handle from the Cheer DB (usePublicProfile), so the page renders for any
 // visitor; the task queue still accumulates in localStorage (the mock backend) until the indexer
 // owns it, so a task set here shows up in the streamer's Task → Overview tab in the same browser.
 export default function TaskPage({ params }: { params: { handle: string } }) {
   const handle = decodeURIComponent(params.handle).replace(/^@/, "");
-  // Resolve the content maker by handle from the Crown DB, so a viewer sees this page in any
+  // Resolve the content maker by handle from the Cheer DB, so a viewer sees this page in any
   // browser — not just the owner whose localStorage holds the profile.
   const { profile: maker, status } = usePublicProfile(handle);
-  const { getReputation } = useCrown();
+  const { getReputation } = useCheer();
   const isWide = useIsWide();
 
   // Session resolution: ?s=<id> picks a specific session; one live session resolves itself;
@@ -61,13 +64,14 @@ export default function TaskPage({ params }: { params: { handle: string } }) {
   const [custom, setCustom] = useState("");
   const [send, setSend] = useState<SendState>("idle");
   const [durationH, setDurationH] = useState<number | null>(null); // the donor's deadline pick
-  const [view, setView] = useState<"set" | "queue">("set"); // the top toggle: set a task vs. what's already on the list
+  const [view, setView] = useState<"set" | "queue" | "rules">("set"); // the top toggle: set a task vs. what's already on the list
   const [chainErr, setChainErr] = useState("");
   const chain = useGameChain("task");
+  const confirm = useConfirm(); // paying for a task is real escrow — ask first
 
   // Shared game state: pulls the server copy on mount and every few seconds — other viewers'
   // tasks land in `queue` via the nonce dep below.
-  const syncNonce = useGameSync(scope);
+  const { nonce: syncNonce, synced } = useGameSyncState(scope);
 
   useEffect(() => {
     if (!scope) return;
@@ -132,7 +136,10 @@ export default function TaskPage({ params }: { params: { handle: string } }) {
   const chosen = amount ?? tp.presets[0];
   const customN = Math.round(Number(custom)) || 0;
   const finalAmount = custom ? customN : chosen;
-  const canSend = send === "idle" && !full && text.trim().length > 0 && finalAmount >= cfg.minAmount;
+  // `synced`: until the server has answered, the minimum and the deadline shown may be the maker's
+  // current defaults rather than the ones this run was opened with — and those defaults are editable
+  // mid-run. No money moves under terms we can't vouch for.
+  const canSend = send === "idle" && !full && synced && text.trim().length > 0 && finalAmount >= cfg.minAmount;
 
   // $1 donated = 1 reputation (front.md I §4) — so this task's amount is exactly the gain.
   const rep = getReputation(handle);
@@ -185,18 +192,23 @@ export default function TaskPage({ params }: { params: { handle: string } }) {
           </div>
         </Link>
 
-        <h1 className={styles.headline}>{tp.headline.trim() || "Set me a task"}</h1>
+        {/* No stand-in headline: the pitch is required in the builder, and inventing one here
+            made an unfinished page look finished (the preview showed words nobody wrote). */}
+        {tp.headline.trim() && <h1 className={styles.headline}>{tp.headline}</h1>}
         {tp.descriptionEnabled && tp.description && <p className={styles.desc}>{tp.description}</p>}
 
         {/* Tab 1: set a task. Tab 2: what other viewers have already set, and where each stands. */}
         <GameTabs
           value={view}
-          onChange={(v) => setView(v as "set" | "queue")}
+          onChange={(v) => setView(v as "set" | "queue" | "rules")}
           tabs={[
             { key: "set", label: "Set a task" },
             { key: "queue", label: "On the list", count: running },
+            { key: "rules", label: "Rules" },
           ]}
         />
+
+        {view === "rules" && <GameRules lines={taskLines(cfg, mine.name)} mine={mine} />}
 
         {view === "queue" && (
           <div className={styles.queue}>
@@ -297,17 +309,30 @@ export default function TaskPage({ params }: { params: { handle: string } }) {
                 {chainErr}
               </div>
             )}
-            <button type="button" className="btn" disabled={!canSend} onClick={() => void submit()}>
-              {send === "sending" ? "Sending…" : send === "done" ? "In escrow ✓" : `Set the task · ${usd(finalAmount)}`}
+            <button
+              type="button"
+              className="btn"
+              disabled={!canSend}
+              onClick={() => confirm(chain.live ? dangerCopy.task(finalAmount) : dangerCopy.demoGame(finalAmount), () => void submit())}
+            >
+              {send === "sending"
+                ? "Sending…"
+                : send === "done"
+                  ? chain.live
+                    ? "In escrow ✓"
+                    : "Preview ✓"
+                  : `Set the task · ${usd(finalAmount)}`}
             </button>
 
             <div className="footnote">
               {full
                 ? `The queue is full — ${mine.name} takes ${cfg.maxActiveTasks} at a time. Try again once one wraps up.`
                 : send === "done"
-                  ? cfg.requireApproval
-                    ? "Sent — it's waiting for them to accept. Declined or missed, and you're refunded."
-                    : "Sent — the clock is already running."
+                  ? !chain.live
+                    ? "Preview only — no money moved and nothing is in escrow. This is how the flow will look once it's live."
+                    : cfg.requireApproval
+                      ? "Sent — it's waiting for them to accept. Declined or missed, and you're refunded."
+                      : "Sent — the clock is already running."
                   : `From ${usd(cfg.minAmount)} · you pick the deadline, up to ${cfg.deadlineHours}h.`}
             </div>
           </div>
@@ -340,6 +365,7 @@ export default function TaskPage({ params }: { params: { handle: string } }) {
           <Logo />
         </div>
       </div>
+      {confirm.dialog}
     </main>
   );
 }

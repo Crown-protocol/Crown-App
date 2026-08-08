@@ -32,7 +32,6 @@ export function TaskDemo() {
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M5 12l4 4 10-10" /></svg>
             </span>
             <h3>Run a task through</h3>
-            <p>A viewer sets a paid task. See what happens when you finish it — and when you don&apos;t.</p>
             <button className={styles.primary} type="button" style={{ marginTop: 8 }} onClick={() => setStep(1)}>
               Launch the demo
             </button>

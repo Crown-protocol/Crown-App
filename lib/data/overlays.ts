@@ -36,7 +36,7 @@ export const OVERLAYS: OverlayDef[] = [
   // one per mini-game
   { kind: "roulette", label: "Roulette", desc: "The live wheel — the pot and what's winning right now.", game: "roulette" },
   { kind: "task", label: "Task", desc: "The active paid task and how long is left to do it.", game: "task" },
-  { kind: "fundraiser", label: "Fundraiser", desc: "A crown that fills toward the goal as viewers chip in.", game: "fundraiser" },
+  { kind: "fundraiser", label: "Fundraiser", desc: "A cheer that fills toward the goal as viewers chip in.", game: "fundraiser" },
   { kind: "auction", label: "Auction", desc: "The live lot board — what's leading and by how much.", game: "auction" },
   // general — batch 2, donation-driven (components/overlays/Extras.tsx)
   { kind: "ticker", label: "Donation ticker", desc: "A thin broadcast-style strip of recent donations along the screen edge, with the session total pinned right." },

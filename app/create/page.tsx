@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { safeId } from "@/lib/id";
 import { useRouter } from "next/navigation";
 import { useProfile } from "@/lib/data/ProfileProvider";
 import { DEMO_ADDRESS, isDemoAddress, startDemoSession } from "@/lib/data/session";
@@ -8,7 +9,7 @@ import { markProved } from "@/lib/data/proveOwnership";
 import { MOCK_STREAMERS } from "@/lib/data/mock";
 import { isValidAddress } from "@/lib/chain/config";
 import { useWallet } from "@/lib/chain/useWallet";
-import { useCrown } from "@/lib/data/DataProvider";
+import { useCheer } from "@/lib/data/DataProvider";
 import { TopNav } from "@/components/TopNav";
 import { SocialIcon, SOCIAL_LABEL, SOCIAL_KINDS, SOCIAL_BRAND } from "@/components/icons";
 import { SOCIAL_EXAMPLE, isSocialValid, sanitizeSocials } from "@/lib/data/social-links";
@@ -26,7 +27,7 @@ const short = (a: string) => (a.length > 16 ? `${a.slice(0, 8)}…${a.slice(-6)}
 export default function CreatePage() {
   const router = useRouter();
   const { save } = useProfile();
-  const { mode } = useCrown();
+  const { mode } = useCheer();
   const wallet = useWallet();
 
   const [step, setStep] = useState(1);
@@ -47,7 +48,7 @@ export default function CreatePage() {
   // Same Aave-style wallet picker as the donation pages — opens Phantom/Solflare (with install
   // links when none is present). The old bare wallet.connect() silently did nothing with no wallet.
   const [walletModalOpen, setWalletModalOpen] = useState(false);
-  // Publishing the page to the Crown DB (registration must not claim success until the server has it).
+  // Publishing the page to the Cheer DB (registration must not claim success until the server has it).
   const [publishing, setPublishing] = useState(false);
   const [publishErr, setPublishErr] = useState("");
 
@@ -79,7 +80,7 @@ export default function CreatePage() {
   // A filled-in social link must be a real profile URL on its platform (anti-phishing) before moving on.
   const canNext2 = socials.every((s) => !s.url.trim() || isSocialValid(s.kind, s.url));
 
-  // Base58 Solana pubkey (32 bytes) — the payout address format of the Crown backend.
+  // Base58 Solana pubkey (32 bytes) — the payout address format of the Cheer backend.
   const manualValid = isValidAddress(manualAddr);
 
   function resolvedAddress(): string {
@@ -135,7 +136,7 @@ export default function CreatePage() {
           ? "Your wallet didn't sign the page, so it wasn't published. Approve the signature request and press Finish again."
           : res.reason === "taken"
             ? "That handle is already taken — pick another one."
-            : "Couldn't reach Crown to publish your page. Check your connection and press Finish again."
+            : "Couldn't reach Cheer to publish your page. Check your connection and press Finish again."
       );
       return;
     }
@@ -217,7 +218,7 @@ export default function CreatePage() {
               <div className="field">
                 <label htmlFor="w-handle">Your page link</label>
                 <div className={styles.linkField}>
-                  <span className={styles.linkPrefix}>{host || "crown.tv"}/@</span>
+                  <span className={styles.linkPrefix}>{host || "cheer.tv"}/@</span>
                   <input
                     id="w-handle"
                     type="text"
@@ -276,7 +277,7 @@ export default function CreatePage() {
                 </div>
               ))}
               {socials.length < SOCIAL_KINDS.length && (
-                <button className="btn-outline" type="button" style={{ alignSelf: "flex-start" }} onClick={() => setSocials((p) => [...p, { kind: "twitch", url: "", id: crypto.randomUUID() }])}>
+                <button className="btn-outline" type="button" style={{ alignSelf: "flex-start" }} onClick={() => setSocials((p) => [...p, { kind: "twitch", url: "", id: safeId() }])}>
                   + Add link
                 </button>
               )}
@@ -333,7 +334,7 @@ export default function CreatePage() {
               </div>
 
               {/* money-critical, so it gets a real notice — not grey fine print */}
-              <div className="notice">Donations land here directly. Crown never holds them, so a wrong address can&apos;t be undone.</div>
+              <div className="notice">Donations land here directly. Cheer never holds them, so a wrong address can&apos;t be undone.</div>
             </>
           )}
 

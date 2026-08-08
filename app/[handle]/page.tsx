@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCrown } from "@/lib/data/DataProvider";
+import { useCheer } from "@/lib/data/DataProvider";
 import { usePublicProfile } from "@/lib/data/usePublicProfile";
 import { tierInfo } from "@/lib/level";
 import { Logo } from "@/components/Logo";
@@ -13,9 +13,9 @@ import { SocialIcon, SOCIAL_LABEL } from "@/components/icons";
 import { normalizeSocialLink } from "@/lib/data/social-links";
 
 export default function StreamerPage({ params }: { params: { handle: string } }) {
-  const { getReputation, lastGainFor } = useCrown();
+  const { getReputation, lastGainFor } = useCheer();
   const handle = decodeURIComponent(params.handle).replace(/^@/, "");
-  // Resolve the maker by handle against the Crown DB (same source the game sub-pages use), WITH a
+  // Resolve the maker by handle against the Cheer DB (same source the game sub-pages use), WITH a
   // loading gate — getStreamer() resolved synchronously and flashed the "no such maker" screen on a
   // real page's primary donation link while /api/profiles was still in flight.
   const { profile: streamer, status } = usePublicProfile(handle);
@@ -73,7 +73,7 @@ export default function StreamerPage({ params }: { params: { handle: string } })
         </header>
 
         {/* ---- the donate action: the hero of the page ---- */}
-        <section className="vdonate" aria-label={`Donate to ${streamer.name}`}>
+        <section className="vdonate" aria-label={`Cheer ${streamer.name}`}>
           <DonateForm handle={streamer.handle} defaultAmount={5} streamerName={`${streamer.name}'s wallet`} presets={streamer.donatePresets} />
 
           {/* Reputation as a slim strip under the donate card — informative, never a competing box. */}
@@ -129,7 +129,7 @@ export default function StreamerPage({ params }: { params: { handle: string } })
           <ViewerLive handle={streamer.handle} name={streamer.name} profile={streamer} />
         </div>
         <section className="vfeed">
-          <Feed title="Recent supporters" limit={5} />
+          <Feed title="Recent supporters" limit={5} forAddress={streamer.address} />
         </section>
       </div>
 

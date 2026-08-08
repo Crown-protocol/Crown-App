@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 import { useSolanaWallet } from "@/lib/chain/wallet";
 import { lookupAccountByOwner } from "@/lib/data/lookupAccount";
 import { proveOwnership } from "@/lib/data/proveOwnership";
+import { useProfile } from "@/lib/data/ProfileProvider";
 import { WalletModal } from "@/components/WalletModal";
 
 // The single "Create or log in" entry. No middle page: the button opens the Connect-Wallet modal
 // right here, and the moment a wallet is connected it decides where you go —
-//   • the wallet already OWNS an account (found in the Crown DB) → hydrate it and open /space (log in)
+//   • the wallet already OWNS an account (found in the Cheer DB) → hydrate it and open /space (log in)
 //   • no account for this wallet                                 → /create (register; the wizard
 //     picks up the connected wallet's address as the payout target)
 // The account check is server-side (by wallet owner), so it works on a fresh device too, not only the
@@ -17,6 +18,7 @@ import { WalletModal } from "@/components/WalletModal";
 export function AuthButton({ label = "Create or log in", className = "btn", style }: { label?: string; className?: string; style?: React.CSSProperties }) {
   const router = useRouter();
   const { address, connected, signMessage } = useSolanaWallet();
+  const { markSession } = useProfile();
   const [open, setOpen] = useState(false);
   // "The user asked to sign in and we're now waiting for / acting on a connection." Gates the effect
   // below so it only routes as a result of THIS button, never a wallet connected elsewhere.
@@ -47,7 +49,7 @@ export function AuthButton({ label = "Create or log in", className = "btn", styl
       // them retry.
       if (found.status === "error") {
         setStep("");
-        setErr("Couldn't reach Crown to check your account. Check your connection and try again.");
+        setErr("Couldn't reach Cheer to check your account. Check your connection and try again.");
         doneRef.current = false;
         setRouting(false);
         return;
@@ -73,9 +75,21 @@ export function AuthButton({ label = "Create or log in", className = "btn", styl
         setRouting(false);
         return;
       }
+      if (proof === "no-session") {
+        // The signature was fine but the server issued no session — sending them to /space anyway
+        // would look signed in while every edit is refused. Say so and let them retry.
+        setStep("");
+        setErr("Couldn't start your session — the server is busy. Give it a moment and try again.");
+        doneRef.current = false;
+        setRouting(false);
+        return;
+      }
+      // Tell the app we're authenticated NOW, so the nav and any save that happens before the
+      // navigation completes already know — rather than waiting for the reload to discover it.
+      markSession();
       setDest("/space");
     })();
-  }, [routing, connected, address, signMessage]);
+  }, [routing, connected, address, signMessage, markSession]);
 
   // Perform the navigation from a plain effect (not the async tail above), so it always runs on a live
   // component. Close the modal first, then navigate. We use a hard location change rather than

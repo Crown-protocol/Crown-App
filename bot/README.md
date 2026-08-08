@@ -1,4 +1,4 @@
-# Crown Telegram bot
+# Cheer Telegram bot
 
 Уведомления контент-мейкеру в телегу: донаты, задачи и их дедлайны, лоты аукциона, сборы,
 раунды рулетки, выплаты, месячный дайджест. Плюс режим основателей — статистика по платформе.
@@ -10,10 +10,10 @@
 
 ```
 TELEGRAM_BOT_TOKEN=123456:ABC-твой-токен
-CROWN_BOT_SECRET=<любая длинная строка>
+CHEER_BOT_SECRET=<любая длинная строка>
 ```
 
-`CROWN_BOT_SECRET` должен **совпадать** со значением в `.env.local` сайта. Сервер работает
+`CHEER_BOT_SECRET` должен **совпадать** со значением в `.env.local` сайта. Сервер работает
 fail-closed: без совпадающего секрета он отвергает бота целиком (раньше при отсутствии
 секрета труба бот↔сервер становилась публичной).
 
@@ -22,10 +22,10 @@ fail-closed: без совпадающего секрета он отверга�
 **Для постоянной работы** — systemd-юнит с автоперезапуском (упавший бот поднимется сам):
 
 ```bash
-cp bot/crown-bot.service ~/.config/systemd/user/
+cp bot/cheer-bot.service ~/.config/systemd/user/
 systemctl --user daemon-reload
-systemctl --user enable --now crown-bot
-journalctl --user -u crown-bot -f     # логи
+systemctl --user enable --now cheer-bot
+journalctl --user -u cheer-bot -f     # логи
 ```
 
 Разово, для отладки: `npm run bot`.
@@ -59,7 +59,7 @@ Start. Ссылка живёт **15 минут**; просроченную бо�
 забирает очередь из `/api/telegram/outbox` и отчитывается, что реально доставлено. Вся
 логика — на стороне сайта (`lib/server/telegram-store.ts`).
 
-**Хранилище — таблицы `tg_*` в основной базе** (`data/crown.db`), а не отдельный файл; её
+**Хранилище — таблицы `tg_*` в основной базе** (`data/cheer.db`), а не отдельный файл; её
 бэкапит общий механизм (`lib/server/backup.ts`). Файл `bot/data/store.json` остался только
 как источник разовой миграции со старой версии.
 

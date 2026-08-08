@@ -38,6 +38,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "signature of the page owner required" }, { status: 403 });
     }
   }
-  await saveGameText({ id: b.id, game: b.game, handle: b.handle, escrow: b.escrow, body: b.body, salt: b.salt });
+  const saved = await saveGameText({ id: b.id, game: b.game, handle: b.handle, escrow: b.escrow, body: b.body, salt: b.salt });
+  // The id exists but belongs to another page: the signature proved this handle, not that one.
+  if (!saved) return NextResponse.json({ error: "this id belongs to another page" }, { status: 409 });
   return NextResponse.json({ ok: true });
 }

@@ -1,6 +1,7 @@
 import { Connection, PublicKey } from "@solana/web3.js";
 import bs58 from "bs58";
-import { insertDonation, getCursor, setCursor, listProfiles } from "./store";
+import { insertDonation, getCursor, setCursor, listProfiles, getDonationEvent } from "./store";
+import { getLink, forwardDonation } from "./streamlabs";
 import { readStore, writeStore, queueNotify } from "./telegram-store";
 
 // ──────────────────────────────────────────────────────────────────
@@ -9,13 +10,13 @@ import { readStore, writeStore, queueNotify } from "./telegram-store";
 // into the DB (donations + reputation). This is what turns the chain feed
 // and the reputation numbers into real data.
 //
-// Event layout (Crown-Core event-CPI, verified against the repo):
+// Event layout (Cheer-Core event-CPI, verified against the repo):
 //   inner instruction, program == splitter, data =
 //   e445a52e51cb9a1d (event-CPI tag, 8) ‖ e8d228118e7c91ee (sha256("event:Settled")[..8])
 //   ‖ payer (32) ‖ streamer (32) ‖ gross u64 LE (8)
 // Escrow attribution: when the emitted payer is an escrow account owned by a
 // pinned factory (discriminator 1fd57bbbba16da9b, donor at bytes 8..40), the
-// book credits the DONOR — same rule as crown-index.
+// book credits the DONOR — same rule as cheer-index.
 // ──────────────────────────────────────────────────────────────────
 
 const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC || "https://api.devnet.solana.com";
@@ -56,7 +57,7 @@ function parseSettledFromData(dataB58: string): Settled | null {
 
 // When the emitted payer is a live escrow account of a pinned factory, the
 // donation belongs to its donor. If the escrow is already closed we keep the
-// raw payer — the same honesty rule crown-index applies (anomaly, not a guess).
+// raw payer — the same honesty rule cheer-index applies (anomaly, not a guess).
 async function attribute(rawPayer: string): Promise<{ payer: string; source: string }> {
   try {
     await new Promise((r) => setTimeout(r, 350));
@@ -121,10 +122,16 @@ export async function tick(): Promise<{ ingested: number; scanned: number }> {
     if (splitterIdx === -1) continue;
 
     const inner = (tx.meta.innerInstructions ?? []).flatMap((g) => g.instructions);
+    // A transaction can carry SEVERAL Settled events (the splitter paying more than one
+    // recipient). Each is its own donation, so each gets its own position — the donations row is
+    // keyed by (signature, ev_index). Counting only parsed events keeps the index stable across
+    // re-scans: it doesn't shift if unrelated inner instructions come or go.
+    let evIndex = -1;
     for (const ix of inner) {
       if (ix.programIdIndex !== splitterIdx) continue;
       const ev = parseSettledFromData(ix.data);
       if (!ev) continue;
+      evIndex++;
       let att;
       try {
         att = await attribute(ev.payer);
@@ -133,6 +140,7 @@ export async function tick(): Promise<{ ingested: number; scanned: number }> {
       }
       const isNew = await insertDonation({
         signature: s.signature,
+        evIndex,
         slot: s.slot,
         blockTime: s.blockTime ?? null,
         payer: att.payer,
@@ -149,6 +157,9 @@ export async function tick(): Promise<{ ingested: number; scanned: number }> {
         // landed in their mirror. Address → handle via the profiles table;
         // strangers' pages simply have no handle and no chat to ring.
         void notifyTelegram(ev.streamer, ev.gross);
+        // …and into the streamer's own Streamlabs alert box, if they connected one. Fire-and-forget
+        // for the same reason as above: their outage must never stall ingest of money.
+        void notifyStreamlabs(ev.streamer, ev.gross, s.signature, evIndex);
       }
     }
     // Progress survives a mid-pass rate limit: this signature is done for good.
@@ -159,7 +170,7 @@ export async function tick(): Promise<{ ingested: number; scanned: number }> {
 
 // Background loop, one per server process (dev HMR re-imports modules — the
 // globalThis guard keeps exactly one interval alive).
-const LOOP_KEY = Symbol.for("crown.indexer.loop");
+const LOOP_KEY = Symbol.for("cheer.indexer.loop");
 
 export function startIndexerLoop(intervalMs = 30_000): void {
   const g = globalThis as { [LOOP_KEY]?: boolean };
@@ -174,6 +185,32 @@ export function startIndexerLoop(intervalMs = 30_000): void {
   };
   run();
   setInterval(run, intervalMs);
+}
+
+// Mirror a freshly ingested donation into the streamer's Streamlabs alert box, so it fires through
+// the overlay they already built there. Silent when they never connected Streamlabs, and never
+// throws — see lib/server/streamlabs.ts.
+export async function notifyStreamlabs(addr: string, gross: number, signature: string, evIndex: number): Promise<void> {
+  try {
+    const profiles = await listProfiles();
+    const hit = profiles.find((p) => p.address === addr);
+    if (!hit) return;
+    const link = await getLink(hit.handle);
+    if (!link) return; // not connected — nothing to do, and no work done
+    // Read the EXACT event we're firing for by (signature, ev_index) — not "the most recent donation
+    // to this streamer", which attached the wrong donor's name/message/payer whenever two events
+    // landed close together or one tx paid several recipients. Its donor_name/message already carry
+    // whatever the intent decorated in insertDonation.
+    const row = await getDonationEvent(signature, evIndex);
+    await forwardDonation({
+      handle: hit.handle,
+      from: row?.donorName || "Anonymous",
+      amount: gross / 1e6,
+      message: row?.message ?? null,
+      signature,
+      donorId: row?.payer ?? null,
+    });
+  } catch {}
 }
 
 // Fire-and-forget Telegram ping for a freshly mirrored donation. Never throws:

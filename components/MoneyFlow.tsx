@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CrownMark } from "./icons";
+import { CheerMark } from "./icons";
 import styles from "./MoneyFlow.module.css";
 
 const AMOUNTS = [5, 25, 100];
@@ -103,7 +103,7 @@ export function MoneyFlow() {
         <div className={`${styles.node} ${styles.nodeMuted}`}>
           <div className={styles.nodeTop}>
             <span className={styles.badge}>
-              <CrownMark />
+              <CheerMark />
             </span>
             Smart contract
           </div>

@@ -7,6 +7,7 @@ import { RulesSummary, daysText } from "@/components/RulesSummary";
 import { WarnIcon } from "@/components/WarnIcon";
 import { withFundraiserDefaults } from "@/lib/data/fundraiser";
 import { usd } from "@/lib/money";
+import { RulesScopeNote } from "@/components/games/RulesScopeNote";
 
 export const DEFAULT_FUNDRAISER_CONFIG: FundraiserConfig = {
   minContribution: 1,
@@ -49,6 +50,7 @@ export function FundraiserGameSettings({ profile, onSave }: { profile: Profile; 
 
   return (
     <div className="game-settings">
+      <RulesScopeNote />
       <section className="card" aria-labelledby="fr-money-h">
         <h2 id="fr-money-h">Money</h2>
 

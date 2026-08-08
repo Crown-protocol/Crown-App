@@ -22,22 +22,22 @@ import { db, now } from "./db";
 
 // Only these key families sync — anything else in a POST is rejected.
 export const SYNCED_KEYS = [
-  "crown-tasks",
-  "crown-roulette-round",
-  "crown-roulette-meta",
-  "crown-auction-lots",
-  "crown-auction-meta",
-  "crown-fundraiser-collected",
-  "crown-fundraiser-status",
+  "cheer-tasks",
+  "cheer-roulette-round",
+  "cheer-roulette-meta",
+  "cheer-auction-lots",
+  "cheer-auction-meta",
+  "cheer-fundraiser-collected",
+  "cheer-fundraiser-status",
   // The session REGISTRY (scope = "<handle>:<gameId>", value = GameSession[]). Without it a
   // second+ session only exists in the streamer's browser: a viewer's ?s=<id> link can't name
   // a scope the viewer has never heard of, and falls back to the legacy bare-handle state.
-  "crown-game-sessions",
+  "cheer-game-sessions",
   // The rules a session was opened with (lib/data/gameConfig.ts), keyed by game inside one blob
   // per scope. Shared for the same reason the registry is: a viewer's browser has no copy of the
   // maker's profile, so without it the public page falls back to platform defaults and could
   // show a $5 minimum where this session set $50.
-  "crown-game-config",
+  "cheer-game-config",
 ] as const;
 
 const MAX_LIST = 500; // abuse cap: a scope's list never grows past this
@@ -46,7 +46,7 @@ const MAX_VALUE_BYTES = 64 * 1024; // one key's JSON — far above any honest pa
 export type GameOp =
   | { type: "append"; item: { id: string } & Record<string, unknown>; seed?: unknown[] }
   | { type: "suggest"; title: string; genre: string; dPool: number; dBackers: number }
-  | { type: "entry"; id: string; entry: Record<string, unknown> }
+  | { type: "entry"; id: string; entry: Record<string, unknown>; seed?: unknown[] }
   | { type: "add"; delta: number }
   // Just `{ id }` — the merge only ever reads the id, and demanding an index signature here would
   // reject every caller that passes a plain interface (GameSession) rather than a literal.
@@ -180,7 +180,16 @@ export function applyGameOp(scope: string, k: string, op: GameOp): Promise<unkno
       case "entry": {
         // Auction top-up: append one LotEntry to one lot. Commutes with other
         // viewers' top-ups on the same lot — nobody's escrow gets lost.
-        const list: { id?: unknown; entries?: unknown[] }[] = Array.isArray(current) ? current : [];
+        // Same seeding rule as `append`: on the first write the server copy may be empty (or absent)
+        // while the viewer's board is the in-memory demo seed. Adopting an empty list here would drop
+        // the entry on the floor — the lot it belongs to wouldn't exist server-side.
+        const list: { id?: unknown; entries?: unknown[] }[] = Array.isArray(current) && current.length
+          ? current
+          : Array.isArray(op.seed)
+            ? (op.seed as { id?: unknown; entries?: unknown[] }[])
+            : Array.isArray(current)
+              ? current
+              : [];
         if (typeof op.id !== "string" || !op.entry) throw new Error("bad entry");
         const next = list.map((l) =>
           l && l.id === op.id ? { ...l, entries: [...(Array.isArray(l.entries) ? l.entries : []), op.entry] } : l

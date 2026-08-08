@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useCrown, NotConfiguredError } from "@/lib/data/DataProvider";
+import { useCheer, NotConfiguredError } from "@/lib/data/DataProvider";
 import { useWallet } from "@/lib/chain/useWallet";
 import { readDonorName, writeDonorName } from "@/lib/data/donorName";
+import { useConfirm } from "@/components/useConfirm";
+import { dangerCopy } from "@/lib/data/dangerous";
 import { usd } from "@/lib/money";
 
 type Status = "idle" | "sending" | "done" | "error";
@@ -20,7 +22,10 @@ function friendlyError(e: unknown): { text: string; soft: boolean } {
   if (/rejected|denied|declined|cancel/i.test(msg)) return { text: "", soft: true }; // user closed the wallet — not an error
   // Solana wallets phrase an empty USDC account several ways; SOL covers tx fees.
   if (/insufficient|custom program error: 0x1\b|InsufficientFunds/i.test(msg)) return { text: "Not enough USDC in the wallet.", soft: false };
-  if (/could not find account|AccountNotFound/i.test(msg)) return { text: "No devnet USDC in this wallet yet.", soft: false };
+  // "No USDC", not "no devnet USDC": which network the app runs on is our business, not the donor's,
+  // and the sentence has to stay true after the mainnet cutover. The one place that DOES name the
+  // network is /wallet-guide, where saying "this isn't real money yet" is the honest thing to do.
+  if (/could not find account|AccountNotFound/i.test(msg)) return { text: "No USDC in this wallet yet.", soft: false };
   if (/connect.*wallet/i.test(msg)) return { text: "Connect your wallet first.", soft: false };
   return { text: "Something went wrong. Try again.", soft: false };
 }
@@ -38,8 +43,9 @@ export function DonateForm({
   presets?: number[];
   slug?: string; // campaign page passes its slug so only that campaign's total is bumped
 }) {
-  const { mode, donate } = useCrown();
+  const { mode, donate } = useCheer();
   const wallet = useWallet();
+  const confirm = useConfirm(); // a donation leaves the wallet for good — never on one click
   const PRESETS = presets.length ? presets : DEFAULT_PRESETS;
 
   // Open on a real preset. If defaultAmount isn't one of this streamer's presets, fall back to a
@@ -66,7 +72,7 @@ export function DonateForm({
   const busy = status === "sending";
   // A submit must not re-fire while the request is in flight OR during the 2s "Done" window that
   // follows a success (the button stays visible and would otherwise send a duplicate donation).
-  // "error" is intentionally excluded — the button reverts to "Donate" so the donor can retry.
+  // "error" is intentionally excluded — the button reverts to "Cheer" so the donor can retry.
   const locked = status === "sending" || status === "done";
   const chainNeedsConnect = mode === "chain" && !wallet.connected;
 
@@ -107,6 +113,7 @@ export function DonateForm({
     setError("");
 
     if (chainNeedsConnect) {
+      if (wallet.connecting) return; // a connect popup is already open — don't stack a second one
       if (!wallet.hasWallet) {
         setError("No Solana wallet found in the browser. Install Phantom or Solflare.");
         return;
@@ -115,6 +122,13 @@ export function DonateForm({
       return;
     }
 
+    // Everything above is preamble (connecting a wallet, telling them they don't have one). THIS is
+    // the point of no return, so the confirmation sits here rather than on the button: the same
+    // click can mean "connect" or "send $50", and only the second one deserves a stop.
+    confirm(dangerCopy.donate(amount), () => send());
+  }
+
+  async function send() {
     setStatus("sending");
     try {
       await donate({ handle, amount, name, message, slug }, wallet.address);
@@ -140,7 +154,7 @@ export function DonateForm({
   if (busy) label = "Sending…";
   else if (status === "done") label = "Done";
   else if (chainNeedsConnect) label = wallet.connecting ? "Opening wallet…" : "Connect wallet";
-  else label = (<>Donate <span className="num">{usd(amount)}</span></>);
+  else label = (<>Cheer <span className="num">{usd(amount)}</span></>);
 
   return (
     <div className="card form-card">
@@ -167,9 +181,15 @@ export function DonateForm({
               value={customValue}
               disabled={busy}
               onChange={(e) => {
-                setCustomValue(e.target.value);
+                const raw = e.target.value;
+                setCustomValue(raw);
                 setActivePreset("custom");
-                if (e.target.value) setAmount(Math.max(1, Math.round(+e.target.value) || 1));
+                // Keep the amount that will actually be sent in step with the field: empty or
+                // rounds-to-zero ("0", "0.4", "-2", junk) means "no real amount yet", so DON'T quietly
+                // arm a $1 charge behind it. amount only moves to a real dollar figure once one is typed;
+                // onCustomBlur then snaps the display to match, so a stray "0" can never send $1.
+                const n = Math.round(+raw);
+                if (raw && Number.isFinite(n) && n >= 1) setAmount(n);
               }}
               onBlur={onCustomBlur}
             />
@@ -190,7 +210,7 @@ export function DonateForm({
         <textarea id="don-msg" rows={2} placeholder="optional" value={message} disabled={busy} onChange={(e) => setMessage(e.target.value)} />
       </div>
 
-      <button type="button" className="btn" disabled={locked} onClick={onSubmit}>
+      <button type="button" className="btn" disabled={locked || wallet.connecting} onClick={onSubmit}>
         {label}
       </button>
 
@@ -204,6 +224,7 @@ export function DonateForm({
           {mode === "chain" && wallet.connected ? ` · ${short(wallet.address)}` : ""}
         </div>
       )}
+      {confirm.dialog}
     </div>
   );
 }

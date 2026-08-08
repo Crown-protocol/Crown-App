@@ -5,17 +5,17 @@ import { readFileSync } from "node:fs";
 import { Keypair } from "@solana/web3.js";
 import nacl from "tweetnacl";
 
-const BASE = process.env.CROWN_BASE || "http://localhost:3000";
+const BASE = (process.env.CHEER_BASE ?? process.env.CROWN_BASE) || "http://localhost:3000";
 const DEMO_ADDRESS = "CrownDemo1111111111111111111111111111111111";
 
 // The synthetic-donation hook is locked behind CROWN_TEST_SECRET (dev-only + secret header).
 // Read the same value the dev server loaded from .env.local so `node scripts/verify-db.mjs`
 // works out of the box; env var wins if set. Empty = the hook stays locked and its checks skip.
 const TEST_SECRET =
-  process.env.CROWN_TEST_SECRET ||
+  (process.env.CHEER_TEST_SECRET ?? process.env.CROWN_TEST_SECRET) ||
   (() => {
     try {
-      return (readFileSync(new URL("../.env.local", import.meta.url), "utf8").match(/^CROWN_TEST_SECRET=(.+)$/m) || [])[1] || "";
+      return (readFileSync(new URL("../.env.local", import.meta.url), "utf8").match(/^(?:CHEER|CROWN)_TEST_SECRET=(.+)$/m) || [])[1] || "";
     } catch {
       return "";
     }
@@ -43,11 +43,11 @@ const post = (path, body, headers = {}) =>
 // Mirror of lib/chain/authMessage.ts
 const sha256Hex = (s) => createHash("sha256").update(s).digest("hex");
 const authMsg = (action, subject, ts, body) =>
-  new TextEncoder().encode(`crown-app:${action}:${subject.toLowerCase()}:${ts}:${body === null ? "-" : sha256Hex(JSON.stringify(body))}`);
+  new TextEncoder().encode(`cheer-app:${action}:${subject.toLowerCase()}:${ts}:${body === null ? "-" : sha256Hex(JSON.stringify(body))}`);
 const signHeaders = (kp, action, subject, body) => {
   const ts = Math.floor(Date.now() / 1000);
   const sig = nacl.sign.detached(authMsg(action, subject, ts, body), kp.secretKey);
-  return { "x-crown-pubkey": kp.publicKey.toBase58(), "x-crown-ts": String(ts), "x-crown-signature": Buffer.from(sig).toString("base64") };
+  return { "x-cheer-pubkey": kp.publicKey.toBase58(), "x-cheer-ts": String(ts), "x-cheer-signature": Buffer.from(sig).toString("base64") };
 };
 
 const run = randomBytes(4).toString("hex");
@@ -55,7 +55,22 @@ const H = `dbcheck${run}`; // unique handle per run — rate-limit friendly, no 
 const OWNER = Keypair.generate();
 const STRANGER = Keypair.generate();
 const STREAMER_ADDR = OWNER.publicKey.toBase58();
-const DONOR = Keypair.generate().publicKey.toBase58();
+// A full keypair, not just an address: /api/donations/intent now requires the PAYER to sign for the
+// caption, so the script has to be able to produce that proof like a real donor's wallet does.
+const DONOR_KP = Keypair.generate();
+const DONOR = DONOR_KP.publicKey.toBase58();
+// The intent proof: a plain ed25519 signature over cheer-app:intent:<txSig>:<ts>:-
+const intentBody = (kp, txSig, extra = {}) => {
+  const ts = Math.floor(Date.now() / 1000);
+  const msg = new TextEncoder().encode(`cheer-app:intent:${txSig.toLowerCase()}:${ts}:-`);
+  return {
+    signature: txSig,
+    payer: kp.publicKey.toBase58(),
+    ts,
+    proof: Buffer.from(nacl.sign.detached(msg, kp.secretKey)).toString("base64"),
+    ...extra,
+  };
+};
 const mkProfile = (over = {}) => ({
   handle: H, name: "DB Check", bio: "verify", address: STREAMER_ADDR,
   socials: [], tiers: [{ name: "Newcomer", threshold: 0, color: "#9AA0AE" }], ...over,
@@ -70,7 +85,7 @@ const hackBody = mkProfile({ bio: "hack" });
 check("owned page: STRANGER's signature REJECTED (403)", (await post("/api/profiles", hackBody, signHeaders(STRANGER, "profile", H, hackBody))).status === 403);
 const updBody = mkProfile({ bio: "updated" });
 check("owned page: owner's update ok", (await post("/api/profiles", updBody, signHeaders(OWNER, "profile", H, updBody))).body?.ok === true);
-check("stale timestamp REJECTED", (await post("/api/profiles", updBody, { ...signHeaders(OWNER, "profile", H, updBody), "x-crown-ts": String(Math.floor(Date.now() / 1000) - 3600) })).status === 403);
+check("stale timestamp REJECTED", (await post("/api/profiles", updBody, { ...signHeaders(OWNER, "profile", H, updBody), "x-cheer-ts": String(Math.floor(Date.now() / 1000) - 3600) })).status === 403);
 check("garbage payout address REJECTED (400)", (await post("/api/profiles", mkProfile({ handle: H + "bad", address: "0xdead" }))).status === 400);
 
 // ── 2. Texts follow page ownership
@@ -81,13 +96,23 @@ check("texts: readable", (await j(`/api/texts?handle=${H}&game=task`)).body?.tex
 
 // ── 3. Donation pipeline: intent → synthetic Settled → feed + reputation
 const SIG = "VERIFYDB" + run;
-check("intent saved", (await post("/api/donations/intent", { signature: SIG, handle: H, name: "Max", message: "gg" })).body?.ok === true);
+check("intent saved", (await post("/api/donations/intent", intentBody(DONOR_KP, SIG, { handle: H, name: "Max", message: "gg" }))).body?.ok === true);
+// The caption is the donor's to write: without a proof from the paying wallet, anyone who saw the
+// public tx signature could attach their own name and message to someone else's donation.
+check("intent: refused without proof", (await post("/api/donations/intent", { signature: SIG + "X", handle: H, name: "Impostor" })).status === 401);
+// A stranger CAN sign — for their own key. What they can't do is make that signature verify against
+// the payer this row claims, so the row is refused rather than silently mis-attributed.
+{
+  const forged = intentBody(STRANGER, SIG + "Y", { handle: H, name: "Impostor" });
+  forged.payer = DONOR; // claim the real donor's wallet, sign with the stranger's
+  check("intent: refused with a stranger's proof", (await post("/api/donations/intent", forged)).status === 401);
+}
 const ins = await post("/api/indexer", { test: { signature: SIG, slot: 1, payer: DONOR, streamer: STREAMER_ADDR, gross: 25_000_000 } }, TEST_HDR);
 // The synthetic-insert path is double-locked: refused in production (NODE_ENV=production) and,
 // even in dev, gated by CROWN_TEST_SECRET. A 403 here (prod build, or the secret not shared) means
 // the four pipeline checks are SKIPPED, not failed — they need `next dev` with the secret set.
 if (ins.status === 403) {
-  const why = /disabled/i.test(JSON.stringify(ins.body)) ? "set CROWN_TEST_SECRET (server + this script) and run against `next dev`" : "indexer test hook is dev-only; run against `next dev`";
+  const why = /disabled/i.test(JSON.stringify(ins.body)) ? "set CHEER_TEST_SECRET (server + this script) and run against `next dev`" : "indexer test hook is dev-only; run against `next dev`";
   skip("synthetic Settled inserted via real path", why);
   skip("duplicate signature is a no-op", "depends on synthetic insert");
   skip("feed row decorated by intent (Max/gg/$25)", "depends on synthetic insert");
@@ -109,7 +134,7 @@ await fetch(`${BASE}/api/profiles/${H}demo`, { method: "DELETE" }); // demo page
 check("/api/health ok", (await j("/api/health")).body?.ok === true);
 let limited = false;
 for (let i = 0; i < 25; i++) {
-  const r = await post("/api/donations/intent", { signature: "RL" + run + i, handle: H });
+  const r = await post("/api/donations/intent", intentBody(DONOR_KP, "RL" + run + i, { handle: H }));
   if (r.status === 429) { limited = true; break; }
 }
 check("rate limit kicks in on write spam (429)", limited);

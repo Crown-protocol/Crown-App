@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
       lastSeen,
       // Configuration the bot can't work without — reported so a silent misconfiguration
       // ("everything looks connected, nothing arrives") is visible instead of mysterious.
-      secretConfigured: !!process.env.CROWN_BOT_SECRET,
+      secretConfigured: !!process.env.CHEER_BOT_SECRET,
       founderSecretConfigured: !!process.env.FOUNDER_SECRET,
     },
     links: Object.entries(s.links).map(([handle, l]) => ({

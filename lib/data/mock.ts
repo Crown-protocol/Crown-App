@@ -98,23 +98,23 @@ export const MOCK_STREAMERS: Record<string, Streamer> = {
 };
 
 // Homepage showcase: per-streamer aggregates (hardcoded in mock,
-// will come from the indexer in chain mode). The "crown" goes to whoever donated the most.
+// will come from the indexer in chain mode). The "cheer" goes to whoever donated the most.
 export interface RealmStat {
   handle: string; // without "@", the key in MOCK_STREAMERS
   receivedAll: number; // total received, $
   received7d: number; // received over the last 7 days, $
   spark: number[]; // mini-chart points (receipts over time)
-  crown: string; // name of whoever holds the crown
+  cheer: string; // name of whoever holds the cheer
 }
 
 export const MOCK_REALMS: RealmStat[] = [
-  { handle: "nova", receivedAll: 31450, received7d: 2740, crown: "lesya", spark: [8, 9, 7, 11, 10, 14, 13, 17, 15, 19, 18, 22, 20, 25, 24, 28] },
-  { handle: "glitch", receivedAll: 27200, received7d: 4100, crown: "Anonymous", spark: [20, 16, 22, 18, 26, 21, 15, 24, 28, 22, 30, 26, 34, 29, 38, 41] },
-  { handle: "miradev", receivedAll: 19880, received7d: 1580, crown: "Dan", spark: [6, 7, 6, 9, 8, 11, 10, 9, 13, 12, 15, 14, 17, 16, 19, 20] },
-  { handle: "volk", receivedAll: 15340, received7d: 2210, crown: "Maximus", spark: [14, 12, 16, 13, 18, 20, 15, 22, 19, 24, 21, 26, 23, 28, 25, 30] },
-  { handle: "sonya", receivedAll: 11760, received7d: 1890, crown: "anna_k", spark: [9, 11, 10, 13, 12, 15, 14, 16, 15, 18, 17, 20, 19, 21, 20, 23] },
-  { handle: "raidkeeper", receivedAll: 8430, received7d: 990, crown: "Whale", spark: [10, 8, 12, 9, 11, 14, 10, 13, 16, 12, 15, 18, 14, 17, 15, 19] },
-  { handle: "pixelira", receivedAll: 4275, received7d: 640, crown: "Julia", spark: [4, 5, 4, 6, 5, 7, 6, 8, 7, 9, 8, 10, 9, 11, 10, 12] },
+  { handle: "nova", receivedAll: 31450, received7d: 2740, cheer: "lesya", spark: [8, 9, 7, 11, 10, 14, 13, 17, 15, 19, 18, 22, 20, 25, 24, 28] },
+  { handle: "glitch", receivedAll: 27200, received7d: 4100, cheer: "Anonymous", spark: [20, 16, 22, 18, 26, 21, 15, 24, 28, 22, 30, 26, 34, 29, 38, 41] },
+  { handle: "miradev", receivedAll: 19880, received7d: 1580, cheer: "Dan", spark: [6, 7, 6, 9, 8, 11, 10, 9, 13, 12, 15, 14, 17, 16, 19, 20] },
+  { handle: "volk", receivedAll: 15340, received7d: 2210, cheer: "Maximus", spark: [14, 12, 16, 13, 18, 20, 15, 22, 19, 24, 21, 26, 23, 28, 25, 30] },
+  { handle: "sonya", receivedAll: 11760, received7d: 1890, cheer: "anna_k", spark: [9, 11, 10, 13, 12, 15, 14, 16, 15, 18, 17, 20, 19, 21, 20, 23] },
+  { handle: "raidkeeper", receivedAll: 8430, received7d: 990, cheer: "Whale", spark: [10, 8, 12, 9, 11, 14, 10, 13, 16, 12, 15, 18, 14, 17, 15, 19] },
+  { handle: "pixelira", receivedAll: 4275, received7d: 640, cheer: "Julia", spark: [4, 5, 4, 6, 5, 7, 6, 8, 7, 9, 8, 10, 9, 11, 10, 12] },
 ];
 
 export const MOCK_FEED: Donation[] = [

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSolanaWallet } from "@/lib/chain/wallet";
 import { useProfile } from "./ProfileProvider";
-import { hasProof, hasAnyProof } from "./proveOwnership";
+import { hasProof } from "./proveOwnership";
 import { readDemoSession, DEMO_SESSION_EVENT } from "./session";
 
 // Are you actually SIGNED IN right now? A profile must exist on this device, AND one of:
@@ -48,6 +48,8 @@ export function useSignedIn(): boolean {
   // hasn't reattached yet — any proof stored on this device. Requiring `connected` was the bug: for
   // the first seconds after F5 nothing is connected, so a signed-in visitor was shown the signed-out
   // landing. A proof is only written after a verified signature and log out deletes it.
-  const proven = address ? connected && hasProof(address) : hasAnyProof();
+  // Without a wallet attached, ask about the profile this device holds — not "any proof at all", which
+  // on a shared browser showed a signed-in header for someone else's cached account.
+  const proven = address ? connected && hasProof(address) : !!profile.address && hasProof(profile.address);
   return hasSession || proven || demo;
 }

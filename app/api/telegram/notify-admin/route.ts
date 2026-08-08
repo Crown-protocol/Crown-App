@@ -5,12 +5,12 @@ import { readStore, writeStore, queueAdmin } from "@/lib/server/telegram-store";
 // server-to-server endpoint (the real backend / a founder script calls it), never the browser.
 //
 // Secret-gated, fail-closed: it broadcasts to EVERY founder, so an open endpoint would let anyone
-// spam the admin channel with forged platform stats. Requires x-crown-admin === CROWN_ADMIN_SECRET;
+// spam the admin channel with forged platform stats. Requires x-cheer-admin === CHEER_ADMIN_SECRET;
 // if the env var isn't set the endpoint is simply unavailable (no guessable default).
-const ADMIN_SECRET = process.env.CROWN_ADMIN_SECRET;
+const ADMIN_SECRET = process.env.CHEER_ADMIN_SECRET;
 
 export async function POST(req: Request) {
-  if (!ADMIN_SECRET || req.headers.get("x-crown-admin") !== ADMIN_SECRET) {
+  if (!ADMIN_SECRET || req.headers.get("x-cheer-admin") !== ADMIN_SECRET) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

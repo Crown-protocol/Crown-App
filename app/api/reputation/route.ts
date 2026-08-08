@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 // The mirror book. ?payer=<base58> → every streamer this wallet has honestly
 // paid; add &streamer=<base58> for one pair. Totals are USDC minor units —
-// the same unit crown-index returns, so the two sources are interchangeable.
+// the same unit cheer-index returns, so the two sources are interchangeable.
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const payer = searchParams.get("payer");

@@ -24,10 +24,10 @@ import {
 } from "./games";
 
 // ──────────────────────────────────────────────────────────────────
-// The full game flows over the Crown backend — escrow birth on Solana
-// (Crown-Factory two-outcome) + registration/actions on the ICP resolver
+// The full game flows over the Cheer backend — escrow birth on Solana
+// (Cheer-Factory two-outcome) + registration/actions on the ICP resolver
 // canisters. Everything here composes primitives that are pinned by the
-// backend repos' own test vectors (crown-salt, PDA, message formats, id
+// backend repos' own test vectors (cheer-salt, PDA, message formats, id
 // derivations), so when the canisters get public principals (env), these
 // flows go live UNCHANGED. Until then gamePrincipals.<game>() is false and
 // no UI path reaches this file.
@@ -62,6 +62,16 @@ export function fromHex(s: string): Uint8Array {
   return out;
 }
 
+/**
+ * What a viewer is told when the game's on-chain half isn't reachable.
+ *
+ * Every one of these cases is the same thing from the person's side: this game can't take money
+ * right now. Which piece of our plumbing is missing — the canister principal, the IC gateway, a
+ * resolver key — is our problem, not theirs, and naming it leaks the build's internals into a
+ * donation screen. One sentence, and it stays true whichever piece is the one that's absent.
+ */
+const NOT_LIVE = "This game isn't taking money right now — try again later.";
+
 function err(e: unknown): { ok: false; error: string } {
   const raw = e instanceof Error ? e.message : String(e);
   const first = raw.split("\n")[0].trim();
@@ -91,16 +101,16 @@ const u64leBytes = (v: bigint): Uint8Array => {
 
 // ---- deterministic ids (pinned by the canisters' auth.rs vectors) --------
 
-// collection_id = sha256("crown:conditional-funding" ‖ len(canister) u8 ‖ canister ‖ recipient ‖ nonce_le)
+// collection_id = sha256("cheer:conditional-funding" ‖ len(canister) u8 ‖ canister ‖ recipient ‖ nonce_le)
 export async function deriveCollectionId(canisterPrincipal: string, recipient: PublicKey, nonce: bigint): Promise<Uint8Array> {
   const cid = Principal.fromText(canisterPrincipal).toUint8Array();
-  return sha256(concat(enc.encode("crown:conditional-funding"), new Uint8Array([cid.length]), cid, recipient.toBytes(), u64leBytes(nonce)));
+  return sha256(concat(enc.encode("cheer:conditional-funding"), new Uint8Array([cid.length]), cid, recipient.toBytes(), u64leBytes(nonce)));
 }
 
-// auction_id = sha256("crown:auction" ‖ len(canister) u8 ‖ canister ‖ recipient ‖ nonce_le)
+// auction_id = sha256("cheer:auction" ‖ len(canister) u8 ‖ canister ‖ recipient ‖ nonce_le)
 export async function deriveAuctionId(canisterPrincipal: string, recipient: PublicKey, nonce: bigint): Promise<Uint8Array> {
   const cid = Principal.fromText(canisterPrincipal).toUint8Array();
-  return sha256(concat(enc.encode("crown:auction"), new Uint8Array([cid.length]), cid, recipient.toBytes(), u64leBytes(nonce)));
+  return sha256(concat(enc.encode("cheer:auction"), new Uint8Array([cid.length]), cid, recipient.toBytes(), u64leBytes(nonce)));
 }
 
 // lot_id = sha256(auction_id ‖ text_hash)
@@ -114,7 +124,7 @@ async function signed(wallet: FlowWallet, message: string): Promise<Uint8Array> 
   return sig;
 }
 
-// Attach the human words to an escrow in the Crown DB (canisters pin hashes only).
+// Attach the human words to an escrow in the Cheer DB (canisters pin hashes only).
 async function postText(t: { id: string; game: string; handle: string; escrow: string; body: string; salt?: string }): Promise<void> {
   await fetch("/api/texts", {
     method: "POST",
@@ -126,20 +136,20 @@ async function postText(t: { id: string; game: string; handle: string; escrow: s
 // ══════════════════════════════ TASK ══════════════════════════════
 
 // Viewer sets a paid task: resolver from the canister → escrow on Solana → register on the
-// canister (donor-signed) → words into the Crown DB. task_id ≡ the escrow address.
+// canister (donor-signed) → words into the Cheer DB. task_id ≡ the escrow address.
 export async function taskStartOnChain(
   wallet: FlowWallet,
   input: { recipient: string; dollars: number; durationHours: number; text: string; handle: string }
 ): Promise<FlowResult<{ escrow: string; txSig: string }>> {
   try {
-    if (!gamePrincipals.task()) return { ok: false, error: "Task canister isn't live yet." };
+    if (!gamePrincipals.task()) return { ok: false, error: NOT_LIVE };
     if (!isValidAddress(input.recipient)) return { ok: false, error: "This page has no valid payout address." };
     const canister = await tasksCanister();
-    if (!canister) return { ok: false, error: "IC gateway isn't configured." };
+    if (!canister) return { ok: false, error: NOT_LIVE };
 
     const resolverOpt = await canister.get_resolver(CHAIN_ID);
     const resolverBytes = Array.isArray(resolverOpt) ? resolverOpt[0] : undefined;
-    if (!resolverBytes) return { ok: false, error: "The task resolver isn't provisioned for this chain." };
+    if (!resolverBytes) return { ok: false, error: NOT_LIVE };
 
     const donor = new PublicKey(wallet.address);
     const streamer = new PublicKey(input.recipient);
@@ -183,7 +193,7 @@ export async function taskStartOnChain(
 export async function taskAction(wallet: FlowWallet, escrowB58: string, action: "accept" | "decline" | "ready"): Promise<FlowResult<object>> {
   try {
     const canister = await tasksCanister();
-    if (!canister) return { ok: false, error: "IC gateway isn't configured." };
+    if (!canister) return { ok: false, error: NOT_LIVE };
     const taskId = new PublicKey(escrowB58).toBytes();
     const signature = await signed(wallet, taskMessage.action(action, TASKS_PRINCIPAL, escrowB58));
     const res = await canister[action]({ chain: CHAIN_ID, task_id: taskId, signature });
@@ -196,7 +206,7 @@ export async function taskAction(wallet: FlowWallet, escrowB58: string, action: 
 export async function taskVote(wallet: FlowWallet, escrowB58: string, choice: "done" | "not_done"): Promise<FlowResult<object>> {
   try {
     const canister = await tasksCanister();
-    if (!canister) return { ok: false, error: "IC gateway isn't configured." };
+    if (!canister) return { ok: false, error: NOT_LIVE };
     const signature = await signed(wallet, taskMessage.vote(TASKS_PRINCIPAL, escrowB58, choice));
     const res = await canister.vote({
       chain: CHAIN_ID,
@@ -220,9 +230,9 @@ export async function fundingCreateCollection(
   input: { goalDollars: number; durationDays: number }
 ): Promise<FlowResult<{ collectionHex: string; nonce: string }>> {
   try {
-    if (!gamePrincipals.fundraiser()) return { ok: false, error: "Funding canister isn't live yet." };
+    if (!gamePrincipals.fundraiser()) return { ok: false, error: NOT_LIVE };
     const canister = await fundingCanister();
-    if (!canister) return { ok: false, error: "IC gateway isn't configured." };
+    if (!canister) return { ok: false, error: NOT_LIVE };
 
     const recipient = new PublicKey(wallet.address);
     const nonce = BigInt(Date.now());
@@ -248,14 +258,14 @@ export async function fundingChipIn(
   input: { collectionHex: string; recipient: string; dollars: number; deadlineDays: number }
 ): Promise<FlowResult<{ escrow: string; txSig: string }>> {
   try {
-    if (!gamePrincipals.fundraiser()) return { ok: false, error: "Funding canister isn't live yet." };
+    if (!gamePrincipals.fundraiser()) return { ok: false, error: NOT_LIVE };
     if (!isValidAddress(input.recipient)) return { ok: false, error: "This page has no valid payout address." };
     const canister = await fundingCanister();
-    if (!canister) return { ok: false, error: "IC gateway isn't configured." };
+    if (!canister) return { ok: false, error: NOT_LIVE };
 
     const resolverOpt = await canister.get_resolver(CHAIN_ID, fromHex(input.collectionHex));
     const resolverBytes = Array.isArray(resolverOpt) ? resolverOpt[0] : undefined;
-    if (!resolverBytes) return { ok: false, error: "This collection has no resolver on the canister." };
+    if (!resolverBytes) return { ok: false, error: NOT_LIVE };
 
     const donor = new PublicKey(wallet.address);
     const { tx, escrow } = await buildCreateEscrowTx({
@@ -279,7 +289,7 @@ export async function fundingChipIn(
 export async function fundingAction(wallet: FlowWallet, collectionHex: string, action: "ready" | "recipient_cancel"): Promise<FlowResult<object>> {
   try {
     const canister = await fundingCanister();
-    if (!canister) return { ok: false, error: "IC gateway isn't configured." };
+    if (!canister) return { ok: false, error: NOT_LIVE };
     const word = action === "ready" ? "ready" : "recipient_cancel";
     const signature = await signed(wallet, fundingMessage.action(word, FUNDING_PRINCIPAL, collectionHex));
     const res = await canister[action]({ chain: CHAIN_ID, collection_id: fromHex(collectionHex), signature });
@@ -292,7 +302,7 @@ export async function fundingAction(wallet: FlowWallet, collectionHex: string, a
 export async function fundingVote(wallet: FlowWallet, collectionHex: string, choice: "done" | "not_done"): Promise<FlowResult<object>> {
   try {
     const canister = await fundingCanister();
-    if (!canister) return { ok: false, error: "IC gateway isn't configured." };
+    if (!canister) return { ok: false, error: NOT_LIVE };
     const signature = await signed(wallet, fundingMessage.vote(FUNDING_PRINCIPAL, collectionHex, choice));
     const res = await canister.vote({
       chain: CHAIN_ID,
@@ -314,9 +324,9 @@ export async function auctionCreate(
   input: { durationHours: number; performHours: number; minEntryDollars: number }
 ): Promise<FlowResult<{ auctionHex: string; nonce: string }>> {
   try {
-    if (!gamePrincipals.auction()) return { ok: false, error: "Auction canister isn't live yet." };
+    if (!gamePrincipals.auction()) return { ok: false, error: NOT_LIVE };
     const canister = await auctionCanister();
-    if (!canister) return { ok: false, error: "IC gateway isn't configured." };
+    if (!canister) return { ok: false, error: NOT_LIVE };
 
     const recipient = new PublicKey(wallet.address);
     const nonce = BigInt(Date.now());
@@ -346,10 +356,10 @@ export async function auctionPlaceEntry(
   input: { auctionHex: string; recipient: string; dollars: number; deadlineHours: number; text: string; handle: string }
 ): Promise<FlowResult<{ escrow: string; txSig: string; lotHex: string }>> {
   try {
-    if (!gamePrincipals.auction()) return { ok: false, error: "Auction canister isn't live yet." };
+    if (!gamePrincipals.auction()) return { ok: false, error: NOT_LIVE };
     if (!isValidAddress(input.recipient)) return { ok: false, error: "This page has no valid payout address." };
     const canister = await auctionCanister();
-    if (!canister) return { ok: false, error: "IC gateway isn't configured." };
+    if (!canister) return { ok: false, error: NOT_LIVE };
 
     const auctionId = fromHex(input.auctionHex);
     const textHash = await sha256(enc.encode(input.text));
@@ -389,7 +399,7 @@ export async function auctionPlaceEntry(
 export async function auctionLotAction(wallet: FlowWallet, auctionHex: string, lotHex: string, action: "accept" | "return-lot"): Promise<FlowResult<object>> {
   try {
     const canister = await auctionCanister();
-    if (!canister) return { ok: false, error: "IC gateway isn't configured." };
+    if (!canister) return { ok: false, error: NOT_LIVE };
     const signature = await signed(wallet, auctionMessage.lot(action, AUCTION_PRINCIPAL, auctionHex, lotHex));
     const arg = { chain: CHAIN_ID, auction_id: fromHex(auctionHex), lot_id: fromHex(lotHex), signature };
     const res = action === "accept" ? await canister.accept_lot(arg) : await canister.return_lot(arg);
@@ -402,7 +412,7 @@ export async function auctionLotAction(wallet: FlowWallet, auctionHex: string, l
 export async function auctionAction(wallet: FlowWallet, auctionHex: string, action: "ready" | "cancel"): Promise<FlowResult<object>> {
   try {
     const canister = await auctionCanister();
-    if (!canister) return { ok: false, error: "IC gateway isn't configured." };
+    if (!canister) return { ok: false, error: NOT_LIVE };
     const signature = await signed(wallet, auctionMessage.auction(action, AUCTION_PRINCIPAL, auctionHex));
     const arg = { chain: CHAIN_ID, auction_id: fromHex(auctionHex), signature };
     const res = action === "ready" ? await canister.ready(arg) : await canister.cancel_auction(arg);
@@ -415,7 +425,7 @@ export async function auctionAction(wallet: FlowWallet, auctionHex: string, acti
 export async function auctionVote(wallet: FlowWallet, auctionHex: string, choice: "done" | "not_done"): Promise<FlowResult<object>> {
   try {
     const canister = await auctionCanister();
-    if (!canister) return { ok: false, error: "IC gateway isn't configured." };
+    if (!canister) return { ok: false, error: NOT_LIVE };
     const signature = await signed(wallet, auctionMessage.vote(AUCTION_PRINCIPAL, auctionHex, choice));
     const res = await canister.vote({
       chain: CHAIN_ID,

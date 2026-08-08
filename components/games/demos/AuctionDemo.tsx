@@ -61,7 +61,6 @@ export function AuctionDemo() {
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M14 6 6 14M9 4l7 7M4 20h7M13 9l4-4M17 13l3-3" /></svg>
             </span>
             <h3>Run a bidding round</h3>
-            <p>Take a few lots, watch them climb, then ring the bell — top lot wins, the rest refund.</p>
             <button className={styles.primary} type="button" style={{ marginTop: 8 }} onClick={() => setStep(1)}>
               Launch the demo
             </button>

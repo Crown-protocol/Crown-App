@@ -15,7 +15,7 @@ import { useEffect, useState } from "react";
 // landing page, so there's no common provider to thread state through, and the signal is
 // page-local and ephemeral.
 
-const EVENT = "crown-cta-handoff";
+const EVENT = "cheer-cta-handoff";
 
 let handedOff = false;
 

@@ -1,8 +1,8 @@
 import type { Social } from "./types";
 import type { GameId } from "./games";
 
-// Operator panel data — mock (real data will come from crown-app/api + the canister).
-// Terms per the charter: streamers (not realms), donations/received (not crowned), donators (not viewers,
+// Operator panel data — mock (real data will come from cheer-app/api + the canister).
+// Terms per the charter: streamers (not realms), donations/received (not cheered), donators (not viewers,
 // not supporters) — "viewers" is the cabinet's retired term (front.md §6); this panel tracks who paid.
 
 export const OPS_STATS = {

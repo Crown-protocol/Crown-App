@@ -36,7 +36,7 @@ export function getModal(): AppKitModal | null {
       defaultNetwork,
       projectId: REOWN_PROJECT_ID,
       metadata: {
-        name: "Crown",
+        name: "Cheer",
         description: "Donations straight to your wallet",
         url: window.location.origin,
         icons: [`${window.location.origin}/icon.svg`],

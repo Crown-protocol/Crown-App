@@ -8,7 +8,14 @@ import styles from "./ObsGuideModal.module.css";
 // Kept behind the Widgets tab's "?" so the tab stays clean; portalled to <body> so nothing clips it.
 const STEPS: { title: string; body: ReactNode }[] = [
   { title: "Copy the widget's link", body: <>On the widget's card, hit <b>Copy URL</b>.</> },
-  { title: "Add a Browser source", body: <>In OBS: <b>Sources</b> → <b>+</b> → <b>Browser</b> → <b>OK</b>.</> },
+  {
+    title: "Add a Browser source",
+    body: (
+      <>
+        In OBS or Streamlabs Desktop: <b>Sources</b> → <b>+</b> → <b>Browser</b> → <b>OK</b>.
+      </>
+    ),
+  },
   { title: "Paste the link", body: <>Drop it into the <b>URL</b> field.</> },
   {
     title: "Set the size",
@@ -23,6 +30,7 @@ const STEPS: { title: string; body: ReactNode }[] = [
     body: (
       <>
         Hit <b>OK</b>. It sits over your stream — transparent background, live on every donation.
+        Works the same in OBS Studio and Streamlabs Desktop.
       </>
     ),
   },
@@ -54,7 +62,7 @@ export function ObsGuideModal({ onClose }: { onClose: () => void }) {
   }, [onClose]);
 
   const modal = (
-    <div className={styles.overlay} onMouseDown={onClose} role="dialog" aria-modal="true" aria-label="Add a widget to OBS">
+    <div className={styles.overlay} onMouseDown={onClose} role="dialog" aria-modal="true" aria-label="Add a widget to OBS or Streamlabs Desktop">
       <div className={styles.card} onMouseDown={(e) => e.stopPropagation()}>
         <button type="button" className={styles.close} onClick={onClose} aria-label="Close">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -67,7 +75,7 @@ export function ObsGuideModal({ onClose }: { onClose: () => void }) {
             <MonitorGlyph />
           </span>
           <div className={styles.headText}>
-            <div className={styles.title}>Add a widget to OBS</div>
+            <div className={styles.title}>Add a widget to OBS or Streamlabs</div>
             <div className={styles.sub}>~30 seconds · no plugins</div>
           </div>
         </div>

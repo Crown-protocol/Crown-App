@@ -15,7 +15,7 @@ const ROUND_R = 0.18; // rounded-corner radius as a fraction of the side
 
 type Shape = "circle" | "rounded" | "square" | "hexagon";
 
-// A pointy-top regular hexagon inscribed in an n×n box — the same orientation as the Crown badge.
+// A pointy-top regular hexagon inscribed in an n×n box — the same orientation as the Cheer badge.
 function hexPoints(n: number): [number, number][] {
   const c = n / 2;
   return Array.from({ length: 6 }, (_, i) => {
@@ -183,9 +183,27 @@ export function CropModal({
         return;
       }
     } else {
-      // Transparent corners need PNG. A 256px avatar with transparent corners stays small.
+      // Transparent corners need PNG, and PNG is lossless — a photographic 256px avatar lands around
+      // 170KB, which is where the whole profile row's weight came from (the profile JSON, aviators
+      // and all, is served on every page load). If it doesn't fit the same budget the square path
+      // respects, re-encode as WEBP: it keeps the alpha channel and compresses the photo properly.
       blob = await new Promise<Blob | null>((r) => out.toBlob(r, "image/png"));
+      if (blob && blob.size > MAX_BYTES) {
+        let quality = 0.85;
+        let webp: Blob | null = null;
+        do {
+          webp = await new Promise<Blob | null>((r) => out.toBlob(r, "image/webp", quality));
+          quality -= 0.1;
+        } while (webp && webp.size > MAX_BYTES && quality > 0.1);
+        // Only take it if the browser actually produced WEBP (toBlob falls back to PNG otherwise)
+        // and it genuinely helped.
+        if (webp && webp.type === "image/webp" && webp.size < blob.size) blob = webp;
+      }
       if (!blob) return;
+      if (blob.size > MAX_BYTES) {
+        alert("Image too large even after compression.");
+        return;
+      }
     }
 
     const reader = new FileReader();
@@ -253,12 +271,12 @@ export function CropModal({
         <img src={imageSrc} alt="" className={styles.img} style={imgStyle} draggable={false} />
         <svg className={styles.mask} viewBox={`0 0 ${VP} ${VP}`}>
           <defs>
-            <mask id="crown-cmask">
+            <mask id="cheer-cmask">
               <rect width={VP} height={VP} fill="white" />
               <ShapeSvg shape={shape} fill="black" />
             </mask>
           </defs>
-          <rect width={VP} height={VP} fill="rgba(0,0,0,0.55)" mask="url(#crown-cmask)" />
+          <rect width={VP} height={VP} fill="rgba(0,0,0,0.55)" mask="url(#cheer-cmask)" />
           <ShapeSvg shape={shape} fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth={1.5} />
         </svg>
       </div>

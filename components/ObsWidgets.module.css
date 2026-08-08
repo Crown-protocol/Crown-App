@@ -186,7 +186,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ---- Rank-up: reuses the .alert row, with a crown badge ---- */
+/* ---- Rank-up: reuses the .alert row, with a cheer badge ---- */
 .rankBadge {
   width: 44px;
   height: 44px;
@@ -286,7 +286,7 @@
   color: var(--text-3);
 }
 
-/* ---- Fundraiser: the crown fill + numbers ---- */
+/* ---- Fundraiser: the cheer fill + numbers ---- */
 .fund {
   display: flex;
   align-items: center;

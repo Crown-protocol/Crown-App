@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CrownMark, GameIcon } from "@/components/icons";
+import { CheerMark, GameIcon } from "@/components/icons";
 import { FundraiserFill } from "@/components/FundraiserFill";
 import { OVERLAY_TIERS } from "@/lib/data/overlays";
 import type { GameId } from "@/lib/data/games";
@@ -179,8 +179,8 @@ export function LiveOverlays({
           <div className={styles.screen}>
             {ranker ? (
               <div className={styles.alert}>
-                <span className={styles.crown} aria-hidden>
-                  <CrownMark />
+                <span className={styles.cheer} aria-hidden>
+                  <CheerMark />
                 </span>
                 <div className={styles.rankLine}>
                   <b>{ranker.name}</b> reached <span className={styles.tier}>{ranker.tier}</span>

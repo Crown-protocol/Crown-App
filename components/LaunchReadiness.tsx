@@ -11,7 +11,7 @@ import {
   FACTORY_STREAM,
   FEE_WALLET,
   IC_HOST,
-  CROWN_INDEX_PRINCIPAL,
+  CHEER_INDEX_PRINCIPAL,
   TASKS_PRINCIPAL,
   FUNDING_PRINCIPAL,
   AUCTION_PRINCIPAL,
@@ -67,8 +67,17 @@ export function LaunchReadiness() {
     void fetch("/api/telegram/status")
       .then(async (r) => {
         const j = await r.json();
-        setBot(j?.botUsername ? "on" : "off");
-        setBotNote(j?.botUsername ? `@${j.botUsername}` : "start the bot (bot/README.md) — TELEGRAM_BOT_TOKEN");
+        // `botRunning` is the live heartbeat; `botUsername` only means the bot introduced itself
+        // once, possibly months ago. Reading the latter reported "on" for a bot that had been down
+        // for days — which is the one thing a readiness check must never do.
+        setBot(j?.botRunning ? "on" : "off");
+        setBotNote(
+          j?.botRunning
+            ? `@${j.botUsername ?? "bot"} — running`
+            : j?.botUsername
+              ? `@${j.botUsername} configured but not responding — start the bot (bot/README.md)`
+              : "start the bot (bot/README.md) — TELEGRAM_BOT_TOKEN"
+        );
       })
       .catch(() => {
         setBot("off");
@@ -93,7 +102,7 @@ export function LaunchReadiness() {
       title: "Resolvers (ICP canisters)",
       rows: [
         { name: "IC gateway", detail: IC_HOST || "NEXT_PUBLIC_IC_HOST", state: IC_HOST ? "on" : "off" },
-        { name: "crown-index (reputation book)", detail: CROWN_INDEX_PRINCIPAL || "NEXT_PUBLIC_CROWN_INDEX_PRINCIPAL", state: isIndexConfigured() ? "on" : "off", note: "until then the DB mirror serves /api/reputation" },
+        { name: "cheer-index (reputation book)", detail: CHEER_INDEX_PRINCIPAL || "NEXT_PUBLIC_CHEER_INDEX_PRINCIPAL", state: isIndexConfigured() ? "on" : "off", note: "until then the DB mirror serves /api/reputation" },
         { name: "Conditional-Tasks", detail: TASKS_PRINCIPAL || "NEXT_PUBLIC_TASKS_PRINCIPAL", state: TASKS_PRINCIPAL ? "on" : "off", note: "task escrows go live the moment this lands" },
         { name: "Conditional-Funding", detail: FUNDING_PRINCIPAL || "NEXT_PUBLIC_FUNDING_PRINCIPAL", state: FUNDING_PRINCIPAL ? "on" : "off", note: "fundraiser collections go live" },
         { name: "Auction", detail: AUCTION_PRINCIPAL || "NEXT_PUBLIC_AUCTION_PRINCIPAL", state: AUCTION_PRINCIPAL ? "on" : "off", note: "auction lots go live" },
@@ -103,7 +112,7 @@ export function LaunchReadiness() {
     {
       title: "Our own backend",
       rows: [
-        { name: "Crown DB + API", detail: dbNote || "…", state: db },
+        { name: "Cheer DB + API", detail: dbNote || "…", state: db },
         { name: "Telegram bot", detail: botNote || "…", state: bot },
         { name: "Default visitor mode", detail: process.env.NEXT_PUBLIC_DEFAULT_MODE === "chain" ? "chain (real money)" : "mock (demo)", state: process.env.NEXT_PUBLIC_DEFAULT_MODE === "chain" ? "on" : "off", note: "NEXT_PUBLIC_DEFAULT_MODE — .env.production pins chain" },
       ],

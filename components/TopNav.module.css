@@ -1,4 +1,4 @@
-/* Shared top navigation — the CROWN wordmark + Mini-games/Admin Panel links + TopRight.
+/* Shared top navigation — the CHEER wordmark + Mini-games/Admin Panel links + TopRight.
    Used by every page that shows the full nav (home, mini-games catalog, …). Only
    design-charter tokens: one purple accent, no gold. Single source — do not fork this file. */
 .topnav {
@@ -36,9 +36,9 @@
   gap: 10px;
   text-decoration: none;
   color: var(--text-1);
-  font-size: 17px;
+  font-size: 19px;
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: -0.01em;
   white-space: nowrap;
 }
 .nav {

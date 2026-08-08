@@ -7,12 +7,12 @@ import { handleEvent, type BotEvent } from "@/lib/server/telegram-store";
 // FAIL-CLOSED. This is the most dangerous endpoint in the subsystem: a forged event can rewrite the
 // bot username (repointing every "Connect Telegram" link at someone else's bot), disconnect a chat,
 // brute-force the founder secret without Telegram's flood limits, or redeem a link code. It used to
-// be gated only "if a secret is configured" — so a deploy where CROWN_BOT_SECRET didn't reach the
+// be gated only "if a secret is configured" — so a deploy where CHEER_BOT_SECRET didn't reach the
 // process turned it public. Now: no secret, no pipe.
-const BOT_SECRET = process.env.CROWN_BOT_SECRET;
+const BOT_SECRET = process.env.CHEER_BOT_SECRET;
 
 export async function POST(req: Request) {
-  if (!BOT_SECRET || req.headers.get("x-crown-bot") !== BOT_SECRET) {
+  if (!BOT_SECRET || req.headers.get("x-cheer-bot") !== BOT_SECRET) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

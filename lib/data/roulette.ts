@@ -41,11 +41,11 @@ export function withRouletteDefaults(profile: Profile): RouletteDraft {
 }
 
 // ---- mock open round (localStorage, like the rest of the mock backend) ----
-// The real round will live on crown-app/api; until then the public page starts from the
+// The real round will live on cheer-app/api; until then the public page starts from the
 // seeded MOCK_ROUND and viewer suggestions accumulate on top, merged by game title —
 // backing an existing suggestion grows its pool (and odds), a new title adds a slice.
 
-const ROUND_KEY = "crown-roulette-round";
+const ROUND_KEY = "cheer-roulette-round";
 
 interface LocalSuggestion {
   title: string;
@@ -92,20 +92,20 @@ export function addSuggestion(handle: string, title: string, genre: GameGenre, a
     localStorage.setItem(`${ROUND_KEY}:${handle}`, JSON.stringify(local));
   } catch {}
   // Share it as a DELTA: two viewers backing the same title must sum, not overwrite.
-  sendOp(handle, "crown-roulette-round", { type: "suggest", title, genre, dPool: amount, dBackers: 1 });
+  sendOp(handle, "cheer-roulette-round", { type: "suggest", title, genre, dPool: amount, dBackers: 1 });
   return readRound(handle);
 }
 
 // ---- round lifecycle (mock) ----
 // The round clock starts when the page is first opened and the wheel spins either when the
-// clock runs out or when the streamer hits "Spin now" — время вышло / решение КМ. The verdict
+// clock runs out or when the streamer hits "Spin now" — time's up, or the maker's call. The verdict
 // is stored so the streamer's cabinet and the public page converge on the same winner.
 
 export interface RoundMeta {
   startedAt: number; // epoch ms — the round clock's zero
   winner: { id: string; title: string } | null; // set once the wheel lands
   // Who gets to PUT a game on the wheel — everyone-by-donating (classic), or free for viewers
-  // at minTier and above (the КМ picks the tier when the session is created). Backing an
+  // at minTier and above (the maker picks the tier when the session is created). Backing an
   // existing suggestion is a donation in both modes.
   mode?: "donate" | "rank";
   minTier?: string;
@@ -117,7 +117,7 @@ export interface RoundMeta {
   eliminated?: string[]; // suggestion ids knocked out so far, in the order they went
 }
 
-const META_KEY = "crown-roulette-meta";
+const META_KEY = "cheer-roulette-meta";
 
 export function readRoundMeta(handle: string): RoundMeta | null {
   try {
@@ -146,7 +146,7 @@ function writeMeta(handle: string, meta: RoundMeta, share = true) {
   // Authoritative writes (init/spin verdict/new round) overwrite the shared copy. ensureRound's
   // first-sight default passes share=false — a fresh viewer's local clock must never reset the
   // round for everyone; the next poll adopts the real shared meta if one exists.
-  if (share) sendOp(handle, "crown-roulette-meta", { type: "replace", value: meta });
+  if (share) sendOp(handle, "cheer-roulette-meta", { type: "replace", value: meta });
 }
 
 // Open a round with its mode — called when the session is created. Classic sessions never call
@@ -178,7 +178,7 @@ export function newRound(handle: string): RoundMeta {
   try {
     localStorage.removeItem(`${ROUND_KEY}:${handle}`);
   } catch {}
-  sendOp(handle, "crown-roulette-round", { type: "replace", value: [] });
+  sendOp(handle, "cheer-roulette-round", { type: "replace", value: [] });
   const prev = readRoundMeta(handle);
   const fresh: RoundMeta = { startedAt: Date.now(), winner: null, mode: prev?.mode, minTier: prev?.minTier, format: prev?.format, eliminated: [] };
   writeMeta(handle, fresh);
@@ -227,7 +227,7 @@ export function eliminate(handle: string, id: string, round: RouletteSuggestion[
 // tab reflects real rounds instead of a frozen sample. MOCK_ROULETTE_HISTORY trails behind as
 // seeded "older" rounds so a new streamer's table isn't empty.
 
-const HISTORY_KEY = "crown-roulette-history";
+const HISTORY_KEY = "cheer-roulette-history";
 
 function readLocalHistory(handle: string): RouletteRound[] {
   try {

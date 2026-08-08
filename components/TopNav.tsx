@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CrownBadge } from "@/components/CrownBadge";
+import { CheerBadge } from "@/components/CheerBadge";
 import { TopRight } from "@/components/TopRight";
 import styles from "./TopNav.module.css";
 
@@ -24,8 +24,8 @@ export function TopNav({ active, className = "" }: { active?: "games" | "discove
       <div className={styles.bar}>
         <div className={styles.left}>
           <Link className={styles.brand} href="/">
-            <CrownBadge size={30} />
-            CROWN
+            <CheerBadge size={30} />
+            Cheer
           </Link>
           <nav className={styles.nav}>
             {LINKS.map((l) => {

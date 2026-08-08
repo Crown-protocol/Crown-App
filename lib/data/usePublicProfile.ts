@@ -9,11 +9,11 @@ import type { Profile } from "./types";
 // by handle — so a viewer who opens the link or QR in ANY browser gets the content maker's page,
 // not the owner-only gate. The game pages need the whole Profile (headline, presets, per-game
 // config), not the trimmed Streamer that DataProvider.getStreamer returns, so this resolves it
-// straight from the Crown DB.
+// straight from the Cheer DB.
 //
 // Order of truth:
 //   1. your own local profile — if this is YOUR page, the cabinet copy is the freshest;
-//   2. the Crown DB (/api/profiles/<handle>) — the server copy every browser resolves against;
+//   2. the Cheer DB (/api/profiles/<handle>) — the server copy every browser resolves against;
 //   3. a built-in demo streamer (MOCK_STREAMERS) — so /@nova/* always demos, even with no DB row.
 // `profile` is null only when the handle exists nowhere; `status` is "loading" until resolved so
 // the page shows a blank frame instead of flashing the "nothing here" gate mid-fetch.

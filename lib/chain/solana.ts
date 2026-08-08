@@ -2,7 +2,7 @@ import { Connection, PublicKey } from "@solana/web3.js";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { RPC_URL, SPLITTER, USDC_MINT } from "./config";
 
-// One shared devnet connection. "confirmed" is enough for UX; the crown-index
+// One shared devnet connection. "confirmed" is enough for UX; the cheer-index
 // book only ingests finalized txs anyway (its own 60s timer), so reputation
 // lags the donation by ~30–90s regardless of what we pick here.
 let conn: Connection | null = null;

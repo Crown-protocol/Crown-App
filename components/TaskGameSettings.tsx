@@ -5,6 +5,7 @@ import { NumberInput } from "@/components/NumberInput";
 import { HelpTip } from "@/components/HelpTip";
 import { RulesSummary, hoursText } from "@/components/RulesSummary";
 import { usd } from "@/lib/money";
+import { RulesScopeNote } from "@/components/games/RulesScopeNote";
 
 export const DEFAULT_TASK_CONFIG: TaskGameConfig = {
   minAmount: 10,
@@ -36,6 +37,7 @@ export function TaskGameSettings({ profile, onSave }: { profile: Profile; onSave
 
   return (
     <div className="game-settings">
+      <RulesScopeNote />
       <section className="card" aria-labelledby="task-money-h">
         <h2 id="task-money-h">Money</h2>
 

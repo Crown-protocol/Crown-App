@@ -275,12 +275,32 @@
   color: var(--text-3);
 }
 .urlRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
   margin-top: 4px;
   padding: 9px 12px;
   border-radius: var(--r-2);
   background: var(--bg-0);
   border: 1px solid var(--line);
   overflow: hidden;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease);
+}
+.urlRow:hover {
+  border-color: var(--line-strong);
+}
+.urlRow:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-neutral);
+}
+/* the link itself takes the room, the size note keeps its own */
+.urlRow .url {
+  flex: 1;
+  min-width: 0;
 }
 .url {
   font-size: 12.5px;
@@ -297,11 +317,10 @@
   margin-top: 2px;
 }
 .paramField {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1;
-  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
 }
 .paramLabel {
   font-size: 11px;
@@ -311,8 +330,9 @@
   color: var(--text-3);
 }
 .paramInput {
-  width: 100%;
-  height: 32px;
+  /* Sized for a number, not a sentence: keeps room on the line for the toggle and the link. */
+  width: 62px;
+  height: 30px;
   padding: 0 10px;
   background: var(--bg-0);
   border: 1px solid var(--line);
@@ -334,33 +354,12 @@
 .metaRow {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
 }
-.sizeChip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 26px;
-  padding: 0 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-pill);
-  background: var(--bg-0);
-  color: var(--text-3);
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
-}
-.sizeChip:hover {
-  border-color: var(--line-strong);
-  color: var(--text-2);
-}
-/* the dimensions are numbers — white 700 tabular, per the charter */
-.sizeChip b {
-  color: var(--text-1);
-  font-weight: 700;
+/* Push the toggle + preview link away from the params, so the row groups by purpose. */
+.metaRow .demoToggle {
+  margin-left: auto;
 }
 .demoToggle {
   display: inline-flex;
@@ -393,38 +392,6 @@
   color: var(--text-1);
 }
 
-.actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 4px;
-}
-.actions :global(.btn-outline) {
-  height: 32px;
-  padding: 0 10px;
-  gap: 6px;
-  font-size: 12.5px;
-}
-.qrPop {
-  margin-top: 8px;
-  display: flex;
-  justify-content: center;
-  padding: 14px;
-  background: var(--bg-0);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-2);
-}
-.qrPop img {
-  border-radius: var(--r-1);
-}
-.qrLoading {
-  width: 180px;
-  height: 180px;
-  display: grid;
-  place-items: center;
-  color: var(--text-3);
-  font-size: 13px;
-}
 
 /* Phone: comfortable touch targets — the category rows, the "?" help button, the OBS/demo chips
    and the per-card action buttons are all a bit small for a fingertip on desktop density. */
@@ -436,11 +403,48 @@
     width: 40px;
     height: 40px;
   }
-  .sizeChip,
   .demoToggle {
     height: 32px;
   }
-  .actions :global(.btn-outline) {
-    height: 40px;
-  }
+}
+
+/* Streamlabs link row — offered next to the "add to OBS" line, where a streamer is already
+   thinking about their overlay software. Only rendered when the server has the app credentials. */
+.slRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  padding: 12px 14px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+}
+.slText {
+  flex: 1;
+  min-width: 220px;
+  font-size: 14px;
+  color: var(--text-2);
+}
+
+/* The Browser Source size, sitting quietly at the end of the link row. Information, not a control:
+   a wrong size crops the widget in OBS, so it has to be visible — but it isn't something to click. */
+.sizeNote {
+  flex: none;
+  font-size: 11.5px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* "Open ↗" — a plain link now, not a button: previewing the overlay is a side trip, not the
+   main action on this card (that's copying the URL). */
+.openLink {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-3);
+  text-decoration: none;
+}
+.openLink:hover {
+  color: var(--text-1);
 }

@@ -17,6 +17,8 @@ export async function GET() {
       db: { donations: s.donations, profiles: s.profiles, indexerCursor: s.cursor },
     });
   } catch (e) {
-    return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "db unreachable" }, { status: 503 });
+    // Don't leak the raw error (DB path, driver internals) to the client — log it, answer generically.
+    console.error("[health] db check failed", e);
+    return NextResponse.json({ ok: false, error: "db unreachable" }, { status: 503 });
   }
 }

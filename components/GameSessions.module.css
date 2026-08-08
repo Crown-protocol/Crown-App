@@ -47,7 +47,11 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
   gap: 18px 20px;
-  align-items: end;
+  /* Top, not bottom. `end` lines the cells up by their last element, so a field that carries a hint
+     underneath ("= $500 of your $1,000 goal") pushed its own input a line higher than its
+     neighbours — the row read as a staircase. Aligning from the top keeps every label and input on
+     the same line and lets the hint hang below where it belongs. */
+  align-items: start;
 }
 
 /* Everything in this form is body text. A knob you are about to bind money to is not a footnote,
@@ -154,12 +158,6 @@
   font-size: 15px;
   color: var(--text-3);
 }
-.rowTag {
-  margin-left: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--accent);
-}
 .rowActions {
   display: flex;
   gap: 8px;
@@ -170,4 +168,109 @@
   .grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* What still has to be filled in before a session can start. Sits next to the disabled button, so
+   the button is never dead without a reason — neutral, not an error: nothing has gone wrong yet. */
+.needs {
+  flex-basis: 100%;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
+/* "Go to the Page tab" inside the blocked-reason line: a link, not a button — it navigates rather
+   than acts, and the sentence should read as one thought. */
+.needsLink {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--text-1);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.needsLink:hover { color: var(--accent); }
+
+/* Collapsed starter: with runs already going, the long rules form is noise on a screen whose
+   subject is the live list. One button instead, styled as the card it replaces. */
+.starterCollapsed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 18px;
+  border-style: dashed;
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.starterCollapsed:hover {
+  border-color: var(--line-strong);
+  color: var(--text-1);
+}
+.starterPlus {
+  font-size: 18px;
+  line-height: 1;
+  color: var(--text-3);
+}
+/* Puts the form away again without starting anything. */
+.starterClose {
+  margin-left: auto;
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.starterClose:hover { color: var(--text-1); }
+
+/* Title and its Cancel share a line — the heading keeps its place, the button sits at the far end. */
+.headRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* ── Starter as a dialog ────────────────────────────────────────────────────────────────────────
+   The rules form opens over the page instead of unfolding above the session list: inline, it pushed
+   the running sessions off-screen behind a form you only need when starting something new. */
+.modalBack {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px 20px;
+  overflow-y: auto;
+  background: rgba(10, 9, 13, 0.72);
+  backdrop-filter: blur(3px);
+  animation: starterFade 0.16s var(--ease) both;
+}
+.modalCard {
+  width: 100%;
+  max-width: 620px;
+  margin: auto;
+  animation: starterRise 0.2s var(--ease) both;
+}
+@keyframes starterFade {
+  from { opacity: 0; }
+}
+@keyframes starterRise {
+  from { opacity: 0; transform: translateY(8px); }
+}
+/* Someone who asked for less motion gets the dialog without the slide. */
+@media (prefers-reduced-motion: reduce) {
+  .modalBack, .modalCard { animation: none; }
 }

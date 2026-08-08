@@ -9,7 +9,7 @@ const CONFIG: GameEditorConfig = {
   slug: "roulette",
   title: "Roulette",
   linkLabel: "Roulette link",
-  qrFileName: "crown-roulette-qr.png",
+  qrFileName: "cheer-roulette-qr.png",
   headlineLabel: "Your pitch",
   headlinePlaceholder: "e.g. You pick what I do next — suggest anything",
   headlineMax: RL_HEADLINE_MAX,

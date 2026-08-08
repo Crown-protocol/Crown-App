@@ -49,40 +49,40 @@ const nl = (lines: string[]) => lines.join("\n") + "\n";
 
 export const taskMessage = {
   register: (canister: string, task: string, textHex: string, duration: number) =>
-    nl([`crown:conditional-tasks:v1`, `action: register`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `task: ${task}`, `text: ${textHex}`, `duration: ${duration}`]),
+    nl([`cheer:conditional-tasks:v1`, `action: register`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `task: ${task}`, `text: ${textHex}`, `duration: ${duration}`]),
   action: (action: "accept" | "decline" | "ready", canister: string, task: string) =>
-    nl([`crown:conditional-tasks:v1`, `action: ${action}`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `task: ${task}`]),
+    nl([`cheer:conditional-tasks:v1`, `action: ${action}`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `task: ${task}`]),
   vote: (canister: string, task: string, choice: "done" | "not_done") =>
-    nl([`crown:conditional-tasks:v1`, `action: vote`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `task: ${task}`, `choice: ${choice}`]),
+    nl([`cheer:conditional-tasks:v1`, `action: vote`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `task: ${task}`, `choice: ${choice}`]),
 };
 
 export const fundingMessage = {
   // The canonical builder pushes `collection:` UNCONDITIONALLY — create included: the id is
   // derived (deriveCollectionId) before the canister call, so the recipient signs over it too.
   create: (canister: string, collectionHex: string, goal: number, duration: number) =>
-    nl([`crown:conditional-funding:v1`, `action: create`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `collection: ${collectionHex}`, `goal: ${goal}`, `duration: ${duration}`]),
+    nl([`cheer:conditional-funding:v1`, `action: create`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `collection: ${collectionHex}`, `goal: ${goal}`, `duration: ${duration}`]),
   action: (action: "ready" | "recipient_cancel", canister: string, collectionHex: string) =>
-    nl([`crown:conditional-funding:v1`, `action: ${action}`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `collection: ${collectionHex}`]),
+    nl([`cheer:conditional-funding:v1`, `action: ${action}`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `collection: ${collectionHex}`]),
   vote: (canister: string, collectionHex: string, choice: "done" | "not_done") =>
-    nl([`crown:conditional-funding:v1`, `action: vote`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `collection: ${collectionHex}`, `choice: ${choice}`]),
+    nl([`cheer:conditional-funding:v1`, `action: vote`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `collection: ${collectionHex}`, `choice: ${choice}`]),
 };
 
 export const auctionMessage = {
   create: (canister: string, nonce: number, duration: number, performWindow: number, minEntry: number) =>
-    nl([`crown:auction:v1`, `action: create`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `recipient_nonce: ${nonce}`, `duration: ${duration}`, `perform_window: ${performWindow}`, `min_entry: ${minEntry}`]),
+    nl([`cheer:auction:v1`, `action: create`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `recipient_nonce: ${nonce}`, `duration: ${duration}`, `perform_window: ${performWindow}`, `min_entry: ${minEntry}`]),
   lot: (action: "accept" | "return-lot", canister: string, auctionHex: string, lotHex: string) =>
-    nl([`crown:auction:v1`, `action: ${action}`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `auction: ${auctionHex}`, `lot: ${lotHex}`]),
+    nl([`cheer:auction:v1`, `action: ${action}`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `auction: ${auctionHex}`, `lot: ${lotHex}`]),
   entry: (canister: string, auctionHex: string, escrowB58: string) =>
-    nl([`crown:auction:v1`, `action: return-entry`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `auction: ${auctionHex}`, `escrow: ${escrowB58}`]),
+    nl([`cheer:auction:v1`, `action: return-entry`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `auction: ${auctionHex}`, `escrow: ${escrowB58}`]),
   auction: (action: "cancel" | "ready", canister: string, auctionHex: string) =>
-    nl([`crown:auction:v1`, `action: ${action}`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `auction: ${auctionHex}`]),
+    nl([`cheer:auction:v1`, `action: ${action}`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `auction: ${auctionHex}`]),
   vote: (canister: string, auctionHex: string, choice: "done" | "not_done") =>
-    nl([`crown:auction:v1`, `action: vote`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `auction: ${auctionHex}`, `choice: ${choice}`]),
+    nl([`cheer:auction:v1`, `action: vote`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `auction: ${auctionHex}`, `choice: ${choice}`]),
 };
 
 export const subscriptionMessage = {
   cancel: (canister: string, escrowB58: string) =>
-    nl([`crown:subscription:v1`, `action: cancel`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `escrow: ${escrowB58}`]),
+    nl([`cheer:subscription:v1`, `action: cancel`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `escrow: ${escrowB58}`]),
 };
 
 // ---- Conditional-Tasks --------------------------------------------------

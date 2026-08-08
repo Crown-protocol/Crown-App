@@ -44,6 +44,16 @@ export interface Donation {
   at?: number; // unix ms of the settle — a precise clock, not just the calendar day
   sig?: string; // Solana tx signature — links the row to the block explorer
   payer?: string; // donor's base58 wallet address (for anonymous donors, `from` is a short form of this)
+  streamer?: string; // recipient's base58 payout address — who this donation was FOR. The feed is one
+  // global stream, so every surface that shows a single maker's money filters on this.
+  // Where the money is. "settled" — the indexer saw it finalized on-chain and it is in the payout
+  // wallet. "sending" — the donor submitted and we have their intent, but no Settled event yet.
+  // Absent means settled: every row that predates this field came from the confirmed table.
+  status?: "settled" | "sending";
+  // Set only on a row built by the cabinet's "Merge by name" view: how many donations were folded
+  // into it. Its own field rather than overwriting `message`, so a merged row keeps the donor's
+  // actual words — otherwise "With message" filtered for messages and then replaced them with a count.
+  mergedCount?: number;
 }
 
 export interface Campaign {
@@ -135,7 +145,7 @@ export interface FundraiserDraft {
   presets: number[]; // chip-in amount chips, at least 1
   widgets: PageWidget[]; // chip-in form + socials — toggle/reorder, same shape as the main page
   design: PageDesign; // the fundraiser page's own backdrop
-  fillImage?: string; // data URL — the content maker's own photo for the fill-up figure; empty = Crown badge
+  fillImage?: string; // data URL — the content maker's own photo for the fill-up figure; empty = Cheer badge
 }
 
 // The Task page itself — what a viewer sees when they open the link to set a paid task.

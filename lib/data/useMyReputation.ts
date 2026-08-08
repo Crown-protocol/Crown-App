@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useCrown } from "./DataProvider";
+import { useCheer } from "./DataProvider";
 import { MOCK_STREAMERS } from "./mock";
 import { tierInfo } from "@/lib/level";
 import type { Profile, Streamer, Tier } from "./types";
@@ -34,9 +34,9 @@ export interface MyReputation {
 
 // One place that answers "where does this viewer stand" — used by the wallet menu, the reputation
 // page and the per-maker badge, so the three can never disagree. Reputation itself still comes from
-// useCrown().getReputation (mock map or chain mirror); this only resolves the makers and the ladders.
+// useCheer().getReputation (mock map or chain mirror); this only resolves the makers and the ladders.
 export function useMyReputation(): MyReputation {
-  const { getReputation } = useCrown();
+  const { getReputation } = useCheer();
   const [known, setKnown] = useState<Omit<MyMaker, "rep" | "current" | "next" | "pct">[]>([]);
 
   useEffect(() => {
@@ -47,7 +47,8 @@ export function useMyReputation(): MyReputation {
         base[s.handle.toLowerCase()] = { handle: s.handle, name: s.name, avatarUrl: s.avatarUrl, avatarEnabled: s.avatarEnabled, tiers: s.tiers };
       }
       try {
-        const r = await fetch("/api/profiles");
+        // ?avatars=1 — the reputation page shows each maker's face beside their ladder.
+        const r = await fetch("/api/profiles?avatars=1");
         if (r.ok) {
           const { profiles } = (await r.json()) as { profiles: Profile[] };
           for (const p of profiles ?? []) {

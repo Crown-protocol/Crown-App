@@ -1,13 +1,13 @@
 import { LegalPage } from "@/components/LegalPage";
 
-export const metadata = { title: "Terms · Crown" };
+export const metadata = { title: "Terms · Cheer" };
 
 export default function TermsPage() {
   return (
     <LegalPage title="Terms" updated="July 2026">
       <p>
-        Crown is a tool for content makers to receive donations and run mini-games. Payments settle on-chain through
-        escrow contracts you can read on GitHub. Crown is non-custodial — it never holds, moves, or has access to your
+        Cheer is a tool for content makers to receive donations and run mini-games. Payments settle on-chain through
+        escrow contracts you can read on GitHub. Cheer is non-custodial — it never holds, moves, or has access to your
         money.
       </p>
 
@@ -26,7 +26,7 @@ export default function TermsPage() {
 
       <h2>Acceptable use</h2>
       <p>
-        Don&apos;t use Crown to defraud backers, launder funds, or promise anything illegal. Pages that do can be
+        Don&apos;t use Cheer to defraud backers, launder funds, or promise anything illegal. Pages that do can be
         delisted from discovery; the on-chain escrow always follows its own refund rules regardless.
       </p>
     </LegalPage>

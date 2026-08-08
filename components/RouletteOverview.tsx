@@ -18,7 +18,7 @@ function fmtLeft(ms: number): string {
 }
 
 // The streamer's view of the open round: the same wheel viewers see, plus the two controls
-// the spec gives the content maker — spin early ("решение КМ") or open a fresh round. The
+// the spec gives the content maker — spin early (the maker's call) or open a fresh round. The
 // round itself (suggestions, clock, verdict) lives in the shared mock storage, so this and
 // the public page stay in step.
 export function RouletteOverview({ profile, scope, shareQuery = "" }: { profile: Profile; scope?: string; shareQuery?: string }) {
@@ -75,7 +75,7 @@ export function RouletteOverview({ profile, scope, shareQuery = "" }: { profile:
   // Nothing pitched yet and no verdict — an empty wheel says nothing, so we show a share prompt instead.
   const empty = !meta?.winner && round.length === 0;
 
-  // Время вышло — the wheel spins itself, same as on the public page.
+  // Time's up — the wheel spins itself, same as on the public page.
   useEffect(() => {
     if (!now || !meta || meta.winner || !expired) return;
     if (spunFor.current === String(meta.startedAt)) return;

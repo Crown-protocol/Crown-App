@@ -8,7 +8,7 @@ import { readTasks, setTaskState, removeTask, taskTotals, type GameTask, type Ta
 import { useGameSync } from "@/lib/data/gameSync";
 import { useGameChain } from "@/lib/chain/useGameChain";
 import { taskAction } from "@/lib/chain/gameFlows";
-import { useCrown } from "@/lib/data/DataProvider";
+import { useCheer } from "@/lib/data/DataProvider";
 import type { Profile } from "@/lib/data/types";
 import { usd } from "@/lib/money";
 import styles from "./GameOverview.module.css";
@@ -30,7 +30,7 @@ export function TaskOverview({ profile, scope }: { profile: Profile; scope?: str
   const handle = scope ?? profile.handle;
   // This run's rules — the ones the session was opened with, not whatever the profile says today.
   const cfg = taskRules(profile, handle);
-  const { feed, applyMockDonation } = useCrown();
+  const { feed, applyMockDonation } = useCheer();
   const [tasks, setTasks] = useState<GameTask[]>([]);
 
   // Shared game state: viewers' tasks from other browsers land via the nonce dep.

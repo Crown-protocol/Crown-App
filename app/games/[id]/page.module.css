@@ -1,6 +1,6 @@
 /* Mini-game detail page — one template for every game. Neutral dark ground, quiet accents; the one
    splash of colour is the game's own interactive demo (the roulette wheel, the fundraiser fill, …).
-   Primary buttons keep Crown's purple. Uses the app's tokens from globals.css. Top nav is the shared
+   Primary buttons keep Cheer's purple. Uses the app's tokens from globals.css. Top nav is the shared
    <TopNav> — do not re-add a header here. */
 
 .wrap {

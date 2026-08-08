@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { CrownBadge } from "./CrownBadge";
+import { CheerBadge } from "./CheerBadge";
 
 export function Logo() {
   return (
     <Link className="logo" href="/">
-      <CrownBadge size={26} />
-      Crown
+      <CheerBadge size={26} />
+      Cheer
     </Link>
   );
 }

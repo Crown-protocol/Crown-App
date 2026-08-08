@@ -1,9 +1,13 @@
 import Link from "next/link";
 import styles from "./SiteFooter.module.css";
 
-// Every repo linked here was checked to actually exist (200) under the org — the "open & honest"
-// column is only honest if the links resolve. The old personal account (69walterwhite420-star)
-// was renamed into the Crown-protocol org: its root now 404s, so links point at the org directly.
+// Every repo linked here is verified to resolve (200, public) — an "Open & honest" column whose
+// links 404 is worse than no column at all.
+//
+// The org and the contract repos are still named Crown: the product rename stopped at this app, and
+// the on-chain repos keep their published names because the deployed program ids, the pinned salt
+// ("crown-salt") and every audit reference point at them. Renaming them on GitHub would break those
+// references for anyone verifying the contracts, which is the whole point of linking them.
 const ORG = "https://github.com/Crown-protocol";
 const REPOS = [
   { href: `${ORG}/Crown-Core`, label: "Core contract" }, // splitter + canister
@@ -14,7 +18,7 @@ const REPOS = [
 // The big page footer: links that point somewhere real (post-front.md: no links to pages that
 // don't exist), and nothing else. The brand is said exactly ONCE, by the giant watermark at the
 // bottom — the badge, the spelled-out wordmark, the tagline and the copyright line all used to
-// repeat it up here, which is four ways of saying "Crown" to someone already on the site.
+// repeat it up here, which is four ways of saying "Cheer" to someone already on the site.
 export function SiteFooter() {
   return (
     <footer className={styles.footer}>
@@ -49,10 +53,10 @@ export function SiteFooter() {
             </div>
             <div className={styles.col}>
               <div className={styles.colHead}>Community &amp; contact</div>
-              <a href="https://x.com/Crownprotocol2" target="_blank" rel="noreferrer">X (Twitter)</a>
+              <a href="https://x.com/Cheerprotocol2" target="_blank" rel="noreferrer">X (Twitter)</a>
               <a href="https://t.me/+LBrKLgrPuY9kYjI6" target="_blank" rel="noreferrer">Telegram</a>
               {/* the address IS the label — nothing to hunt for, copyable as-is */}
-              <a href="mailto:crowndonate@proton.me">crowndonate@proton.me</a>
+              <a href="mailto:cheerdonate@proton.me">cheerdonate@proton.me</a>
             </div>
           </nav>
         </div>
@@ -60,10 +64,10 @@ export function SiteFooter() {
 
       {/* The wordmark as a watermark: oversized, barely-there, and cropped by the page edge — it
           signs the page off without being another thing to read. Not aria-hidden: with the badge,
-          wordmark and copyright line all gone, this is the only place the footer names Crown, so
+          wordmark and copyright line all gone, this is the only place the footer names Cheer, so
           hiding it would leave a screen reader with an unnamed page. */}
       <div className={styles.watermark}>
-        Crown
+        Cheer
       </div>
     </footer>
   );

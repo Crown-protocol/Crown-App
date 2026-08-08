@@ -35,7 +35,7 @@ export interface ScopeRules {
   auction?: AuctionConfig;
 }
 
-export const RULES_KEY = "crown-game-config";
+export const RULES_KEY = "cheer-game-config";
 
 export function readScopeRules(scope: string): ScopeRules {
   try {
@@ -55,6 +55,26 @@ export function writeSessionRules<K extends GameId>(scope: string, gameId: K, ru
     localStorage.setItem(`${RULES_KEY}:${scope}`, JSON.stringify(next));
   } catch {}
   sendOp(scope, RULES_KEY, { type: "replace", value: next });
+}
+
+/**
+ * Has this session's rule snapshot actually arrived in this browser?
+ *
+ * The snapshot is written once when the session is created and then SYNCED to every viewer — but
+ * `readScopeRules` is synchronous while `pullScope` is not, so for the first frames after a page
+ * loads (and for as long as the pull keeps failing — offline, a 429, a dropped op) a viewer
+ * resolves rules WITHOUT it and silently falls back to the maker's current profile defaults.
+ *
+ * That is the hole this closes: a maker could edit their standing rules mid-run and, in that
+ * window, a viewer would be shown — and could act on — a minimum, a step and a clock that belong to
+ * no session at all. Public pages call this before taking money, and refuse until it's true.
+ *
+ * Legacy runs (opened before rules were snapshotted) have nothing stored and never will, so a game
+ * with no snapshot for its own id is treated as settled rather than perpetually loading.
+ */
+export function hasSessionRules(scope: string | null, gameId: GameId): boolean {
+  if (!scope) return false;
+  return readScopeRules(scope)[gameId] !== undefined;
 }
 
 // ---- resolvers -------------------------------------------------------------

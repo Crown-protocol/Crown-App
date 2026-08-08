@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { Mono } from "@/components/Mono";
-import { CrownMark } from "@/components/icons";
+import { CheerMark } from "@/components/icons";
 import { useDonationStream } from "@/lib/data/useDonationStream";
 import { useCountUp, useChangeNonce } from "@/components/overlays/fx";
 import type { DonationEvent } from "@/lib/data/donationStream";
@@ -140,7 +140,7 @@ export function QrOverlay({ handle, demo }: Common) {
   // same fallback host. The QR points at the DONATE page, not at the overlay itself.
   const [origin, setOrigin] = useState("");
   useEffect(() => setOrigin(window.location.origin), []);
-  const url = `${origin || "https://crown.tv"}/@${handle}`;
+  const url = `${origin || "https://cheer.tv"}/@${handle}`;
 
   const [qr, setQr] = useState("");
   useEffect(() => {
@@ -163,7 +163,7 @@ export function QrOverlay({ handle, demo }: Common) {
   return (
     <div className={`${styles.stage} ${styles.stageBottomRight}`}>
       <div className={styles.qr}>
-        <div className={styles.qrHead}>Donate</div>
+        <div className={styles.qrHead}>Cheer</div>
         <span className={styles.qrRule}>{last && <span key={last.ts} className={styles.qrSweep} />}</span>
         {qr ? (
           // eslint-disable-next-line @next/next/no-img-element -- data URI, not an optimizable asset
@@ -279,7 +279,7 @@ interface RecordHolder {
 }
 
 function recordKey(handle: string): string {
-  return `crown-record:${handle.toLowerCase()}`;
+  return `cheer-record:${handle.toLowerCase()}`;
 }
 
 // Local date (en-CA gives YYYY-MM-DD) — "the day's record" should roll at the streamer's midnight,
@@ -376,13 +376,13 @@ export function RecordOverlay({ handle, demo }: Common) {
           {prev && (
             <div className={`${styles.recordLine} ${styles.lineOut}`}>
               <Mono name={prev.from} size={22} />
-              <CrownMark className={styles.recordCrown} />
+              <CheerMark className={styles.recordCheer} />
               <span className={styles.recordName}>{prev.from}</span>
             </div>
           )}
           <div key={`l${ceremony}`} className={ceremony > 0 ? `${styles.recordLine} ${styles.lineIn}` : styles.recordLine}>
             <Mono name={rec.from} size={22} />
-            <CrownMark className={styles.recordCrown} />
+            <CheerMark className={styles.recordCheer} />
             <span className={styles.recordName}>{rec.from}</span>
           </div>
         </div>

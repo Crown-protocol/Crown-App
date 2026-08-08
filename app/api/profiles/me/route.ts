@@ -22,14 +22,20 @@ export async function GET(req: NextRequest) {
   const sessionOwner = explicit ? null : readSession(req);
   const owner = explicit || sessionOwner || "";
 
-  // A malformed address can't own anything — answer "no account" without touching the DB.
-  if (!isValidAddress(owner)) return NextResponse.json({ profile: null });
+  // A malformed address can't own anything — answer "no account" without touching the DB. `session`
+  // still reports the truth: an explicit ?owner= lookup says nothing about the caller's own cookie.
+  if (!isValidAddress(owner)) return NextResponse.json({ profile: null, session: !!sessionOwner, owner: sessionOwner ?? null });
 
   const profile = await getProfileByOwner(owner);
-  const res = NextResponse.json({ profile: profile ?? null });
+  // `session` answers "does the server recognise me?" — separately from "do I have a page". These
+  // are different questions: a wallet can hold a valid cookie with no page yet (just registered, or
+  // the page was deleted). Folding them together made the client re-ask the wallet to sign on every
+  // save, and left it unable to tell a live session from an expired one.
+  const res = NextResponse.json({ profile: profile ?? null, session: !!sessionOwner, owner: sessionOwner ?? null });
   // Rolling session: every recognised visit restarts the clock. Without this the cookie died a fixed
   // interval after sign-in no matter how active the person was, and the next reload signed them out.
-  if (sessionOwner && profile) {
+  // Keyed on the session alone — a page-less owner must keep their session too.
+  if (sessionOwner) {
     const fresh = issueSessionToken(sessionOwner);
     if (fresh) res.cookies.set(SESSION_COOKIE, fresh, sessionCookieOptions);
   }

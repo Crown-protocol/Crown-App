@@ -1,6 +1,6 @@
 // Auction game — the public page's draft, the lot book, and the localStorage mock behind both.
 // Data + store, no React. Mirrors lib/data/roulette.ts / tasks.ts. The real book will come from
-// the auction canister (crown-games/auction, game-spec.md); until then lots placed on the public
+// the auction canister (cheer-games/auction, game-spec.md); until then lots placed on the public
 // page really do land in the streamer's Auction → Overview, and both pages share one store.
 //
 // The game in one line: viewers place lots (money in escrow + a condition text private to the
@@ -114,7 +114,7 @@ export const MOCK_LOTS: AuctionLot[] = [
   },
 ];
 
-const LOTS_KEY = "crown-auction-lots";
+const LOTS_KEY = "cheer-auction-lots";
 
 export function readLots(handle: string): AuctionLot[] {
   try {
@@ -152,17 +152,20 @@ export function addLot(handle: string, input: { from: string; amount: number; te
   writeLots(handle, next);
   // Share it: append commutes with other viewers' lots; `seed` initialises the
   // server copy with the demo rows on the very first real action in a scope.
-  sendOp(handle, "crown-auction-lots", { type: "append", item: lot as unknown as { id: string } & Record<string, unknown>, seed: next });
+  sendOp(handle, "cheer-auction-lots", { type: "append", item: lot as unknown as { id: string } & Record<string, unknown>, seed: next });
   return next;
 }
 
 // Anyone joins an accepted lot with their own escrow — the lot climbs the board.
 export function topUpLot(handle: string, id: string, input: { name: string; amount: number }): AuctionLot[] {
   const entry = { name: input.name.trim() || "Anonymous", amount: input.amount, when: "just now" };
-  const next = readLots(handle).map((l) => (l.id === id && l.state === "accepted" ? { ...l, entries: [...l.entries, entry] } : l));
+  const current = readLots(handle);
+  const next = current.map((l) => (l.id === id && l.state === "accepted" ? { ...l, entries: [...l.entries, entry] } : l));
   writeLots(handle, next);
-  // Share it as an ENTRY append on that one lot — concurrent top-ups both count.
-  sendOp(handle, "crown-auction-lots", { type: "entry", id, entry });
+  // Share it as an ENTRY append on that one lot — concurrent top-ups both count. `seed` carries the
+  // board this entry was applied to: on a demo scope readLots() hands back MOCK_LOTS from memory, and
+  // without the seed the server would hold an entry for a lot it has never heard of.
+  sendOp(handle, "cheer-auction-lots", { type: "entry", id, entry, seed: next as unknown as Record<string, unknown>[] });
   return next;
 }
 
@@ -171,7 +174,7 @@ export function setLotState(handle: string, id: string, state: LotState): Auctio
   const next = readLots(handle).map((l) => (l.id === id ? { ...l, state } : l));
   writeLots(handle, next);
   // The streamer is the book's single authority — accept/return overwrites.
-  sendOp(handle, "crown-auction-lots", { type: "replace", value: next });
+  sendOp(handle, "cheer-auction-lots", { type: "replace", value: next });
   return next;
 }
 
@@ -192,7 +195,7 @@ export function auctionTotals(list: AuctionLot[]) {
 
 // ---- auction lifecycle (mock) ----
 // The clock starts when the auction is first seen; the streamer can close the bidding early
-// ("решение КМ") — same pattern as the roulette round. The verdict chain is the spec's:
+// (the maker's call) — same pattern as the roulette round. The verdict chain is the spec's:
 // bidding → performing (winner delivers) → voting (reputation holders confirm) → settled/refunded.
 
 // The platform floor — set by the admin, not the streamer: no auction anywhere may open below
@@ -205,12 +208,12 @@ export interface AuctionMeta {
   startedAt: number; // epoch ms — the bidding clock's zero
   state: AuctionState;
   chainAuction?: string; // hex auction id once created on the auction canister
-  minBid?: number; // the opening price, fixed at creation (spec: КМ's handle, set once, forever)
+  minBid?: number; // the opening price, fixed at creation (spec: the maker's call, set once, forever)
   winnerId: string | null; // set at the final
   votes: { done: number; notDone: number; voters: string[] }; // weights in $ of reputation (mock: 1 voter = their stated weight)
 }
 
-const META_KEY = "crown-auction-meta";
+const META_KEY = "cheer-auction-meta";
 
 const FRESH_META = (): AuctionMeta => ({ startedAt: Date.now(), state: "bidding", winnerId: null, votes: { done: 0, notDone: 0, voters: [] } });
 
@@ -233,7 +236,7 @@ function writeMeta(handle: string, meta: AuctionMeta, share = true) {
   // Authoritative writes (init/bell/votes/new auction) overwrite the shared copy. ensureAuction's
   // first-sight default passes share=false — a fresh viewer's local clock must never reset the
   // bidding for everyone; the next poll adopts the real shared meta if one exists.
-  if (share) sendOp(handle, "crown-auction-meta", { type: "replace", value: meta });
+  if (share) sendOp(handle, "cheer-auction-meta", { type: "replace", value: meta });
 }
 
 export function ensureAuction(handle: string): AuctionMeta {
@@ -297,7 +300,7 @@ export function castVote(handle: string, input: { name: string; weight: number; 
 }
 
 // The count: strictly more "done" weight settles; ties, silence and everything else refunds —
-// молчание сообщества не двигает чужие деньги (spec §10).
+// silence from the community must not move other people's money (spec §10).
 export function closeVoting(handle: string): AuctionMeta {
   const meta = ensureAuction(handle);
   if (meta.state !== "voting") return meta;
@@ -306,7 +309,7 @@ export function closeVoting(handle: string): AuctionMeta {
   return next;
 }
 
-// КМ's own cancel — only while bidding (spec §5); everything goes back.
+// The maker's own cancel — only while bidding (spec §5); everything goes back.
 export function cancelAuction(handle: string): AuctionMeta {
   const meta = ensureAuction(handle);
   if (meta.state !== "bidding") return meta;
@@ -320,7 +323,7 @@ export function newAuction(handle: string): AuctionMeta {
   try {
     localStorage.removeItem(`${LOTS_KEY}:${handle}`);
   } catch {}
-  sendOp(handle, "crown-auction-lots", { type: "replace", value: [] });
+  sendOp(handle, "cheer-auction-lots", { type: "replace", value: [] });
   const fresh = FRESH_META();
   writeMeta(handle, fresh);
   return fresh;
@@ -343,7 +346,7 @@ export const MOCK_AUCTION_HISTORY: AuctionRecord[] = [
   { id: "a-h3", date: "Jun 29, 2026", condition: "Beat a viewer 1v1, loser deletes a rank.", pot: 240, lots: 5, verdict: "refunded" },
 ];
 
-const HISTORY_KEY = "crown-auction-history";
+const HISTORY_KEY = "cheer-auction-history";
 
 function readLocalHistory(handle: string): AuctionRecord[] {
   try {

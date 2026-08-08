@@ -46,6 +46,9 @@ interface WcSigner {
 interface InjectedProvider {
   isPhantom?: boolean;
   isSolflare?: boolean;
+  // Set while the extension is unlocked and already connected to this site. Used to decide whether
+  // it is safe to probe at all — see the silent-reconnect effect.
+  isConnected?: boolean;
   publicKey?: { toString(): string } | null;
   connect: (opts?: { onlyIfTrusted?: boolean }) => Promise<{ publicKey?: { toString(): string } } | void>;
   disconnect: () => Promise<void>;
@@ -108,7 +111,7 @@ interface WalletCtx {
 const Ctx = createContext<WalletCtx | null>(null);
 
 // Which wallet the user last connected with, so the silent auto-reconnect tries that one first.
-const LAST_WALLET_KEY = "crown-last-wallet";
+const LAST_WALLET_KEY = "cheer-last-wallet";
 
 export function SolanaWalletProvider({ children }: { children: React.ReactNode }) {
   const [address, setAddress] = useState<string | null>(null);
@@ -204,6 +207,15 @@ export function SolanaWalletProvider({ children }: { children: React.ReactNode }
     const tryOne = async (name: WalletName): Promise<boolean> => {
       const p = getInjected(name);
       if (!p) return false;
+      // `onlyIfTrusted` is a promise the wallet is supposed to keep: return the address silently or
+      // fail silently, never prompt. Solflare breaks it — when the extension is LOCKED it throws its
+      // "Unlock your wallet" password sheet at you anyway, which is what made a plain visit to the
+      // cabinet demand a password before anything on the page was even read.
+      //
+      // So probe only when the wallet is demonstrably already unlocked: `isConnected` (Solflare) or
+      // a live `publicKey` (both). Neither is set while locked, so a locked wallet is left alone.
+      const unlocked = !!p.isConnected || !!p.publicKey;
+      if (!unlocked) return false;
       try {
         const res = await p.connect({ onlyIfTrusted: true });
         const resPk = res && typeof res === "object" && "publicKey" in res ? (res as { publicKey?: { toString(): string } }).publicKey : undefined;

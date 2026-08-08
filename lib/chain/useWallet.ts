@@ -1,12 +1,12 @@
 "use client";
 
-import { useCrown } from "@/lib/data/DataProvider";
+import { useCheer } from "@/lib/data/DataProvider";
 import { useSolanaWallet, type WalletName } from "./wallet";
 
 // One wallet handle for both modes.
 // mock — "connected" without a real wallet; chain — a real Phantom/Solflare wallet.
 export function useWallet() {
-  const { mode } = useCrown();
+  const { mode } = useCheer();
   const w = useSolanaWallet();
 
   if (mode === "mock") {

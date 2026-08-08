@@ -8,9 +8,13 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 11px 15px;
+  padding: 12px 15px;
   border-radius: var(--r-2);
-  background: var(--accent-soft);
+  /* A flat accent fill made this the heaviest thing on the form — heavier than the inputs it
+     annotates, which inverted the hierarchy. A hairline plus a whisper of the accent keeps the
+     "this is a reward, not a field" reading without shouting over the actual controls. */
+  background: linear-gradient(180deg, rgba(192, 183, 250, 0.07), rgba(192, 183, 250, 0.03));
+  border: 1px solid rgba(192, 183, 250, 0.14);
 }
 .repLabel {
   font-size: 14px;
@@ -25,18 +29,20 @@
 }
 .repNow {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-3);
+  font-variant-numeric: tabular-nums;
 }
 .repArrow {
   font-size: 13px;
   color: var(--accent);
 }
 .repNext {
-  font-size: 19px;
-  font-weight: 800;
+  font-size: 18px;
+  font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--text-1);
+  font-variant-numeric: tabular-nums;
 }
 /* the tier the contribution lands you in — a small level badge, shown only when it changes.
    The name's color is the streamer's own tier color, set inline in the component. */
@@ -44,13 +50,15 @@
   flex: none;
   display: inline-flex;
   align-items: center;
-  height: 24px;
-  padding: 0 10px;
+  height: 22px;
+  padding: 0 9px;
   border-radius: var(--r-pill);
   background: var(--bg-0);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
+  border: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
 /* Phone: tighten the callout and let a long (streamer-defined) tier name wrap to its own line

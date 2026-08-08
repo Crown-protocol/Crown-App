@@ -28,8 +28,8 @@ export interface GameSession {
 
 export type SessionState = "live" | "finished";
 
-const KEY = "crown-game-sessions";
-const CURRENT_KEY = "crown-current-session";
+const KEY = "cheer-game-sessions";
+const CURRENT_KEY = "cheer-current-session";
 
 // ---- the registry ----
 
@@ -57,10 +57,10 @@ function writeSessions(handle: string, gameId: GameId, list: GameSession[]) {
   // cabinet that hadn't pulled the registry back yet would send a list of one and delete every
   // other session from the server — for the streamer and every viewer at once. Merging by id keeps
   // whatever the server already knows and still records this session's own changes.
-  sendOp(sessionsScope(handle, gameId), "crown-game-sessions", { type: "mergeById", list });
+  sendOp(sessionsScope(handle, gameId), "cheer-game-sessions", { type: "mergeById", list });
 }
 
-// The registry's gamestate scope. The localStorage key is `crown-game-sessions:<handle>:<gameId>`
+// The registry's gamestate scope. The localStorage key is `cheer-game-sessions:<handle>:<gameId>`
 // and the sync layer stores every key as `<k>:<scope>` — so scope is exactly "<handle>:<gameId>".
 function sessionsScope(handle: string, gameId: GameId): string {
   return `${handle}:${gameId}`;
@@ -92,10 +92,10 @@ export function createSession(handle: string, gameId: GameId, name?: string): Ga
     markFresh(scope);
     // The fresh marker is per-browser — publish the empty starting state too, so a VIEWER's
     // browser (which has no marker) also sees a session that starts empty, not the demo seeds.
-    if (gameId === "task") sendOp(scope, "crown-tasks", { type: "replace", value: [] });
-    if (gameId === "roulette") sendOp(scope, "crown-roulette-round", { type: "replace", value: [] });
-    if (gameId === "auction") sendOp(scope, "crown-auction-lots", { type: "replace", value: [] });
-    if (gameId === "fundraiser") sendOp(scope, "crown-fundraiser-collected", { type: "replace", value: 0 });
+    if (gameId === "task") sendOp(scope, "cheer-tasks", { type: "replace", value: [] });
+    if (gameId === "roulette") sendOp(scope, "cheer-roulette-round", { type: "replace", value: [] });
+    if (gameId === "auction") sendOp(scope, "cheer-auction-lots", { type: "replace", value: [] });
+    if (gameId === "fundraiser") sendOp(scope, "cheer-fundraiser-collected", { type: "replace", value: 0 });
   }
   writeSessions(handle, gameId, [session, ...list]);
   setCurrentSession(handle, gameId, id);

@@ -150,7 +150,7 @@ export function BotPanel() {
           "nothing is happening", so say it plainly. */}
       {data && !data.bot.secretConfigured && (
         <div className="notice">
-          <b>CROWN_BOT_SECRET isn&apos;t set on the server.</b> The bot pipe is fail-closed, so the bot cannot connect at all —
+          <b>CHEER_BOT_SECRET isn&apos;t set on the server.</b> The bot pipe is fail-closed, so the bot cannot connect at all —
           set the same value in <code>.env.local</code> and <code>bot/.env</code>.
         </div>
       )}
@@ -209,7 +209,7 @@ export function BotPanel() {
         <div className="panel-head">
           <div>
             <h2>Test a scenario</h2>
-            <div className="ph-sub">Sends the real thing — same queue, same card, same filtering.</div>
+            <div className="ph-sub">Sends for real.</div>
           </div>
         </div>
         <div className={styles.controls}>

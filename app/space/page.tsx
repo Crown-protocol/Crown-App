@@ -5,14 +5,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSolanaWallet } from "@/lib/chain/wallet";
 import { useProfile } from "@/lib/data/ProfileProvider";
-import { useCrown } from "@/lib/data/DataProvider";
+import { useCheer } from "@/lib/data/DataProvider";
 import { SpaceGate } from "@/components/SpaceGate";
-import { isDemoAddress, isOwnerAddress, readDemoSession, startDemoSession, endDemoSession } from "@/lib/data/session";
+import { isDemoAddress, isOwnerAddress, readDemoSession, startDemoSession, endDemoSession, OWNER_ADDRESS } from "@/lib/data/session";
 import { lookupAccountByOwner } from "@/lib/data/lookupAccount";
-import { proveOwnership, clearProof, hasProof, hasAnyProof } from "@/lib/data/proveOwnership";
+import { proveOwnership, clearProof, hasProof } from "@/lib/data/proveOwnership";
 import { Logo } from "@/components/Logo";
-import { Mono } from "@/components/Mono";
 import { NotificationBell } from "@/components/NotificationBell";
+import { Mono } from "@/components/Mono";
 import { DonationsPanel } from "@/components/DonationsPanel";
 import { DonationsChart } from "@/components/DonationsChart";
 import { HomeLive } from "@/components/HomeLive";
@@ -33,6 +33,7 @@ import { pullScope } from "@/lib/data/gameSync";
 import { NavIcon, GameIcon, ChevronDown } from "@/components/icons";
 import { usd } from "@/lib/money";
 import { MOCK_DASHBOARD, type DashboardPeriodKey } from "@/lib/data/mock";
+import { buildDashboard } from "@/lib/data/dashboard";
 import { GAMES, type GameId } from "@/lib/data/games";
 
 type Section = "home" | "donations" | "games" | "widgets" | "telegram" | "settings";
@@ -64,8 +65,8 @@ const GAME_TABS: Record<GameId, { key: GameTab; label: string }[]> = {
 export default function SpacePage() {
   const router = useRouter();
   const { address, connected: isConnected, disconnect, signMessage } = useSolanaWallet();
-  const { mode } = useCrown();
-  const { ready, registered, profile, hasSession, sessionChecked, saveDeferred, hydrate, signOut, reset } = useProfile();
+  const { mode, feed, demoData } = useCheer();
+  const { ready, registered, profile, hasSession, sessionChecked, markSession, saveDeferred, hydrate, signOut, reset } = useProfile();
   const [section, setSection] = useState<Section>("home");
   const [period, setPeriod] = useState<DashboardPeriodKey>("30");
 
@@ -79,10 +80,15 @@ export default function SpacePage() {
   }, []);
 
   // Landing here with a connected wallet but no local profile — most often a fresh device, or after
-  // clearing the browser. Ask the Crown DB whether this wallet OWNS an account: if so, load it (log
+  // clearing the browser. Ask the Cheer DB whether this wallet OWNS an account: if so, load it (log
   // in); if not, this wallet has no page, so go straight to registration instead of the old
   // "create your page first" dead-end. Only runs once per address, and never in demo (no wallet).
   const probedFor = useRef<string | null>(null);
+  // Bumped by the gate's "Sign again" action. Declining the ownership popup re-arms probedFor, but the
+  // effect's deps don't otherwise change on a decline, so nothing re-ran it and the person sat forever
+  // on "Confirm the signature" with no way back to the prompt. This nonce is a dep, so bumping it
+  // re-runs the probe and re-opens the wallet request on demand.
+  const [signRetry, setSignRetry] = useState(0);
   // Set while we are deliberately leaving the cabinet (page deleted). Deleting wipes the profile, and
   // for the instant before the wallet actually disconnects the probe would see "no profile + no
   // account in the DB" and redirect to /create — hijacking the navigation to the landing page.
@@ -90,10 +96,16 @@ export default function SpacePage() {
   useEffect(() => {
     if (leavingRef.current) return;
     if (!ready || !isConnected || !address) return;
-    // Nothing to do once we're already in: a live server session, or THIS wallet having proved itself
-    // with a profile loaded. Without the hasSession arm the probe re-ran on a valid session and asked
-    // the wallet to sign again — a popup on a plain reload, which is exactly what must never happen.
-    if (hasSession && profile) return;
+    // Nothing to do once we're already in — but "in" must mean in as THIS connected wallet, not just
+    // that some session exists. Past the guard above a wallet IS attached (a plain reload keeps
+    // isConnected false while the extension reattaches, and the render gate below already opens the
+    // cabinet for a valid cookie in that window). So the only safe fast path here is "the connected
+    // wallet is the one that proved ownership on this device" — hasProof(address). We deliberately do
+    // NOT short-circuit on hasSession alone: the session cookie and the loaded profile both belong to
+    // whoever last signed in, and switching accounts fires accountChanged with a new address while
+    // that stale pair lingers — trusting hasSession kept wallet A's cabinet open under wallet B. When
+    // the connected wallet hasn't proved itself, we fall through to the probe, which looks up the NEW
+    // wallet's own account and hydrate()s it over the stale profile (or routes to /create).
     if (profile && hasProof(address)) return;
     if (probedFor.current === address) return; // one probe per connected wallet
     probedFor.current = address;
@@ -111,10 +123,14 @@ export default function SpacePage() {
         // Prove ownership once per device (wallet signs). Declined → let the probe re-arm so a retry
         // (or the gate) can ask again, don't log in unproven.
         const proof = await proveOwnership(address, signMessage);
-        if (proof === "declined") {
+        // "no-session" too: the signature was fine but no cookie came back, so edits here would be
+        // refused. Re-arm the probe and let the gate ask again rather than opening a cabinet that
+        // cannot save.
+        if (proof === "declined" || proof === "no-session") {
           probedFor.current = null;
           return;
         }
+        markSession(); // the server just recognised us — don't wait for a reload to find out
         hydrate(account); // load THIS wallet's own account (replaces any stale profile on the device)
       } else if (!profile && !leavingRef.current) {
         // This wallet owns no page and the device has none either → registration. (Not while we're on
@@ -124,11 +140,12 @@ export default function SpacePage() {
       // Wallet owns nothing but a profile sits on this device: it isn't this wallet's account, so we
       // leave it be — the gate below shows "that's not this page's wallet" instead of letting them in.
     })();
-  }, [ready, profile, hasSession, isConnected, address, hydrate, router, signMessage]);
+  }, [ready, profile, hasSession, isConnected, address, hydrate, router, signMessage, markSession, signRetry]);
 
   // Bumps whenever a session is created/selected/ended, so everything reading the session
   // registry (a plain localStorage store) re-renders with the fresh pick.
   const [sessionNonce, setSessionNonce] = useState(0);
+
 
   // ── Restore this device's games from the server ───────────────────────────────────────────────
   // The session registry and every game's state are localStorage stores, and Log out deliberately
@@ -166,6 +183,17 @@ export default function SpacePage() {
   const [openGame, setOpenGame] = useState<GameId | null>(null);
   const [gameId, setGameId] = useState<GameId>(GAMES[0].id);
   const [gameTab, setGameTab] = useState<GameTab>(GAME_TABS[GAMES[0].id][0].key);
+
+  // Ending the last session while standing on Page or Overview leaves you on a tab that just
+  // vanished from the sidebar — the content stays, but nothing in the nav is highlighted and there
+  // is no way back to it. Fall back to Sessions, which is where a new run starts.
+  useEffect(() => {
+    if (section !== "games") return;
+    if (gameTab === "sessions") return;
+    if (activeSessions(profile?.handle ?? "", gameId).length === 0) setGameTab("sessions");
+    // sessionNonce is the dependency that matters: it bumps on every create/select/end.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [section, gameTab, gameId, sessionNonce, profile?.handle]);
 
   // The sidebar is a drawer: open by default on desktop (pushes content aside), tucked away on a
   // phone (slides over with a scrim). `navAnim` gates the slide transition so setting the correct
@@ -239,7 +267,11 @@ export default function SpacePage() {
   // proof — the same rule the landing header uses. A proof is only ever written after a verified
   // signature and log out deletes it, so this opens the cabinet for exactly the people who already
   // signed here, and nobody else.
-  const proven = isConnected && !!address ? hasProof(address) : hasAnyProof();
+  // With a wallet attached, ask about THAT wallet. Without one (the extension reconnects a beat after
+  // load), ask about the wallet that owns the page being opened — not "does this device hold any proof
+  // at all". On a shared browser hasAnyProof() let whoever signed in last walk into a cabinet cached
+  // from someone else's session; the server refused every save, but the page had already been read.
+  const proven = isConnected && !!address ? hasProof(address) : !!profile.address && hasProof(profile.address);
   const signedIn = hasSession || proven || demoSession;
   if (!signedIn) {
     // Either nothing is connected (cold open on a device that holds a profile), or a wallet IS
@@ -250,6 +282,7 @@ export default function SpacePage() {
         pageAddress={profile.address}
         connectedAddress={isConnected && address ? address : undefined}
         allowDemo={isDemoAddress(profile.address) || mode === "mock"}
+        onRetry={() => setSignRetry((n) => n + 1)}
         onDemoEnter={() => {
           startDemoSession();
           setDemoSession(true);
@@ -258,8 +291,24 @@ export default function SpacePage() {
     );
   }
 
-  const d = MOCK_DASHBOARD[period];
+  // Real numbers by default (built from this page's own donations). Demo numbers are opt-in via the
+  // admin panel — when on, we hand the tiles/chart the MOCK_DASHBOARD sample AND flag it visually
+  // (red tint + "demo" tooltip) so an invented $1,284 can never be mistaken for real money.
+  const d = demoData ? MOCK_DASHBOARD[period] : buildDashboard(feed, period, profile.address);
+  // Has this page ever been donated to? Deliberately asked of ALL time, not the selected period —
+  // keying it on `d.donations` would make the switcher vanish the moment someone picked a quiet week,
+  // taking away the only control that could get them back.
+  const hasData = demoData || buildDashboard(feed, "all", profile.address).donations > 0;
   const game = GAMES.find((g) => g.id === gameId)!;
+
+  // Which sub-tabs a game shows. With nothing running, "Page" and "Overview" have nothing to be
+  // about — the builder previews a page that doesn't exist yet and the overview counts an empty
+  // set — so the only honest door is Sessions, where you start one. They appear the moment a
+  // session does.
+  const tabsFor = (id: GameId) =>
+    activeSessions(profile.handle, id).length > 0
+      ? GAME_TABS[id]
+      : GAME_TABS[id].filter((t) => t.key === "sessions");
 
   // The session the game tabs are looking at. Reading sessionNonce here is what ties the reads
   // below to the counter, so any create/select/end re-runs them.
@@ -282,7 +331,9 @@ export default function SpacePage() {
     setOpenGame(id);
     setSection("games");
     setGameId(id);
-    setGameTab(GAME_TABS[id][0].key);
+    // First AVAILABLE tab: with no session that's Sessions, not the page builder for a page that
+    // isn't there yet.
+    setGameTab(tabsFor(id)[0].key);
   }
 
   // Switching to a flat section (Home/Donations/Widgets/Settings) closes any expanded game row.
@@ -319,11 +370,12 @@ export default function SpacePage() {
           </button>
           <Logo />
           <div className="me">
-            {/* your public page opens from your name — no separate button needed */}
-            <Link className="who" href={`/@${profile.handle}`} title={`Open /@${profile.handle}`} style={{ textDecoration: "none", color: "inherit" }}>
+            {/* Identity badge, not a link: it answers "signed in as…" and nothing more. Navigation
+                lives in the sidebar, and a second clickable route here only competed with it. */}
+            <div className="who" title={`Signed in as @${profile.handle}`}>
               <Mono name={profile.name} size={28} src={profile.avatarUrl} />
               <span>{profile.name}</span>
-            </Link>
+            </div>
             <NotificationBell handle={profile.handle} />
           </div>
         </div>
@@ -355,7 +407,7 @@ export default function SpacePage() {
                 </button>
                 {open && (
                   <div className="game-sub">
-                    {GAME_TABS[g.id].map((t) => (
+                    {tabsFor(g.id).map((t) => (
                       <button
                         key={t.key}
                         type="button"
@@ -385,9 +437,14 @@ export default function SpacePage() {
           <div className="side-bottom">
             <div className="side-divider" />
             {/* Admin/ops — owner-only entry, deliberately NOT in the public marketing nav (TopNav).
-                Rendered ONLY when the connected wallet is the platform owner's (OWNER_ADDRESS);
-                the /admin route's real access gate is on the backend. */}
-            {isOwnerAddress(address) && (
+                Shown when this is the platform owner: either the owner's wallet is connected right now,
+                OR the owner proved ownership on this device (hasProof) — the wallet extension drops the
+                connection for a beat on log out → log back in, and tying the link to the LIVE connection
+                alone made the Admin entry vanish every time the owner re-entered until they manually
+                reconnected. hasProof only exists after a verified signature and log out clears it, so
+                this opens for exactly the owner and nobody else. The /admin route's real gate is on the
+                backend regardless. */}
+            {(isOwnerAddress(address) || hasProof(OWNER_ADDRESS)) && (
               <Link href="/admin" className="nav-item">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                   <path d="M12 3l7 3v5c0 4.3-2.9 7.6-7 8.7C7.9 18.6 5 15.3 5 11V6l7-3Z" />
@@ -412,35 +469,40 @@ export default function SpacePage() {
             <>
               <div className="main-head">
                 <h1>Dashboard</h1>
-                <div className="seg" role="group" aria-label="Period">
-                  <button type="button" className={period === "7" ? "active" : ""} onClick={() => setPeriod("7")}>
-                    7 days
-                  </button>
-                  <button type="button" className={period === "30" ? "active" : ""} onClick={() => setPeriod("30")}>
-                    30 days
-                  </button>
-                  <button type="button" className={period === "all" ? "active" : ""} onClick={() => setPeriod("all")}>
-                    All time
-                  </button>
-                </div>
+                {/* The period switcher only appears once there is something to slice. On a page that
+                    has never been donated to, every period shows the same zeros — three controls
+                    asking a question whose answer can't change yet. */}
+                {hasData && (
+                  <div className="seg" role="group" aria-label="Period">
+                    <button type="button" className={period === "7" ? "active" : ""} onClick={() => setPeriod("7")}>
+                      7 days
+                    </button>
+                    <button type="button" className={period === "30" ? "active" : ""} onClick={() => setPeriod("30")}>
+                      30 days
+                    </button>
+                    <button type="button" className={period === "all" ? "active" : ""} onClick={() => setPeriod("all")}>
+                      All time
+                    </button>
+                  </div>
+                )}
               </div>
 
-              <div className="tiles">
-                <div className="card tile">
+              {/* Two tiles, not three. "New viewers" counted distinct donors whose first donation fell
+                  in the window — a real number, but it measured donors while calling them viewers, and
+                  anonymous ones sharing a name collapsed into one. Money received and how many times
+                  are both exact and are what a maker actually opens this page for. */}
+              <div className="tiles tiles-2">
+                <div className={`card tile${demoData ? " tile-demo" : ""}`} title={demoData ? "demo numbers" : undefined}>
                   <div className="v num">{usd(d.received)}</div>
                   <div className="k">received</div>
                 </div>
-                <div className="card tile">
+                <div className={`card tile${demoData ? " tile-demo" : ""}`} title={demoData ? "demo numbers" : undefined}>
                   <div className="v num">{d.donations}</div>
                   <div className="k">donations</div>
                 </div>
-                <div className="card tile">
-                  <div className="v num">{d.newViewers}</div>
-                  <div className="k">new viewers</div>
-                </div>
               </div>
 
-              <div className="card chart-card">
+              <div className={`card chart-card${demoData ? " chart-demo" : ""}`} title={demoData ? "demo numbers" : undefined}>
                 <DonationsChart d={d} periodLabel={period === "7" ? "7 days" : period === "30" ? "30 days" : "All time"} />
               </div>
 
@@ -459,9 +521,10 @@ export default function SpacePage() {
               <div className="main-head">
                 <h1>Donations</h1>
               </div>
-              <div className="card">
-                <DonationsPanel />
-              </div>
+              {/* No wrapping .card here on purpose: the panel is two separate things — the filter rail
+                  and the feed — and a card around both glued them into one slab, with the rail reading
+                  as a box inside a box. Each half now carries its own surface. */}
+              <DonationsPanel />
             </>
           )}
 
@@ -470,14 +533,18 @@ export default function SpacePage() {
               <div className="main-head">
                 <h1>{game.title}</h1>
               </div>
-              <div className="card" style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "flex-start" }}>
-                <h2 style={{ fontSize: 16 }}>No live session</h2>
-                <p className="footnote">
-                  The page needs a running session behind it — start one, and the builder and the public link light up.
-                </p>
+              <div className="blank-state">
+                <span className="blank-mark" aria-hidden>
+                  <GameIcon id={game.id} width={26} height={26} />
+                </span>
+                <h2>No live session</h2>
+                <p>The page needs a running session behind it — start one, and the builder and the public link light up.</p>
                 <button className="btn" type="button" onClick={() => setGameTab("sessions")}>
                   Create a session
                 </button>
+                <a className="blank-link" href={`/games/${game.id}`} target="_blank" rel="noreferrer">
+                  How {game.title} works ↗
+                </a>
               </div>
             </>
           )}
@@ -531,6 +598,7 @@ export default function SpacePage() {
               {gameTab === "sessions" && (
                 <GameSessions
                   profile={profile}
+                  onSave={saveDeferred}
                   gameId={game.id}
                   gameTitle={game.title}
                   onOpen={() => {
@@ -553,12 +621,18 @@ export default function SpacePage() {
                 />
               )}
               {gameTab === "overview" && liveSessions.length === 0 && !currentSession && (
-                <div className="card" style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "flex-start" }}>
-                  <h2 style={{ fontSize: 16 }}>No live session</h2>
-                  <p className="footnote">Start a session and this tab becomes its control room.</p>
+                <div className="blank-state">
+                  <span className="blank-mark" aria-hidden>
+                    <GameIcon id={game.id} width={26} height={26} />
+                  </span>
+                  <h2>No live session</h2>
+                  <p>Start a session and this tab becomes its control room.</p>
                   <button className="btn" type="button" onClick={() => setGameTab("sessions")}>
                     Create a session
                   </button>
+                  <a className="blank-link" href={`/games/${game.id}`} target="_blank" rel="noreferrer">
+                    How {game.title} works ↗
+                  </a>
                 </div>
               )}
 

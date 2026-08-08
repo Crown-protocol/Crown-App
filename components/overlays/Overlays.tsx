@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Mono } from "@/components/Mono";
-import { CrownMark, GameIcon } from "@/components/icons";
+import { CheerMark, GameIcon } from "@/components/icons";
 import { RouletteWheel } from "@/components/RouletteWheel";
 import { FundraiserFill } from "@/components/FundraiserFill";
 import { useCountUp, useChangeNonce, useFlip } from "./fx";
@@ -147,7 +147,7 @@ export function RankOverlay({ handle, demo }: Common) {
   // land (effects run in mount order and channel events are async).
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(`crown-rank-totals:${handle}`);
+      const raw = localStorage.getItem(`cheer-rank-totals:${handle}`);
       const obj = raw ? (JSON.parse(raw) as Record<string, number>) : null;
       totals.current = obj && typeof obj === "object" && !Array.isArray(obj) ? obj : {};
     } catch {
@@ -166,7 +166,7 @@ export function RankOverlay({ handle, demo }: Common) {
       const next = prev + e.amount;
       totals.current[e.from] = next;
       try {
-        localStorage.setItem(`crown-rank-totals:${handle}`, JSON.stringify(totals.current));
+        localStorage.setItem(`cheer-rank-totals:${handle}`, JSON.stringify(totals.current));
       } catch {}
       const crossed = OVERLAY_TIERS.filter((t) => prev < t.at && next >= t.at).pop();
       if (crossed) setCurrent(rankEventFor(e.from, crossed.name, next, ++nonce.current));
@@ -206,7 +206,7 @@ export function RankOverlay({ handle, demo }: Common) {
       {current && (
         <div className={styles.rank} key={current.ts}>
           <span className={`${styles.rankBadge} ${current.top ? styles.rankBadgeTop : ""}`}>
-            <CrownMark />
+            <CheerMark />
           </span>
           <div className={styles.alertBody}>
             <div className={styles.alertLine}>
@@ -374,8 +374,8 @@ function TopRow({ name, total, rank }: { name: string; total: number; rank: numb
         {rank === 1 ? (
           // Rows are keyed by name, so this element mounts fresh exactly when a different row
           // becomes first — the spring-in plays on every leader change, and only then.
-          <span className={styles.topCrown}>
-            <CrownMark width={14} height={14} />
+          <span className={styles.topCheer}>
+            <CheerMark width={14} height={14} />
           </span>
         ) : (
           rank
@@ -509,7 +509,7 @@ export function RouletteOverlay({ handle, demo }: Common) {
             {landed && winner ? (
               <div className={styles.gameWinner}>
                 <span className={styles.winnerMark}>
-                  <CrownMark width={18} height={18} />
+                  <CheerMark width={18} height={18} />
                 </span>
                 {winner.title}
               </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { safeId } from "@/lib/id";
 import { createPortal } from "react-dom";
 import QRCode from "qrcode";
 import {
@@ -17,6 +18,8 @@ import {
 import { LivePreview } from "@/components/LivePreview";
 import { DesignTab } from "@/components/DesignTab";
 import { SOCIAL_EXAMPLE, isSocialValid } from "@/lib/data/social-links";
+import { activeSessions, getCurrentSession, pullSessions, type GameSession } from "@/lib/data/gameSessions";
+import type { GameId } from "@/lib/data/games";
 import type { PageDesign, PageWidget, Profile, Social } from "@/lib/data/types";
 import styles from "./PageBuilder.module.css";
 
@@ -111,8 +114,37 @@ export function GamePageEditor({
   // isn't captured by a transformed ancestor. Only mount the portal client-side.
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-  const path = `/@${profile.handle}/${config.slug}`;
-  const link = `${origin || "https://crown.tv"}${path}`;
+  // Live sessions for this game. With two or more running, the bare /@handle/slug link can't resolve
+  // which one a viewer means — the public page answers it with a "Pick a session" screen, which is
+  // exactly what the preview here was showing. So the builder picks one and every link it hands out
+  // (address bar, Copy, QR, preview) carries that session's ?s=<id>.
+  // The slug IS the game id for all four games (task/roulette/fundraiser/auction) — no separate field
+  // to keep in step across the four panels.
+  const gameId = config.slug as GameId;
+  const [sessions, setSessions] = useState<GameSession[]>([]);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  useEffect(() => {
+    const read = () => {
+      const live = activeSessions(profile.handle, gameId);
+      setSessions(live);
+      // Default to the session the cabinet is already looking at, else the first live one. Re-checked
+      // on every pull so a session started (or ended) in another tab lands here too.
+      setSessionId((cur) => {
+        if (cur && live.some((s) => s.id === cur)) return cur;
+        return getCurrentSession(profile.handle, gameId)?.id ?? live[0]?.id ?? null;
+      });
+    };
+    read();
+    void pullSessions(profile.handle, gameId).then(read);
+    const t = setInterval(read, 3000);
+    return () => clearInterval(t);
+  }, [profile.handle, gameId]);
+
+  // Only qualify the link when there's an actual choice to make: one session (or none, on a page that
+  // predates sessions) resolves on its own, and a bare link is the nicer thing to share.
+  const linkSession = sessions.length > 1 ? sessions.find((s) => s.id === sessionId) ?? null : null;
+  const path = `/@${profile.handle}/${config.slug}${linkSession ? `?s=${encodeURIComponent(linkSession.id)}` : ""}`;
+  const link = `${origin || "https://cheer.tv"}${path}`;
 
   useEffect(() => {
     if (!qrOpen) return;
@@ -155,7 +187,7 @@ export function GamePageEditor({
   }
 
   function addSocial() {
-    setPendingSocials([...shownSocials, { kind: "twitch", url: "", id: crypto.randomUUID() }]);
+    setPendingSocials([...shownSocials, { kind: "twitch", url: "", id: safeId() }]);
     setSocialsOpen(true);
   }
 
@@ -174,8 +206,11 @@ export function GamePageEditor({
     (pendingDraft ? Object.keys(pendingDraft).filter((k) => JSON.stringify((pendingDraft as Record<string, unknown>)[k]) !== JSON.stringify((draft as unknown as Record<string, unknown>)[k])).length : 0) +
     (pendingSocials && JSON.stringify(pendingSocials) !== JSON.stringify(profile.socials) ? 1 : 0);
 
+  // Empty pitch = a public page with nothing above the form. Blocks the confirm, never the typing.
+  const pitchMissing = !shown.headline.trim();
+
   function confirmChanges() {
-    if (!dirty) return;
+    if (!dirty || pitchMissing) return;
     // One write, so a confirm can't half-apply: the panel merges the game's own slice, and the
     // shared socials ride along on the profile it merges into.
     const base: Profile = pendingSocials ? { ...profile, socials: pendingSocials } : profile;
@@ -232,15 +267,24 @@ export function GamePageEditor({
               {/* ── 2. What you're asking for ── */}
               <section className={styles.section}>
                 <div className={styles.sectionHead}>
-                  <h3 className={styles.sectionTitle}>{config.headlineLabel}</h3>
+                  <h3 className={styles.sectionTitle}>
+                    {config.headlineLabel}
+                    {/* Marked required only while it's empty: once written, the badge has done its
+                        job and would just be noise on a finished page. */}
+                    {pitchMissing && <span className={styles.required}>Required</span>}
+                  </h3>
                 </div>
                 <div className={styles.bioBox}>
                   <textarea
-                    className={styles.bioInput}
+                    className={`${styles.bioInput}${pitchMissing ? ` ${styles.bioInputNeeded}` : ""}`}
                     rows={2}
                     maxLength={config.headlineMax}
                     placeholder={config.headlinePlaceholder}
                     value={shown.headline}
+                    aria-required
+                    // Land the cursor here when there's nothing to say yet — the first thing to do
+                    // on a fresh session is say what it's for.
+                    autoFocus={pitchMissing}
                     onChange={(e) => stage({ headline: e.target.value })}
                   />
                   <span className={styles.charCount}>
@@ -297,10 +341,11 @@ export function GamePageEditor({
                       {payForm?.enabled && (
                         <ChevronDown className={`${styles.widgetChev}${formOpen ? ` ${styles.widgetChevOn}` : ""}`} />
                       )}
+                      {/* Just the name. The preset amounts and the link count used to sit here in grey,
+                          but both are already visible one click down — inside the panel this button
+                          opens — so the row was repeating itself and the toggle beside it already
+                          says whether the widget is on. */}
                       {config.formLabel}
-                      <span className={styles.widgetMeta}>
-                        {payForm?.enabled ? shown.presets.map((a) => `$${a}`).join(" · ") : "off"}
-                      </span>
                     </button>
                     <label className={`toggle${payForm?.enabled ? " on" : ""}`}>
                       <span className="track">
@@ -383,18 +428,6 @@ export function GamePageEditor({
                         <ChevronDown className={`${styles.widgetChev}${socialsOpen ? ` ${styles.widgetChevOn}` : ""}`} />
                       )}
                       Social links
-                      <span className={styles.widgetMeta}>
-                        {!socials?.enabled
-                          ? "off"
-                          : shownSocials.length === 0
-                            ? "none yet"
-                            : (() => {
-                                const live = shownSocials.filter((s) => isSocialValid(s.kind, s.url)).length;
-                                const label = `${live} ${live === 1 ? "link" : "links"}`;
-                                // Say so when some rows won't make it to the page.
-                                return live === shownSocials.length ? label : `${label} · ${shownSocials.length - live} invalid`;
-                              })()}
-                      </span>
                     </button>
                     <label className={`toggle${socials?.enabled ? " on" : ""}`}>
                       <span className="track">
@@ -468,10 +501,12 @@ export function GamePageEditor({
           {tab === "page" && dirty && mounted &&
             createPortal(
               <div className={styles.saveBar}>
+                {/* Say why the button is dead — the field is a few centimetres up this same tab. */}
+                {pitchMissing && <span className={styles.saveNeeds}>{config.headlineLabel} can&apos;t be empty</span>}
                 <button className={styles.discard} type="button" onClick={discardChanges}>
                   Discard
                 </button>
-                <button className={styles.saveConfirm} type="button" onClick={confirmChanges}>
+                <button className={styles.saveConfirm} type="button" disabled={pitchMissing} onClick={confirmChanges}>
                   Confirm changes ({changeCount})
                 </button>
               </div>,
@@ -485,6 +520,33 @@ export function GamePageEditor({
         </div>
 
         <div className={styles.previewCol}>
+          {/* Which session, then how it's displayed. The session decides WHAT the preview and the
+              link below point at — a different board and a different URL — while phone/desktop only
+              changes how the same page is drawn. The bigger choice reads first.
+
+              A select rather than a row of tabs: sessions are named by the maker ("Friday run"), so
+              the row grew as wide as those names and wrapped once a few were running. */}
+          {sessions.length > 1 && (
+            <div className={styles.sessionRow}>
+              <label className={styles.sessionLabel} htmlFor="preview-session">
+                Session
+              </label>
+              <select
+                id="preview-session"
+                className={styles.sessionSelect}
+                value={sessionId ?? ""}
+                onChange={(e) => setSessionId(e.target.value)}
+                title="Which session the preview and the link below are for"
+              >
+                {sessions.map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className={styles.deviceSeg} role="group" aria-label="Preview device">
             <button type="button" className={device === "phone" ? styles.deviceOn : ""} onClick={() => setDevice("phone")}>
               <PhoneIcon /> Phone

@@ -47,9 +47,9 @@ export function TelegramPanel({ handle, name }: { handle: string; name: string }
         const ts = Math.floor(Date.now() / 1000);
         const sig = await wallet.signMessage(await buildAuthMessage(action, handle, ts, body));
         if (sig) {
-          headers["x-crown-pubkey"] = wallet.address;
-          headers["x-crown-ts"] = String(ts);
-          headers["x-crown-signature"] = Buffer.from(sig).toString("base64");
+          headers["x-cheer-pubkey"] = wallet.address;
+          headers["x-cheer-ts"] = String(ts);
+          headers["x-cheer-signature"] = Buffer.from(sig).toString("base64");
         }
       }
       return headers;

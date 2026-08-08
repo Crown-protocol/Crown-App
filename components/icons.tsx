@@ -2,7 +2,7 @@ import type { SVGProps } from "react";
 import type { Social } from "@/lib/data/types";
 import type { GameId } from "@/lib/data/games";
 
-export function CrownMark(props: SVGProps<SVGSVGElement>) {
+export function CheerMark(props: SVGProps<SVGSVGElement>) {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" aria-hidden {...props}>
       <path d="M3.5 17.5 5 8l4.5 4L12 5.5 14.5 12 19 8l1.5 9.5Z" />

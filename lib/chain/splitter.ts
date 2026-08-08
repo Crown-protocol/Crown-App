@@ -4,14 +4,14 @@ import { SPLITTER, USDC_MINT } from "./config";
 import { eventAuthority, u64le, usdcAta } from "./solana";
 
 // Anchor discriminator sha256("global:donate")[..8] — pinned from
-// Crown-Core/contracts/solana (verified against the repo's own byte dump).
+// Cheer-Core/contracts/solana (verified against the repo's own byte dump).
 // If the program ever changes, the tx fails loudly with InvalidInstructionData,
 // not silently — hand-encoding without an IDL is a deliberate trade the
-// backend also makes in Crown-Bot-TG's core/.
+// backend also makes in Cheer-Bot-TG's core/.
 const DONATE_DISC = Buffer.from("79badad34946c4b4", "hex");
 
 /**
- * The whole donate transaction, exactly as Crown-Core's examples build it:
+ * The whole donate transaction, exactly as Cheer-Core's examples build it:
  *   [ createATAIdempotent(streamer), createATAIdempotent(donor), donate(gross) ]
  * The donor's own wallet signature is the ONLY auth — never route this through
  * a relayer or the Settled event credits the wrong payer and the donor's

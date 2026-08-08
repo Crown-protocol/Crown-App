@@ -33,13 +33,13 @@ export function SolflareIcon({ size = 28 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 40 40" fill="none" aria-hidden>
       <defs>
-        <linearGradient id="crown-sf" x1="6" y1="6" x2="34" y2="34" gradientUnits="userSpaceOnUse">
+        <linearGradient id="cheer-sf" x1="6" y1="6" x2="34" y2="34" gradientUnits="userSpaceOnUse">
           <stop stopColor="#FFC10B" />
           <stop offset="1" stopColor="#FC7227" />
         </linearGradient>
       </defs>
       <rect width="40" height="40" rx="11" fill="#12101A" />
-      <g fill="url(#crown-sf)">
+      <g fill="url(#cheer-sf)">
         <circle cx="20" cy="20" r="6" />
         {/* eight tapered rays around the core */}
         {Array.from({ length: 8 }).map((_, i) => {

@@ -1,12 +1,12 @@
 import { LegalPage } from "@/components/LegalPage";
 
-export const metadata = { title: "Privacy · Crown" };
+export const metadata = { title: "Privacy · Cheer" };
 
 export default function PrivacyPage() {
   return (
     <LegalPage title="Privacy" updated="July 2026">
       <p>
-        Crown is built to know as little about you as possible. There are no accounts and no passwords — you connect a
+        Cheer is built to know as little about you as possible. There are no accounts and no passwords — you connect a
         wallet, and that&apos;s your identity.
       </p>
 
@@ -19,7 +19,7 @@ export default function PrivacyPage() {
       <h2>What&apos;s public by nature</h2>
       <p>
         Donations, escrows, and payouts happen on a public blockchain. Wallet addresses and amounts are visible to
-        anyone — that&apos;s how the chain works, and it&apos;s not something Crown can hide.
+        anyone — that&apos;s how the chain works, and it&apos;s not something Cheer can hide.
       </p>
 
       <h2>What we don&apos;t do</h2>

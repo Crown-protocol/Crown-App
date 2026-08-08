@@ -2,7 +2,7 @@
 
 import { Logo } from "@/components/Logo";
 import { WalletConnect } from "@/components/WalletConnect";
-import { CrownBadge } from "@/components/CrownBadge";
+import { CheerBadge } from "@/components/CheerBadge";
 import { isDemoAddress } from "@/lib/data/session";
 import styles from "./SpaceGate.module.css";
 
@@ -21,11 +21,16 @@ export function SpaceGate({
   connectedAddress,
   allowDemo,
   onDemoEnter,
+  onRetry,
 }: {
   pageAddress: string;
   connectedAddress?: string;
   allowDemo: boolean;
   onDemoEnter: () => void;
+  // Re-opens the ownership signature request. The right wallet is connected but the popup was
+  // dismissed (or returned no session) — without this the person is stranded on "Confirm the
+  // signature" with nothing to click. Optional: the cold-open gate has no signature to retry.
+  onRetry?: () => void;
 }) {
   // Three distinct states, and they must not be confused:
   //   • a DIFFERENT wallet is connected      → "that's not this page's wallet" (switch accounts)
@@ -48,7 +53,7 @@ export function SpaceGate({
 
       <div className={styles.wrap}>
         <div className={styles.card}>
-          <CrownBadge className={styles.mark} />
+          <CheerBadge className={styles.mark} />
 
           {awaitingSignature ? (
             <>
@@ -56,8 +61,13 @@ export function SpaceGate({
               <p className={styles.lead}>
                 Your wallet <span className={`${styles.addr} num`}>{short(connectedAddress!)}</span> is connected —
                 approve the signature request to finish signing in. It&apos;s free and moves no funds. Closed it by
-                mistake? Reconnect below.
+                mistake? Ask for it again.
               </p>
+              {onRetry && (
+                <button type="button" className={styles.retry} onClick={onRetry}>
+                  Sign again
+                </button>
+              )}
             </>
           ) : wrongWallet ? (
             <>
@@ -72,7 +82,7 @@ export function SpaceGate({
             <>
               <h1 className={styles.title}>Connect your wallet</h1>
               <p className={styles.lead}>
-                Your wallet is your login — Crown has no passwords. You&apos;re the owner of this page if you hold the
+                Your wallet is your login — Cheer has no passwords. You&apos;re the owner of this page if you hold the
                 wallet it pays out to
                 {!demoPage && (
                   <>

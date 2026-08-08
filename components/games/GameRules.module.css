@@ -1,0 +1,70 @@
+/* The Rules tab on a public game page. Deliberately plain: this is the page someone opens when
+   they're deciding whether to part with money, so it reads like terms, not like marketing. */
+
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  /* The game pages centre everything; terms are the one thing that must not be. Centred prose forces
+     the eye to hunt for the start of each line, which is the opposite of what a page people read
+     before paying should do. */
+  text-align: left;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+}
+
+/* A hairline between entries rather than boxes around them — six bordered cards in a column read
+   as six separate offers instead of one set of terms. */
+.row {
+  display: grid;
+  grid-template-columns: 190px 1fr;
+  gap: 18px;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+}
+.row:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.term {
+  margin: 0;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.desc {
+  margin: 0;
+  text-align: left;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.note {
+  margin: 0;
+  text-align: left;
+  padding: 13px 15px;
+  border-radius: var(--r-2);
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
+/* Phone: stack the term above its explanation — a 190px label column leaves the text too narrow
+   to read on a 360px screen. */
+@media (max-width: 560px) {
+  .row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}

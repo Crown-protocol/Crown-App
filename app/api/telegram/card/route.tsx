@@ -6,7 +6,7 @@ import { ImageResponse } from "next/og";
 // or ?t=stats&title=…&rows=Label:Value|Label:Value|…
 //
 // Charter (docs/front.md §II): the exact site tokens, one purple accent per card — the brand mark
-// (the same CrownBadge gradient hexagon as the nav) plus its echo in the footer strip. Everything
+// (the same CheerBadge gradient hexagon as the nav) plus its echo in the footer strip. Everything
 // else neutral: the label is a pill (status by shape, not color), figures are big white bold.
 
 export const runtime = "edge";
@@ -20,12 +20,12 @@ const TEXT_1 = "#F1EFF7";
 const TEXT_2 = "#A6A2B4";
 const GRAD_TOP = "#8B7CF6"; // --grad-top (accent gradient: GRAD_TOP → GRAD_END)
 const GRAD_END = "#F4F2FE";
-// The public domain printed on shared cards. Configurable so a non-crown.tv deployment shows its
-// own host instead of a hardcoded one; crown.tv is the documented production default.
-const SITE_DOMAIN = process.env.NEXT_PUBLIC_SITE_DOMAIN || "crown.tv";
+// The public domain printed on shared cards. Configurable so a non-cheer.tv deployment shows its
+// own host instead of a hardcoded one; cheer.tv is the documented production default.
+const SITE_DOMAIN = process.env.NEXT_PUBLIC_SITE_DOMAIN || "cheer.tv";
 
-// The site's brand mark, verbatim from components/CrownBadge.tsx — the gradient hexagon with the
-// crown punched through to the page. This is the card's one accent-gradient spot.
+// The site's brand mark, verbatim from components/CheerBadge.tsx — the gradient hexagon with the
+// cheer punched through to the page. This is the card's one accent-gradient spot.
 function Wordmark() {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -44,7 +44,7 @@ function Wordmark() {
         <circle cx="33.8" cy="17.6" r="2.4" fill={BG} />
         <path d="M14.4 30.6C20 33 28 33 33.6 30.6 28 31.9 20 31.9 14.4 30.6Z" fill="url(#g)" />
       </svg>
-      <div style={{ fontSize: 32, fontWeight: 700, letterSpacing: -0.5, color: TEXT_1 }}>Crown</div>
+      <div style={{ fontSize: 32, fontWeight: 700, letterSpacing: -0.5, color: TEXT_1 }}>Cheer</div>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useCrown } from "@/lib/data/DataProvider";
+import { useCheer } from "@/lib/data/DataProvider";
 import { DonateForm } from "@/components/DonateForm";
 import { Mono } from "@/components/Mono";
 import { usd } from "@/lib/money";
@@ -12,7 +12,7 @@ function plural(n: number, one: string, many: string) {
 }
 
 export default function CampaignPage({ params }: { params: { handle: string; slug: string } }) {
-  const { getStreamer, getCampaign } = useCrown();
+  const { getStreamer, getCampaign } = useCheer();
   const handle = decodeURIComponent(params.handle).replace(/^@/, "");
   const slug = decodeURIComponent(params.slug);
   const streamer = getStreamer(handle);
@@ -70,7 +70,7 @@ export default function CampaignPage({ params }: { params: { handle: string; slu
         <DonateForm handle={streamer.handle} defaultAmount={10} streamerName={`${streamer.name}'s wallet`} slug={campaign.slug} />
 
         <div className="powered">
-          Powered by <Link href="/">Crown</Link>
+          Powered by <Link href="/">Cheer</Link>
         </div>
       </div>
     </main>

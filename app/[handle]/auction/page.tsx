@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePublicProfile } from "@/lib/data/usePublicProfile";
-import { useCrown } from "@/lib/data/DataProvider";
+import { useCheer } from "@/lib/data/DataProvider";
 import { Logo } from "@/components/Logo";
 import { ReputationDelta } from "@/components/ReputationDelta";
 import { DonateTopBar } from "@/components/DonateTopBar";
@@ -15,6 +15,7 @@ import {
   withAuctionDefaults,
   readLots,
   addLot,
+  topUpLot,
   ensureAuction,
   readAuctionMeta,
   castVote,
@@ -26,10 +27,13 @@ import {
 import { backgroundStyle, backgroundInk } from "@/lib/data/pagebuilder";
 import { useIsWide } from "@/lib/data/useIsWide";
 import { resolvePublicSession, pullSessions } from "@/lib/data/gameSessions";
-import { useGameSync } from "@/lib/data/gameSync";
+import { useGameSyncState } from "@/lib/data/gameSync";
 import { useGameChain } from "@/lib/chain/useGameChain";
 import { auctionPlaceEntry, auctionVote } from "@/lib/chain/gameFlows";
 import { GameTabs } from "@/components/games/GameTabs";
+import { GameRules, auctionLines } from "@/components/games/GameRules";
+import { useConfirm } from "@/components/useConfirm";
+import { dangerCopy } from "@/lib/data/dangerous";
 import { usd } from "@/lib/money";
 import styles from "../roulette/page.module.css";
 import au from "./auction.module.css";
@@ -50,10 +54,10 @@ function fmtLeft(ms: number): string {
 // when the bell rings the top lot wins and everyone else is refunded.
 export default function AuctionPage({ params }: { params: { handle: string } }) {
   const handle = decodeURIComponent(params.handle).replace(/^@/, "");
-  // Resolve the content maker by handle from the Crown DB, so a viewer sees this page in any
+  // Resolve the content maker by handle from the Cheer DB, so a viewer sees this page in any
   // browser — not just the owner whose localStorage holds the profile.
   const { profile: maker, status } = usePublicProfile(handle);
-  const { getReputation } = useCrown();
+  const { getReputation } = useCheer();
   const isWide = useIsWide();
 
   // Session resolution: ?s=<id> picks one; a single live session resolves itself; several → the
@@ -75,7 +79,10 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
 
   // Shared game state: pulls the server copy into localStorage; the 1.5s interval below
   // already re-reads lots+meta from there, so other viewers' bids just show up.
-  useGameSync(scope);
+  // `synced` gates the money below; the nonce is what re-resolves the rules once the snapshot lands
+  // (this page used to throw it away, so a late pull only reached the screen if something else
+  // happened to re-render).
+  const { nonce: syncNonce, synced } = useGameSyncState(scope);
 
   const [lots, setLots] = useState<AuctionLot[]>([]);
   const [meta, setMeta] = useState<AuctionMeta | null>(null);
@@ -83,12 +90,14 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
   const [text, setText] = useState("");
   const [name, setName] = useState("");
   const [send, setSend] = useState<SendState>("idle");
+  const [chipping, setChipping] = useState<string | null>(null); // id of the lot being backed right now
   const [inc, setInc] = useState("1"); // the outbid step — +$1 by default, any +$x they like
   const [openBid, setOpenBid] = useState(""); // the opening bid on an empty board — blank = the maker's floor
   const [voted, setVoted] = useState(false);
-  const [view, setView] = useState<"bid" | "board">("bid"); // the top toggle: place a bid vs. the standing lots
+  const [view, setView] = useState<"bid" | "board" | "rules">("bid"); // the top toggle: place a bid vs. the standing lots
   const [chainErr, setChainErr] = useState("");
   const chain = useGameChain("auction");
+  const confirm = useConfirm(); // real escrow on both paths — bid and back-someone-else's-lot
 
   useEffect(() => {
     if (!scope) return;
@@ -102,7 +111,10 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
       if (m) setMeta(m);
     }, 1500);
     return () => clearInterval(t);
-  }, [scope]);
+    // syncNonce: a pull that brought this run's rules/board must re-read them, not wait for an
+    // unrelated render to happen by.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope, syncNonce]);
 
   if (status === "loading") return <main className="page" />;
 
@@ -161,8 +173,13 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
   const board = leaderboard(lots);
   const winner = meta.winnerId ? lots.find((l) => l.id === meta.winnerId) ?? null : null;
   const state = meta.state;
-  const bidding = state === "bidding";
   const msLeft = meta.startedAt + cfg.biddingHours * 3_600_000 - now;
+  // The clock closes the auction, not just the stored state. `state` only flips to "performing" when
+  // the maker (or the resolver) acts on it, which can be hours after the window ended — so a page
+  // reading `state === "bidding"` alone showed "0:00 left" while still happily taking bids into real
+  // escrow long past the deadline. Roulette already gates on its own clock; this is the same rule.
+  const expired = msLeft <= 0;
+  const bidding = state === "bidding" && !expired;
 
   const topSum = board[0] ? lotSum(board[0]) : 0;
   // The pricing model: beat the leader by your own step (+$1 by default), or open at the price
@@ -175,7 +192,15 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
   // a viewer who wants the lead from the first move can open above it. Blank = open at the floor.
   const opening = Math.max(minBid, Math.round(Number(openBid)) || minBid);
   const bid = board.length ? topSum + step : opening;
-  const canSend = send === "idle" && bidding && text.trim().length > 0;
+  // `synced` is a money gate, not a loading spinner: until this browser has heard from the server,
+  // the minimum, the step and the clock on screen may be the maker's CURRENT defaults rather than
+  // the ones this run was opened with — and the maker can edit those defaults at any time. Bidding
+  // under terms that don't match the escrow is the one thing this page must never allow.
+  const canSend = send === "idle" && bidding && synced && text.trim().length > 0;
+  // Real escrow needs BOTH the canister live AND an on-chain auction to place a lot against — the same
+  // condition submitLot()/chipIn() gate the real path on. Otherwise every "In escrow ✓" here is a lie:
+  // no lot, no bid, no money is held. In that case the buttons/copy say "preview" instead.
+  const realEscrow = chain.live && !!meta?.chainAuction;
   const rep = getReputation(handle);
 
   async function submitLot() {
@@ -218,6 +243,49 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
     }, 1100);
   }
 
+  // Back someone else's lot instead of opening your own: your money joins THAT lot and pushes it up
+  // the board. This is the other half of the auction (`topUpLot` has always existed for it) and it
+  // had no way in from the page — the only button placed a competing lot, so agreeing with a
+  // condition already on the board meant re-typing it and paying the full leading price again.
+  async function chipIn(lotId: string) {
+    // `synced` is the same money gate the primary bid uses: until this browser has heard the run's
+    // pinned rules from the server, `minStep` comes from the maker's CURRENT (editable) profile
+    // defaults, not this session's. Backing a lot before sync could move money under the wrong step —
+    // "the one thing this page must never allow" (see canSend). The back path was missing this guard.
+    if (!bidding || chipping || !synced) return;
+    const amount = Math.max(minStep, Math.round(Number(inc)) || minStep);
+    setChainErr("");
+    setChipping(lotId);
+    if (chain.live && meta?.chainAuction) {
+      if (!chain.wallet) {
+        setChainErr("Connect your wallet — lots here are real escrow.");
+        setChipping(null);
+        return;
+      }
+      const target = lots.find((l) => l.id === lotId);
+      const res = await auctionPlaceEntry(chain.wallet, {
+        auctionHex: meta.chainAuction,
+        recipient: mine!.address,
+        dollars: amount,
+        deadlineHours: cfg.biddingHours + cfg.performHours + 168,
+        text: target?.text ?? "",
+        handle,
+      });
+      if (!res.ok) {
+        setChainErr(res.error);
+        setChipping(null);
+        return;
+      }
+      setLots(topUpLot(scope!, lotId, { name, amount }));
+      setChipping(null);
+      return;
+    }
+    setTimeout(() => {
+      setLots(topUpLot(scope!, lotId, { name, amount }));
+      setChipping(null);
+    }, 700);
+  }
+
   function vote(choice: "done" | "not_done") {
     // Mock: any visitor votes once with a flat weight — the real gate is reputation with
     // this streamer, checked by the canister (game-spec §10). When the canister is live the
@@ -238,28 +306,41 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
             <div className={styles.handle}>
               @{mine.handle} ·{" "}
               <span className={styles.live}>
-                {bidding ? `bidding open · ${fmtLeft(msLeft)} left` : state === "performing" ? "sold — delivering" : state === "voting" ? "voting" : "closed"}
+                {bidding
+                  ? `bidding open · ${fmtLeft(msLeft)} left`
+                  : state === "performing"
+                    ? "sold — delivering"
+                    : state === "voting"
+                      ? "voting"
+                      : // Time ran out but the maker hasn't settled it yet: say so plainly rather than
+                        // "closed", which reads as "already resolved" when nothing has been decided.
+                        expired && state === "bidding"
+                        ? "bidding closed"
+                        : "closed"}
               </span>
             </div>
           </div>
         </Link>
 
-        <h1 className={styles.headline}>{auDraft.headline.trim() || "Name your price — the top lot owns my time"}</h1>
+        {auDraft.headline.trim() && <h1 className={styles.headline}>{auDraft.headline}</h1>}
         {auDraft.descriptionEnabled && auDraft.description && <p className={styles.desc}>{auDraft.description}</p>}
 
         {/* Top toggle: the bidding form, or the standing board of lots. One at a time keeps the
             page a single focused column instead of two half-empty ones. */}
         <GameTabs
           value={view}
-          onChange={(v) => setView(v as "bid" | "board")}
+          onChange={(v) => setView(v as "bid" | "board" | "rules")}
           tabs={[
             { key: "bid", label: "Place a bid" },
             { key: "board", label: "The board", count: board.length },
+            { key: "rules", label: "Rules" },
           ]}
         />
 
         <div className={au.panel}>
           {/* the board — richest first, the leader carries the accent */}
+          {view === "rules" && <GameRules lines={auctionLines(cfg, mine.name)} mine={mine} />}
+
           {view === "board" && (
             <div className={au.board}>
               {board.length === 0 ? (
@@ -281,6 +362,24 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
                     </span>
                     <span style={{ textAlign: "right" }}>
                       <span className={`${au.lotSum} num`}>{usd(lotSum(l))}</span>
+                      {/* Agree with this condition? Add your money to it instead of opening a rival
+                          lot — the same escrow rules, and the lot climbs by what you put in. */}
+                      {bidding && !winner && (
+                        <div>
+                          <button
+                            type="button"
+                            className={au.chipBtn}
+                            disabled={!!chipping || !synced}
+                            onClick={() => {
+                              const amt = Math.max(minStep, Math.round(Number(inc)) || minStep);
+                              confirm(realEscrow ? dangerCopy.backLot(amt) : dangerCopy.demoGame(amt), () => void chipIn(l.id));
+                            }}
+                            title={`Back this lot with $${Math.max(minStep, Math.round(Number(inc)) || minStep)}`}
+                          >
+                            {chipping === l.id ? "Backing…" : `Back · +${usd(Math.max(minStep, Math.round(Number(inc)) || minStep))}`}
+                          </button>
+                        </div>
+                      )}
                       {winner?.id === l.id && (
                         <div>
                           <span className={`pill ${state === "settled" ? "ok" : "wait"}`} style={{ marginTop: 6 }}>
@@ -330,9 +429,9 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
                   />
                 </div>
                 <ReputationDelta rep={rep} gain={bid} tiers={mine.tiers} />
-                <div className={au.bidRow} style={{ display: "flex", gap: 10 }}>
+                <div className={au.bidRow}>
                   {board.length > 0 ? (
-                    <div className="field" style={{ flex: "0 0 104px" }} title="Your outbid step">
+                    <div className="field" title="Your outbid step">
                       <div className="affix has-pre">
                         <span className="affix-pre">+$</span>
                         <input
@@ -348,7 +447,7 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
                             const n = Math.round(Number(inc));
                             if (!n || n < minStep) setInc(String(minStep));
                           }}
-                          style={{ paddingLeft: 38, height: 56 }}
+                          style={{ paddingLeft: 38 }}
                         />
                       </div>
                     </div>
@@ -357,7 +456,6 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
                        maker's price is the floor, and opening above it is allowed. */
                     <div
                       className="field"
-                      style={{ flex: "0 0 116px" }}
                       title={`Your opening bid — ${mine.name}'s floor is ${usd(minBid)}`}
                     >
                       <div className="affix has-pre">
@@ -374,22 +472,27 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
                             const n = Math.round(Number(openBid));
                             if (!n || n < minBid) setOpenBid(String(minBid));
                           }}
-                          style={{ height: 56 }}
+
                         />
                       </div>
                     </div>
                   )}
-                  {chainErr && (
-                  <div className="footnote" style={{ color: "var(--error)" }}>
-                    {chainErr}
-                  </div>
-                )}
-                <button type="button" className="btn" style={{ flex: 1 }} disabled={!canSend} onClick={() => void submitLot()}>
-                    {send === "sending" ? "Placing…" : send === "done" ? "In escrow ✓" : board.length ? `Outbid · ${usd(bid)}` : `Open the bidding · ${usd(bid)}`}
+                  <button
+                    type="button"
+                    className={`btn ${au.bidAction}`}
+                    disabled={!canSend}
+                    onClick={() => confirm(realEscrow ? dangerCopy.bid(bid) : dangerCopy.demoGame(bid), () => void submitLot())}
+                  >
+                    {send === "sending" ? "Placing…" : send === "done" ? (realEscrow ? "In escrow ✓" : "Preview ✓") : board.length ? `Outbid · ${usd(bid)}` : `Open the bidding · ${usd(bid)}`}
                   </button>
                 </div>
+                {chainErr && <div className={au.bidError}>{chainErr}</div>}
                 {send === "done" && (
-                  <div className="footnote" style={{ textAlign: "center" }}>Sent — {mine.name} decides. Turned down = instant refund.</div>
+                  <div className="footnote" style={{ textAlign: "center" }}>
+                    {realEscrow
+                      ? `Sent — ${mine.name} decides. Turned down = instant refund.`
+                      : "Preview only — no money moved and nothing is in escrow. This is how bidding will look once it's live."}
+                  </div>
                 )}
               </div>
             )}
@@ -466,6 +569,7 @@ export default function AuctionPage({ params }: { params: { handle: string } }) 
           <Logo />
         </div>
       </div>
+      {confirm.dialog}
     </main>
   );
 }

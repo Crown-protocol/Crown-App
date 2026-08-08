@@ -1,6 +1,6 @@
 "use client";
 
-import { useCrown } from "@/lib/data/DataProvider";
+import { useCheer } from "@/lib/data/DataProvider";
 import { useSolanaWallet } from "./wallet";
 import { gamePrincipals } from "./games";
 import type { FlowWallet } from "./gameFlows";
@@ -10,7 +10,7 @@ import type { FlowWallet } from "./gameFlows";
 // While canisters aren't deployed (principals empty) `live` is false everywhere and
 // every UI stays on its mock/synced path — flipping the env is the launch switch.
 export function useGameChain(game: keyof typeof gamePrincipals): { live: boolean; wallet: FlowWallet | null } {
-  const { mode } = useCrown();
+  const { mode } = useCheer();
   const w = useSolanaWallet();
   const live = mode === "chain" && gamePrincipals[game]();
   const wallet: FlowWallet | null =

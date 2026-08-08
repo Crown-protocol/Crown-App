@@ -11,9 +11,9 @@ export const dynamic = "force-dynamic";
 //        path (intent merge + reputation fold) so the pipeline is testable
 //        before the first live donation. This FORGES donations + reputation, so
 //        it is double-locked: never in production, and — even in dev — only with
-//        the CROWN_TEST_SECRET header. Unset secret = the hook is unavailable
+//        the CHEER_TEST_SECRET header. Unset secret = the hook is unavailable
 //        (fail-closed), so a stray `next dev` box can't have fake money injected.
-const TEST_SECRET = process.env.CROWN_TEST_SECRET;
+const TEST_SECRET = process.env.CHEER_TEST_SECRET;
 
 export async function GET() {
   return NextResponse.json(await stats());
@@ -25,12 +25,13 @@ export async function POST(req: NextRequest) {
     if (process.env.NODE_ENV === "production") {
       return NextResponse.json({ error: "test inserts are dev-only" }, { status: 403 });
     }
-    if (!TEST_SECRET || req.headers.get("x-crown-test-secret") !== TEST_SECRET) {
-      return NextResponse.json({ error: "test hook disabled — set CROWN_TEST_SECRET and send x-crown-test-secret" }, { status: 403 });
+    if (!TEST_SECRET || req.headers.get("x-cheer-test-secret") !== TEST_SECRET) {
+      return NextResponse.json({ error: "test hook disabled — set CHEER_TEST_SECRET and send x-cheer-test-secret" }, { status: 403 });
     }
     const t = body.test;
     const ok = await insertDonation({
       signature: String(t.signature),
+      evIndex: Number(t.evIndex ?? 0),
       slot: Number(t.slot ?? 0),
       blockTime: t.blockTime ?? Math.floor(Date.now() / 1000),
       payer: String(t.payer),

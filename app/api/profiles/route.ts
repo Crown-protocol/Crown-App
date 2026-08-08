@@ -11,6 +11,13 @@ import type { Profile } from "@/lib/data/types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// Inline data: URL for the avatar — the cropper targets ~150KB, this leaves headroom for base64
+// overhead without letting a full-resolution photo through.
+const MAX_AVATAR_BYTES = 200_000;
+// Everything else (tiers, socials, page-builder drafts, game configs) is text and small; the ceiling
+// exists so one row can't grow without bound and drag down the roster every visitor loads.
+const MAX_PROFILE_BYTES = 400_000;
+
 // GET  — every registered page (the roster public pages resolve against).
 // POST — create/update a page.
 //   Ownership model (the wallet is the account, no passwords):
@@ -21,8 +28,11 @@ export const dynamic = "force-dynamic";
 //   • demo page (payout = demo placeholder / empty): unsigned allowed —
 //     mock mode keeps working wallet-less — but an unsigned write can NEVER
 //     touch an owned page, so squatting on real pages is impossible.
-export async function GET() {
-  const profiles = await listProfiles();
+// ?avatars=1 opts into the inline avatar images. Without it the roster is ~3KB instead of ~500KB —
+// see listProfiles. Only surfaces that actually paint faces should ask.
+export async function GET(req: NextRequest) {
+  const withAvatars = req.nextUrl.searchParams.get("avatars") === "1";
+  const profiles = await listProfiles({ withAvatars });
   return NextResponse.json({ profiles });
 }
 
@@ -47,6 +57,20 @@ export async function POST(req: NextRequest) {
   const demoPage = !p.address || isDemoAddress(p.address);
   if (!demoPage && !isValidAddress(p.address)) {
     return NextResponse.json({ error: "invalid payout address" }, { status: 400 });
+  }
+
+  // Size ceilings. The whole Profile JSON is stored in one row AND handed out by GET /api/profiles,
+  // which the root DataProvider fetches on every page — so an oversized profile is not just a big
+  // row, it is weight on every visitor's first paint. The avatar is the only field that can realistically
+  // run away (it's an inline data: URL), so it gets its own limit alongside the total.
+  // The cropper already compresses to ~150KB; these are the backstop for anything not going through it.
+  const avatarBytes = typeof p.avatarUrl === "string" ? p.avatarUrl.length : 0;
+  if (avatarBytes > MAX_AVATAR_BYTES) {
+    return NextResponse.json({ error: "avatar too large — keep it under 200KB" }, { status: 413 });
+  }
+  const totalBytes = JSON.stringify(p).length;
+  if (totalBytes > MAX_PROFILE_BYTES) {
+    return NextResponse.json({ error: "profile too large" }, { status: 413 });
   }
 
   const existingOwner = await getProfileOwner(p.handle);

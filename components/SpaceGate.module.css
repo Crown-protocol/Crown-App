@@ -49,6 +49,26 @@
   margin-top: 8px;
 }
 
+/* "Sign again" — the primary way back to a dismissed signature popup, so it carries the accent
+   rather than hiding as a quiet link like the demo fallback. */
+.retry {
+  margin-top: 4px;
+  height: 40px;
+  padding: 0 20px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease);
+}
+.retry:hover {
+  background: rgba(192, 183, 250, 0.24);
+}
+
 /* The demo way in is deliberately quieter than the wallet: it's the fallback, not the path. */
 .demo {
   display: flex;

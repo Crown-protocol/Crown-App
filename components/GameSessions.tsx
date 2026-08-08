@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   readSessions,
   createSession,
@@ -13,7 +14,10 @@ import {
 import { readLots, readAuctionMeta, initAuction, setAuctionChain, lotSum, auctionTotals, PLATFORM_MIN_BID } from "@/lib/data/auction";
 import { readRound, readRoundMeta, initRound } from "@/lib/data/roulette";
 import { readStatus, raisedTotal, writeStatus } from "@/lib/data/fundraiser";
-import { readTasks } from "@/lib/data/tasks";
+import { readTasks, withTaskPageDefaults } from "@/lib/data/tasks";
+import { withRouletteDefaults } from "@/lib/data/roulette";
+import { withAuctionDefaults } from "@/lib/data/auction";
+import { withFundraiserDefaults } from "@/lib/data/fundraiser";
 import { useGameChain } from "@/lib/chain/useGameChain";
 import { fundingCreateCollection, auctionCreate } from "@/lib/chain/gameFlows";
 import {
@@ -28,12 +32,14 @@ import { DEADLINE_OPTIONS } from "@/components/TaskGameSettings";
 import { BIDDING_OPTIONS, PERFORM_OPTIONS } from "@/components/AuctionGameSettings";
 import { FUNDING_OPTIONS, DELIVERY_OPTIONS } from "@/components/FundraiserGameSettings";
 import { ROUND_OPTIONS, PLAY_OPTIONS } from "@/components/RouletteGameSettings";
-import { ROULETTE_TOPICS, DEFAULT_TOPIC_ID, topicById } from "@/lib/data/roulette-topics";
+import { topicNoun } from "@/lib/data/roulette-topics";
 import { NumberInput } from "@/components/NumberInput";
 import { hoursText, daysText, minutesText } from "@/components/RulesSummary";
 import type { AuctionConfig, Profile, RouletteConfig, TaskGameConfig } from "@/lib/data/types";
 import type { GameId } from "@/lib/data/games";
 import { usd } from "@/lib/money";
+import { useConfirm } from "@/components/useConfirm";
+import { dangerCopy } from "@/lib/data/dangerous";
 import s from "./GameSessions.module.css";
 
 // One line that tells the streamer what's inside a session without opening it.
@@ -85,12 +91,14 @@ function when(ts: number): string {
 // never move the goalposts under money already in escrow. See lib/data/gameConfig.ts.
 export function GameSessions({
   profile,
+  onSave,
   gameId,
   gameTitle,
   onOpen,
   onCreated,
 }: {
   profile: Profile;
+  onSave: (p: Profile) => void; // clearing last run's pitch is a profile write
   gameId: GameId;
   gameTitle: string;
   onOpen: (sessionId: string) => void; // opening an existing session → its control room
@@ -98,6 +106,7 @@ export function GameSessions({
 }) {
   const handle = profile.handle;
   const tiers = profile.tiers ?? [];
+  const confirm = useConfirm(); // ending a session kills its public page — no way back
   const [chainErr, setChainErr] = useState("");
   // The chain gate for the two canister-backed creates (roulette has no canister by design).
   const chain = useGameChain(gameId === "fundraiser" ? "fundraiser" : gameId === "auction" ? "auction" : "task");
@@ -110,6 +119,8 @@ export function GameSessions({
   // defaults (scope `null` = "stop at the profile", gameConfig.ts).
   const [task, setTask] = useState<TaskGameConfig>(() => taskRules(profile, null));
   const [roul, setRoul] = useState<RouletteConfig>(() => rouletteRules(profile, null));
+  // Whether the (long) rules form is showing while other sessions are already live.
+  const [starterExpanded, setStarterExpanded] = useState(false);
   const [fund, setFund] = useState<FundraiserSessionRules>(() => fundraiserRules(profile, null));
   const [auc, setAuc] = useState<AuctionConfig>(() => auctionRules(profile, null));
   // roulette only: who suggests — everyone by donating (classic), or rank X+ for free.
@@ -124,11 +135,50 @@ export function GameSessions({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile]);
 
+  // Has anything actually been changed away from the maker's own defaults? Only then is there
+  // something to reset — a "Reset to my defaults" button next to untouched defaults is a control
+  // that does nothing, and the reader has to work that out by pressing it.
+  //
+  // Compared per game, because that's what this form is showing: fiddling with roulette settings
+  // shouldn't light up the reset button on the auction tab. JSON compare is enough — these are
+  // small flat config objects built by the same function on both sides, so key order matches.
+  const dirty = (() => {
+    const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+    switch (gameId) {
+      case "task":
+        return !same(task, taskRules(profile, null));
+      case "roulette":
+        return !same(roul, rouletteRules(profile, null)) || rankMode;
+      case "fundraiser":
+        return !same(fund, fundraiserRules(profile, null));
+      case "auction":
+        return !same(auc, auctionRules(profile, null));
+      default:
+        return false;
+    }
+  })();
+
   // Switching games in the cabinet re-seeds the form. Deliberately NOT keyed on `profile`: it's
   // saved on every keystroke elsewhere in the cabinet, and re-seeding then would yank the knobs
   // out from under whoever is setting them here.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(resetRules, [gameId]);
+
+  // Escape closes the starter and the page behind it stops scrolling — the same behaviour every
+  // other dialog here has, so the one that asks for money rules doesn't feel different.
+  useEffect(() => {
+    if (!starterExpanded) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setStarterExpanded(false);
+    };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [starterExpanded]);
 
   const refresh = useCallback(() => {
     setSessions(readSessions(handle, gameId));
@@ -142,10 +192,36 @@ export function GameSessions({
     return () => clearInterval(t);
   }, [refresh]);
 
-  const topic = topicById(roul.topic ?? DEFAULT_TOPIC_ID);
+  const noun = topicNoun(roul.topic);
   const bidFloor = Math.max(PLATFORM_MIN_BID, Math.round(auc.minBid) || PLATFORM_MIN_BID);
 
+  // Missing pieces, in the order a maker reads the form. Empty = ready to start.
+  const missing: string[] = [];
+
+  if (gameId === "roulette") {
+    if (!roul.topic?.trim()) missing.push("say what viewers suggest");
+    if (!(roul.minDonation > 0)) missing.push("set the minimum to suggest");
+    if (!(roul.roundMinutes > 0)) missing.push("set how long the round runs");
+  }
+  if (gameId === "task") {
+    if (!(task.minAmount > 0)) missing.push("set the minimum task amount");
+    if (!(task.deadlineHours > 0)) missing.push("set the longest deadline");
+  }
+  if (gameId === "fundraiser") {
+    if (!(fund.goal > 0)) missing.push("set the goal");
+    if (!(fund.minContribution > 0)) missing.push("set the minimum chip-in");
+    if (!(fund.fundingDays > 0)) missing.push("set how long the collection runs");
+  }
+  if (gameId === "auction") {
+    if (!(auc.minBid > 0)) missing.push("set the minimum bid");
+    if (!(auc.biddingHours > 0)) missing.push("set the bidding window");
+    if (!(auc.performHours > 0)) missing.push("set the time to deliver");
+  }
+  const ready = missing.length === 0;
+
   async function start() {
+    // The button is disabled, but Enter in the name field reaches here too.
+    if (!ready) return;
     setChainErr("");
 
     // Canister-live games are born ON the canister first — a session without its chain id
@@ -156,7 +232,9 @@ export function GameSessions({
     let chainAuction: string | undefined;
     if (chain.live && (gameId === "fundraiser" || gameId === "auction")) {
       if (!chain.wallet) {
-        setChainErr("Connect your wallet — this game is live on the canister.");
+        // Says what to do, not what's under the hood — "the canister" means nothing to the person
+        // holding the wallet, and the reason they're being asked is that real money is involved.
+        setChainErr("Connect your wallet — this game runs on real escrow.");
         return;
       }
       if (gameId === "fundraiser") {
@@ -183,6 +261,15 @@ export function GameSessions({
 
     const session = createSession(handle, gameId, name);
 
+    // Last run's pitch/description belong to last run. Wiping them here (rather than on delete)
+    // means an abandoned session leaves nothing behind either.
+    const blankTexts = { headline: "", description: "" };
+    if (gameId === "task") onSave({ ...profile, taskPage: { ...withTaskPageDefaults(profile), ...blankTexts } });
+    if (gameId === "roulette") onSave({ ...profile, roulette: { ...withRouletteDefaults(profile), ...blankTexts } });
+    if (gameId === "auction") onSave({ ...profile, auction: { ...withAuctionDefaults(profile), ...blankTexts } });
+    // Fundraiser calls its headline "pledge".
+    if (gameId === "fundraiser") onSave({ ...profile, fundraiser: { ...withFundraiserDefaults(profile), pledge: "", description: "" } });
+
     // Pin the rules to this run before anything can be played under them.
     if (gameId === "task") writeSessionRules(session.scope, "task", task);
     if (gameId === "fundraiser") writeSessionRules(session.scope, "fundraiser", fund);
@@ -205,17 +292,36 @@ export function GameSessions({
       });
     }
     setName("");
+    setStarterExpanded(false);
     refresh();
     (onCreated ?? onOpen)(session.id);
   }
 
   const live = sessions.filter((x) => sessionState(x) === "live");
+  // The starter is a dialog now, not a panel that unfolds in place. Inline, it pushed the running
+  // sessions — the thing you came to this tab for — below a screenful of settings you only touch
+  // when starting something new. The button stays put; the form opens over the page.
+  const starterOpen = starterExpanded;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div className={`card ${s.starter}`}>
+      <button type="button" className={`card ${s.starterCollapsed}`} onClick={() => setStarterExpanded(true)}>
+        <span className={s.starterPlus} aria-hidden>+</span>
+        Start a new session
+      </button>
+
+      {starterOpen && createPortal(
+        <div className={s.modalBack} role="dialog" aria-modal="true" aria-label="Start a session" onClick={() => setStarterExpanded(false)}>
+        <div className={`card ${s.starter} ${s.modalCard}`} onClick={(e) => e.stopPropagation()}>
         <div className={s.head}>
-          <h2>Start a session</h2>
+          <div className={s.headRow}>
+            <h2>Start a session</h2>
+            {/* Always available now: as a dialog this is the only visible way out besides Escape,
+                and it used to be hidden whenever nothing was running yet. */}
+            <button type="button" className={s.starterClose} onClick={() => setStarterExpanded(false)} aria-label="Close">
+              Cancel
+            </button>
+          </div>
           <p>One run of {gameTitle} — its own board, its own link, and the rules you set here.</p>
         </div>
 
@@ -293,18 +399,14 @@ export function GameSessions({
                   </div>
                 </div>
                 <div className="field">
-                  <label htmlFor="sess-roul-topic">Topic</label>
-                  <select
+                  <label htmlFor="sess-roul-topic">What viewers suggest</label>
+                  <input
                     id="sess-roul-topic"
-                    value={roul.topic ?? DEFAULT_TOPIC_ID}
-                    onChange={(e) => setRoul({ ...roul, topic: e.target.value, genres: [] })}
-                  >
-                    {ROULETTE_TOPICS.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.label}
-                      </option>
-                    ))}
-                  </select>
+                    type="text"
+                    placeholder="game"
+                    value={roul.topic ?? ""}
+                    onChange={(e) => setRoul({ ...roul, topic: e.target.value })}
+                  />
                 </div>
                 <div className="field">
                   <label htmlFor="sess-roul-format">Spin format</label>
@@ -388,11 +490,11 @@ export function GameSessions({
 
             <p className={s.practice}>
               {rankMode
-                ? `${roul.minTier || tiers[0]?.name || "Ranked"}+ viewers put a ${topic.noun} on the wheel for free`
-                : `${roul.minTier ? `${roul.minTier}+ viewers` : "Anyone"} can back a ${topic.noun} from ${usd(roul.minDonation)}`}
+                ? `${roul.minTier || tiers[0]?.name || "Ranked"}+ viewers put a ${noun} on the wheel for free`
+                : `${roul.minTier ? `${roul.minTier}+ viewers` : "Anyone"} can back a ${noun} from ${usd(roul.minDonation)}`}
               {roul.excludeTopTier ? " (except your top tier)" : ""}. Suggestions stay open {minutesText(roul.roundMinutes)}, then{" "}
               {roul.format === "elimination" ? "the wheel spins until one is left" : "one spin picks the winner"} — the more money behind a{" "}
-              {topic.noun}, the better its odds. You play it for {minutesText(roul.playMinutes)}. Money on the {topic.noun}s that don&apos;t win
+              {noun}, the better its odds. You play it for {minutesText(roul.playMinutes)}. Money on the {noun}s that don&apos;t win
               stays donated.
             </p>
           </>
@@ -529,15 +631,22 @@ export function GameSessions({
         )}
 
         <div className={s.foot}>
-          <button className="btn" type="button" onClick={() => void start()}>
+          <button className="btn" type="button" disabled={!ready} onClick={() => void start()}>
             Start session
           </button>
-          <button className={s.reset} type="button" onClick={resetRules}>
-            Reset to my defaults
-          </button>
+          {dirty && (
+            <button className={s.reset} type="button" onClick={resetRules}>
+              Reset to my defaults
+            </button>
+          )}
+          {/* Say what's missing rather than leaving a dead button with no explanation. */}
+          {!ready && <div className={s.needs}>Before you start: {missing.join(" · ")}.</div>}
           {chainErr && <div className={s.err}>{chainErr}</div>}
         </div>
-      </div>
+        </div>
+        </div>,
+        document.body
+      )}
 
       {sessions.length === 0 && <div className="empty-log">No sessions yet — start the first one above.</div>}
 
@@ -551,10 +660,7 @@ export function GameSessions({
                 live
               </span>
               <div className={s.rowMain}>
-                <div className={s.rowName}>
-                  {session.name}
-                  {session.id === currentId && <span className={s.rowTag}>selected</span>}
-                </div>
+                <div className={s.rowName}>{session.name}</div>
                 <div className={s.rowSub}>
                   {summarize(session)} · started {when(session.createdAt)}
                 </div>
@@ -578,10 +684,12 @@ export function GameSessions({
                 <button
                   className="btn-outline"
                   type="button"
-                  onClick={() => {
-                    setSessions(endSession(handle, gameId, session.id));
-                    refresh();
-                  }}
+                  onClick={() =>
+                    confirm(dangerCopy.endSession(session.name), () => {
+                      setSessions(endSession(handle, gameId, session.id));
+                      refresh();
+                    })
+                  }
                 >
                   End
                 </button>
@@ -590,6 +698,7 @@ export function GameSessions({
           ))}
         </div>
       )}
+      {confirm.dialog}
     </div>
   );
 }

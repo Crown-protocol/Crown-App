@@ -3,7 +3,7 @@
 import { useId } from "react";
 
 // Mini chart of receipts over time. Neutral by design — the accent is rationed site-wide
-// ("редко, но метко"), and a wall of purple sparklines was spending it on decoration.
+// (sparingly, and only where it means something), and a wall of purple sparklines was spending it on decoration.
 // Stretches to the parent's width (preserveAspectRatio="none").
 export function Spark({ data, className }: { data: number[]; className?: string }) {
   const id = useId().replace(/[^a-zA-Z0-9]/g, "");

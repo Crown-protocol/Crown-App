@@ -39,7 +39,7 @@ export async function GET(req: Request) {
   const maker = await resolveMaker(searchParams.get("handle") || "");
   const kind = searchParams.get("kind") || "";
 
-  const name = maker?.name || "Crown";
+  const name = maker?.name || "Cheer";
   const handle = maker?.handle ? `@${maker.handle}` : "";
   const label = KIND_LABEL[kind] || "Donations, straight to your wallet";
   const letter = (name.trim()[0] || "?").toUpperCase();
@@ -115,10 +115,10 @@ export async function GET(req: Request) {
         {/* tagline for this surface */}
         <div style={{ display: "flex", fontSize: "40px", color: "#CFC9E6", maxWidth: "980px", lineHeight: 1.25 }}>{label}</div>
 
-        {/* Crown wordmark */}
+        {/* Cheer wordmark */}
         <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
           <div style={{ width: "44px", height: "44px", borderRadius: "12px", background: ACCENT, display: "flex" }} />
-          <div style={{ fontSize: "34px", fontWeight: 700, letterSpacing: "0.04em" }}>CROWN</div>
+          <div style={{ fontSize: "34px", fontWeight: 700, letterSpacing: "0.04em" }}>CHEER</div>
         </div>
       </div>
     ),

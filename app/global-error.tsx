@@ -26,7 +26,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
         }}
       >
         <div style={{ maxWidth: "440px", textAlign: "center" }}>
-          {/* the Crown mark, drawn minimally so this page needs no assets */}
+          {/* the Cheer mark, drawn minimally so this page needs no assets */}
           <div style={{ width: "44px", height: "44px", borderRadius: "12px", background: "#8B7CF6", margin: "0 auto 20px" }} />
           <h1 style={{ fontSize: "26px", fontWeight: 700, margin: "0 0 10px", letterSpacing: "-0.01em" }}>Something went wrong</h1>
           <p style={{ color: "#A7A2BC", lineHeight: 1.5, margin: "0 0 22px" }}>

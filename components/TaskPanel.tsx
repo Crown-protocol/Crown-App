@@ -9,7 +9,7 @@ const CONFIG: GameEditorConfig = {
   slug: "task",
   title: "Task",
   linkLabel: "Task link",
-  qrFileName: "crown-task-qr.png",
+  qrFileName: "cheer-task-qr.png",
   headlineLabel: "Your pitch",
   headlinePlaceholder: "e.g. Set me a dare — money back if I chicken out",
   headlineMax: TASK_HEADLINE_MAX,

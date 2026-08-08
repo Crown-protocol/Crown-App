@@ -1,6 +1,6 @@
 // The viewer's preferred display name on donations — set once on /me, prefilled into every donate
 // form (still editable per-donation). Plain localStorage, same pattern as the demo session.
-const KEY = "crown-donor-name";
+const KEY = "cheer-donor-name";
 
 export function readDonorName(): string {
   try {

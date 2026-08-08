@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readStore, writeStore } from "@/lib/server/telegram-store";
+import { enqueue } from "@/lib/server/telegram-outbox";
 import { authorizeHandleChannel } from "@/lib/server/auth";
 import { allow } from "@/lib/server/ratelimit";
 
@@ -19,7 +20,14 @@ export async function POST(req: NextRequest) {
   const s = await readStore();
   const link = s.links[handle];
   if (link) {
-    s.outbox.push({ chatId: link.chatId, caption: "Disconnected from your cabinet. Reconnect any time — Settings → Telegram." });
+    // Queue the goodbye through the outbox itself. Pushing onto `s.outbox` looked right but went
+    // nowhere: writeStore deliberately does NOT persist that array (the queue owns its own rows), so
+    // the message was dropped on the floor and the disconnect was exactly the silent one this route
+    // set out to avoid. Send it BEFORE dropping the link, and don't let a queue hiccup block the
+    // unlink — severing the connection is the part the person asked for.
+    try {
+      await enqueue({ chatId: link.chatId, caption: "Disconnected from your cabinet. Reconnect any time — Settings → Telegram." });
+    } catch {}
     delete s.links[handle];
     await writeStore(s);
   }

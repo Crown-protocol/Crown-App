@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useCrown } from "@/lib/data/DataProvider";
+import { useCheer } from "@/lib/data/DataProvider";
+import { useProfile } from "@/lib/data/ProfileProvider";
 import { SOURCE_LABEL } from "@/lib/format";
 import type { GameId } from "@/lib/data/games";
 import type { Donation } from "@/lib/data/types";
@@ -9,6 +10,10 @@ import { SearchIcon, ChevronDown } from "@/components/icons";
 import { Feed } from "./Feed";
 
 type GameFilter = "all" | GameId | "direct";
+// Where the money is, as a filter. "sending" is the one people actually reach for — "did that
+// donation from five minutes ago go through?" — so it earns its own option rather than hiding
+// behind a search box.
+type StatusFilter = "all" | "settled" | "sending";
 type Sort = "new" | "old" | "top";
 type Range = "all" | "1" | "7" | "30";
 
@@ -77,14 +82,26 @@ function fmtShort(iso: string): string {
 // amount floor, with-message), a sort, a live summary, and CSV export. All client-side over the
 // same feed the rest of the cabinet reads.
 export function DonationsPanel() {
-  const { feed } = useCrown();
+  const { feed: allFeed } = useCheer();
+  const { profile } = useProfile();
+  // This tab is the maker's own money — filters, totals and the CSV export all read from here. The
+  // chain feed is global, so narrow it to this page's payout address before anything downstream sees
+  // it; without this the cabinet reported (and exported) other makers' donations as its own.
+  const feed = useMemo(
+    () => (profile?.address ? allFeed.filter((d) => !d.streamer || d.streamer === profile.address) : allFeed),
+    [allFeed, profile?.address]
+  );
   const [query, setQuery] = useState("");
   const [game, setGame] = useState<GameFilter>("all");
+  const [status, setStatus] = useState<StatusFilter>("all");
   const [range, setRange] = useState<Range>("all");
   const [dateFrom, setDateFrom] = useState(""); // custom interval, YYYY-MM-DD; combines with the range chips
   const [dateTo, setDateTo] = useState("");
   const [minAmount, setMinAmount] = useState(0);
   const [withMsg, setWithMsg] = useState(false);
+  // Row detail — the mini-game tag, reputation earned, the message and the explorer link. On by
+  // default (this tab is where a maker reads their donations); off makes the list a compact ledger.
+  const [details, setDetails] = useState(true);
   const [merge, setMerge] = useState(false); // roll every donor's donations into one row (total + count)
   const [sort, setSort] = useState<Sort>("new");
   const [dateOpen, setDateOpen] = useState(false); // the date-filter dropdown (presets + custom range)
@@ -136,6 +153,8 @@ export function DonationsPanel() {
     const from = dateFrom ? Date.parse(`${dateFrom}T00:00:00`) : NaN;
     const to = dateTo ? Date.parse(`${dateTo}T23:59:59`) : NaN;
     const filtered = feed.filter((d) => {
+      // Rows written before this field existed came from the confirmed table, so no status = settled.
+      if (status !== "all" && (d.status ?? "settled") !== status) return false;
       if (needle && !d.from.toLowerCase().includes(needle)) return false;
       if (game !== "all" && (d.source ?? "direct") !== game) return false;
       if (range !== "all" && (now - ts(d, now)) / 86_400_000 > Number(range)) return false;
@@ -150,14 +169,17 @@ export function DonationsPanel() {
       const d = ts(a, now) - ts(b, now);
       return sort === "old" ? d : -d;
     });
-  }, [feed, query, game, range, dateFrom, dateTo, minAmount, withMsg, sort]);
+  }, [feed, query, game, status, range, dateFrom, dateTo, minAmount, withMsg, sort]);
 
-  // "Merge by name": one row per donor, amounts summed, message replaced by the donation count.
+  // "Merge by name": one row per donor, amounts summed, the donation count carried in `mergedCount`.
   const displayRows = useMemo(() => {
     if (!merge) return rows;
     const now = Date.now();
     const byName = new Map<string, { d: Donation; total: number; count: number; latest: number }>();
     for (const d of rows) {
+      // An in-flight donation has no amount yet, so folding it into a donor's total would understate
+      // the sum and inflate the count. It stays a row of its own until the chain confirms it.
+      if (d.status === "sending") continue;
       const key = d.from.toLowerCase();
       const t = ts(d, now);
       const cur = byName.get(key);
@@ -168,13 +190,20 @@ export function DonationsPanel() {
         if (t > cur.latest) { cur.d = d; cur.latest = t; } // keep the most recent one's name/time/date
       }
     }
+    // The count goes in its own field, NOT over the message. Overwriting `message` with "3 donations"
+    // meant "With message" filtered rows in and then hid the very thing it filtered for — and a
+    // merged row claimed to carry a message when what it carried was a counter.
     const merged: Donation[] = [...byName.values()].map(({ d, total, count }) => ({
       ...d,
       amount: total,
-      message: count > 1 ? `${count} donations` : d.message,
+      // Keep the latest real message; a merged donor's words are still their words.
+      mergedCount: count > 1 ? count : undefined,
       source: undefined, // a merged row spans sources — no single-source label
     }));
-    return merged.sort((a, b) => {
+    const stillSending = rows.filter((d) => d.status === "sending");
+    return [...stillSending, ...merged].sort((a, b) => {
+      // In-flight rows stay on top regardless of sort: they are the open question.
+      if ((a.status === "sending") !== (b.status === "sending")) return a.status === "sending" ? -1 : 1;
       if (sort === "top") return b.amount - a.amount;
       const diff = ts(a, now) - ts(b, now);
       return sort === "old" ? diff : -diff;
@@ -196,9 +225,20 @@ export function DonationsPanel() {
 
   function exportCsv() {
     const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
-    const head = ["Name", "Amount $", "Source", "Message", "Date", "When", "Tx"];
+    // Status is its own column, and an unconfirmed row exports an empty amount rather than 0 —
+    // a spreadsheet that sums the column must not count money that hasn't arrived.
+    const head = ["Name", "Amount $", "Status", "Source", "Message", "Date", "When", "Tx"];
     const lines = rows.map((d) =>
-      [d.from, String(d.amount), SOURCE_LABEL[d.source ?? "direct"], d.message ?? "", d.date ?? "", d.time, d.sig ?? ""]
+      [
+        d.from,
+        d.status === "sending" ? "" : String(d.amount),
+        d.status === "sending" ? "sending" : "received",
+        SOURCE_LABEL[d.source ?? "direct"],
+        d.message ?? "",
+        d.date ?? "",
+        d.time,
+        d.sig ?? "",
+      ]
         .map(esc)
         .join(",")
     );
@@ -206,7 +246,7 @@ export function DonationsPanel() {
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = `crown-donations-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `cheer-donations-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -238,8 +278,14 @@ export function DonationsPanel() {
         </button>
       </div>
 
-      {/* toolbar row 2: filters — game · date · amount on the left, toggles to the right */}
-      <div className="don-filters">
+      {/* Filters live in a left rail, the same shape /discover uses: four selects and two toggles
+          crammed above the list read as clutter, and the thing people came for — the donations —
+          started halfway down the screen. Search and sort stay on top since they're used constantly;
+          everything you set once and forget moves aside. */}
+      <div className="don-body">
+        <aside className="don-rail" aria-label="Filters">
+          <div className="don-rail-group">
+            <div className="don-rail-label">Filter</div>
         <select className="don-select" value={game} onChange={(e) => setGame(e.target.value as GameFilter)} aria-label="Filter by mini-game">
           <option value="all">All games</option>
           {GAME_OPTIONS.map((g) => (
@@ -247,6 +293,17 @@ export function DonationsPanel() {
               {SOURCE_LABEL[g]}
             </option>
           ))}
+        </select>
+
+        <select
+          className="don-select"
+          value={status}
+          onChange={(e) => setStatus(e.target.value as StatusFilter)}
+          aria-label="Filter by payment status"
+        >
+          <option value="all">Any status</option>
+          <option value="settled">Received</option>
+          <option value="sending">Sending</option>
         </select>
 
         {/* One date control: quick presets + a custom interval, folded into a dropdown so the toolbar
@@ -370,7 +427,11 @@ export function DonationsPanel() {
           )}
         </div>
 
-        <div className="don-toggles">
+          </div>
+
+          <div className="don-rail-group">
+            <div className="don-rail-label">Show</div>
+            <div className="don-toggles">
           <label className={`toggle${withMsg ? " on" : ""}`}>
             <span className="track">
               <span className="knob" />
@@ -386,8 +447,23 @@ export function DonationsPanel() {
             <input type="checkbox" hidden checked={merge} onChange={(e) => setMerge(e.target.checked)} />
             Merge by name
           </label>
-        </div>
-      </div>
+
+          {/* The two above FILTER which donations are listed; this one changes how much of each row is
+              shown. Off strips every row back to who, how much and when — no mini-game tag, no
+              reputation, no message, no tx link — which is what you want when you're scanning the
+              money rather than reading it. */}
+          <label className={`toggle${details ? " on" : ""}`}>
+            <span className="track">
+              <span className="knob" />
+            </span>
+            <input type="checkbox" hidden checked={details} onChange={(e) => setDetails(e.target.checked)} />
+            Details
+          </label>
+            </div>
+          </div>
+        </aside>
+
+        <div className="don-main">
 
       {/* results line + clear */}
       <div className="don-resultline">
@@ -401,11 +477,13 @@ export function DonationsPanel() {
         )}
       </div>
 
-      {displayRows.length === 0 ? (
-        <div className="empty-log">No donations match these filters.</div>
-      ) : (
-        <Feed rows={displayRows} detailed showHead={false} />
-      )}
+          {displayRows.length === 0 ? (
+            <div className="empty-log">No donations match these filters.</div>
+          ) : (
+            <Feed rows={displayRows} detailed={details} compact={!details} showHead={false} />
+          )}
+        </div>
+      </div>
     </div>
   );
 }

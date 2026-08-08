@@ -1,11 +1,11 @@
 [Unit]
-# Crown site (Next.js, production build). Install as a USER unit — no root needed:
+# Cheer site (Next.js, production build). Install as a USER unit — no root needed:
 #
-#   cp crown-app.service ~/.config/systemd/user/
+#   cp cheer-app.service ~/.config/systemd/user/
 #   systemctl --user daemon-reload
-#   systemctl --user enable --now crown-app
-#   systemctl --user status crown-app     # is it up
-#   journalctl --user -u crown-app -f     # what is it doing
+#   systemctl --user enable --now cheer-app
+#   systemctl --user status cheer-app     # is it up
+#   journalctl --user -u cheer-app -f     # what is it doing
 #
 # `enable` is the part that matters: without it the service does not come back after a reboot,
 # which is exactly how the site ended up down twice — running fine, then simply gone after a
@@ -13,8 +13,12 @@
 #
 # It also needs lingering, or the user manager stops when you log out:
 #   loginctl enable-linger $USER
-Description=Crown site (Next.js)
+Description=Cheer site (Next.js)
 After=network-online.target
+# Stop retrying after 5 failures in 60s. These live in [Unit]: in [Service] systemd ignores them,
+# which is why a port clash produced thousands of restart attempts instead of a clean failure.
+StartLimitIntervalSec=60
+StartLimitBurst=5
 Wants=network-online.target
 
 [Service]
@@ -25,10 +29,7 @@ WorkingDirectory=%h/Crown-App
 ExecStart=/home/kiper/.nvm/versions/node/v20.20.2/bin/npm run start
 Environment=PATH=/home/kiper/.nvm/versions/node/v20.20.2/bin:/usr/local/bin:/usr/bin:/bin
 Restart=always
-RestartSec=3
-# Don't spin forever if the build is missing or the port is taken.
-StartLimitIntervalSec=60
-StartLimitBurst=5
+RestartSec=5
 StandardOutput=journal
 StandardError=journal
 

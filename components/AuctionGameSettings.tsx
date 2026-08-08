@@ -5,6 +5,7 @@ import { NumberInput } from "@/components/NumberInput";
 import { HelpTip } from "@/components/HelpTip";
 import { RulesSummary, hoursText } from "@/components/RulesSummary";
 import { usd } from "@/lib/money";
+import { RulesScopeNote } from "@/components/games/RulesScopeNote";
 
 export const DEFAULT_AUCTION_CONFIG: AuctionConfig = {
   minBid: 5,
@@ -45,6 +46,7 @@ export function AuctionGameSettings({ profile, onSave }: { profile: Profile; onS
 
   return (
     <div className="game-settings">
+      <RulesScopeNote />
       <section className="card" aria-labelledby="au-money-h">
         <h2 id="au-money-h">Money</h2>
         <div className="field">

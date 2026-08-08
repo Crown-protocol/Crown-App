@@ -1,6 +1,6 @@
 // Signing in to the personal space. There are no accounts, passwords or a server: the wallet is
 // the login — you're the owner of a page if you hold the wallet its payouts go to. That check is
-// UX, not security (localStorage is editable by hand); the real one lands with crown-app/api.
+// UX, not security (localStorage is editable by hand); the real one lands with cheer-app/api.
 
 // The payout address a page gets when it's created in demo mode. A valid-shaped base58 pubkey
 // (decodes to 32 bytes) so nothing downstream chokes on it, but a vanity pattern nobody holds a
@@ -34,12 +34,12 @@ export function walletOwns(walletAddress: string | undefined, pageAddress: strin
 // labelled "I'm just looking around" sign-in. Lives in localStorage so a reload keeps you in,
 // exactly like staying logged in; Log out clears it.
 
-const KEY = "crown-demo-session";
+const KEY = "cheer-demo-session";
 
 // The `storage` event only fires in OTHER tabs, never the one that made the change — so a component
 // in this same tab (e.g. the header) wouldn't hear a start/end. Dispatch our own event too, so any
 // in-tab listener (useSignedIn) re-reads immediately when you sign in or log out.
-export const DEMO_SESSION_EVENT = "crown-demo-session-change";
+export const DEMO_SESSION_EVENT = "cheer-demo-session-change";
 function announceDemoChange() {
   try {
     window.dispatchEvent(new Event(DEMO_SESSION_EVENT));

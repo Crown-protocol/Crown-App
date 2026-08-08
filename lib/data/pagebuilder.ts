@@ -29,7 +29,7 @@ const TEXT_SCRIM =
   "linear-gradient(180deg, rgba(13,12,19,0.74) 0%, rgba(13,12,19,0.36) 40%, rgba(13,12,19,0.20) 100%)";
 
 // Neutral, on-charter swatches only (design charter II.1: one purple accent, no gold, no rainbow).
-// These change the page BACKDROP, never the accent — the donate button stays Crown purple everywhere.
+// These change the page BACKDROP, never the accent — the donate button stays Cheer purple everywhere.
 export const BACKGROUND_COLOR_PRESETS: { id: string; label: string; hex: string }[] = [
   { id: "black", label: "Black", hex: "#141318" },
   { id: "slate", label: "Slate", hex: "#1B1A21" },
@@ -56,9 +56,9 @@ export const BACKGROUND_GRADIENT_PRESETS: {
   pos?: number;
   soft?: number;
 }[] = [
-  // The house gradient — the exact ramp the buttons and the crown fill use (docs/design.md
+  // The house gradient — the exact ramp the buttons and the cheer fill use (docs/design.md
   // "Accent gradient"): grad-top → near-white, straight down, fully smooth.
-  { id: "crown", label: "Crown", from: "#8B7CF6", to: "#F4F2FE", angle: 180, pos: 50, soft: 100 },
+  { id: "cheer", label: "Cheer", from: "#8B7CF6", to: "#F4F2FE", angle: 180, pos: 50, soft: 100 },
   { id: "dusk", label: "Dusk", from: "#1B1A21", to: "#141318" },
   { id: "amber", label: "Amber", from: "#E7C24A", to: "#0E0D11", angle: 135, pos: 50, soft: 39 }, // gold → black, the owner's sweep
   { id: "graphite", label: "Graphite", from: "#54545F", to: "#141318", angle: 135, pos: 50, soft: 39 }, // grey → dark, the same 135° sweep
@@ -68,7 +68,7 @@ export const BACKGROUND_GRADIENT_PRESETS: {
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 
 // ── Readability: is this backdrop light or dark? ──
-// The page's text tokens are built for a dark field; a maker picking a light backdrop (the Crown
+// The page's text tokens are built for a dark field; a maker picking a light backdrop (the Cheer
 // gradient, a pale colour) must not wash the words out. backgroundInk() judges the backdrop's
 // relative luminance and the pages flip to dark ink via the `.on-light` class (globals.css).
 function hexLuminance(hex: string): number {
@@ -138,7 +138,7 @@ export const BACKGROUND_IMAGE_PRESETS: { id: string; label: string; url: string;
 ];
 
 // Ready-made looks the streamer can pick in one click (the "templates" gallery). On-charter: themes
-// differ by BACKDROP only — the donate button and every accent stay Crown purple (design charter II.1).
+// differ by BACKDROP only — the donate button and every accent stay Cheer purple (design charter II.1).
 export const THEMES: { id: string; label: string; design: PageDesign }[] = [
   { id: "midnight", label: "Midnight", design: { background: { type: "color", value: "#141318" } } },
   { id: "slate", label: "Slate", design: { background: { type: "color", value: "#1B1A21" } } },

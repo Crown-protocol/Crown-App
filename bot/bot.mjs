@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Crown Telegram bot — a dumb pipe. Telegram updates go to the site, whatever the site answers goes
+// Cheer Telegram bot — a dumb pipe. Telegram updates go to the site, whatever the site answers goes
 // back to Telegram, and the site's outbox is drained into chats. Zero npm dependencies; all the
 // actual behaviour lives in the Next server (lib/server/telegram-store.ts), so when the real
 // backend arrives this file doesn't change.
@@ -14,10 +14,10 @@
 // Run:  npm run bot     (token + secret in bot/.env, from @BotFather)
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const SITE = process.env.CROWN_SITE || "http://localhost:3000";
+const SITE = process.env.CHEER_SITE || "http://localhost:3000";
 // Shared secret for the bot↔server pipe. The server is fail-closed: without a matching secret every
 // call is refused, so a missing value here means "nothing will ever work", not "runs unprotected".
-const BOT_SECRET = process.env.CROWN_BOT_SECRET;
+const BOT_SECRET = process.env.CHEER_BOT_SECRET;
 // Identifies this process to the server's single-instance lease.
 const INSTANCE = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -30,7 +30,7 @@ if (!TOKEN) {
   die("TELEGRAM_BOT_TOKEN is not set.\n1) Message @BotFather → /newbot → copy the token\n2) put it in bot/.env: TELEGRAM_BOT_TOKEN=<token>");
 }
 if (!BOT_SECRET) {
-  die("CROWN_BOT_SECRET is not set.\nThe server refuses the bot pipe without it (fail-closed).\nPut the SAME value in bot/.env and the site's .env.local: CROWN_BOT_SECRET=<secret>");
+  die("CHEER_BOT_SECRET is not set.\nThe server refuses the bot pipe without it (fail-closed).\nPut the SAME value in bot/.env and the site's .env.local: CHEER_BOT_SECRET=<secret>");
 }
 
 // A crash must be loud and fatal, so the process manager restarts us instead of leaving a zombie
@@ -85,7 +85,7 @@ const tgPhoto = async (chatId, png, caption, replyMarkup) => {
 };
 
 const site = async (path, init = {}, timeoutMs = 20000) => {
-  const headers = { ...(init.headers || {}), "x-crown-bot": BOT_SECRET };
+  const headers = { ...(init.headers || {}), "x-cheer-bot": BOT_SECRET };
   const res = await fetch(`${SITE}/api/telegram/${path}`, { ...init, headers, signal: AbortSignal.timeout(timeoutMs) });
   if (!res.ok) throw new Error(`${path} → ${res.status}`);
   return res.json();
@@ -198,7 +198,7 @@ async function main() {
   try {
     cursor = await site(`cursor?instance=${encodeURIComponent(INSTANCE)}`);
   } catch (e) {
-    die(`[bot] can't reach the site at ${SITE} (${e.message}).\nIs it running, and does CROWN_BOT_SECRET match .env.local?`);
+    die(`[bot] can't reach the site at ${SITE} (${e.message}).\nIs it running, and does CHEER_BOT_SECRET match .env.local?`);
   }
   if (!cursor.lease) die("[bot] another bot instance is already running — stopping.\nStop it first, or wait ~60s for its lease to lapse.");
 
@@ -218,10 +218,10 @@ async function main() {
       { command: "stop", description: "Disconnect" },
     ],
   });
-  await tg("setMyShortDescription", { short_description: "Your Crown page, in your pocket: donations, deadlines, payouts." });
+  await tg("setMyShortDescription", { short_description: "Your Cheer page, in your pocket: donations, deadlines, payouts." });
   await tg("setMyDescription", {
     description:
-      "Notifications from your Crown donation page: things that need you, money moves, good news, monthly digests. Connect from your cabinet — Settings → Telegram.",
+      "Notifications from your Cheer donation page: things that need you, money moves, good news, monthly digests. Connect from your cabinet — Settings → Telegram.",
   });
 
   // outbox drain — messages queued by the site

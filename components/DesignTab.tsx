@@ -22,7 +22,7 @@ import styles from "./PageBuilder.module.css";
 //   Fill screen — cover, pinned to the viewport
 //   Whole photo — fit to width at the top, page colour below
 //   Phone + desktop — two photos, one per device
-// Backdrop only: the accent stays Crown purple everywhere (design charter II.1).
+// Backdrop only: the accent stays Cheer purple everywhere (design charter II.1).
 
 type BgType = "color" | "gradient" | "image";
 type Fit = "cover" | "width" | "split";

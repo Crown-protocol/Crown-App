@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listDonations } from "@/lib/server/store";
+import { listDonations, listPendingDonations } from "@/lib/server/store";
 import { getProfile } from "@/lib/server/store";
 
 export const runtime = "nodejs";
@@ -24,5 +24,23 @@ export async function GET(req: NextRequest) {
   }
 
   const donations = await listDonations({ streamer, limit });
-  return NextResponse.json({ donations });
+
+  // In-flight donations ride along, flagged. The cabinet shows them greyed with a "sending" pill so
+  // a creator can tell "the money is on its way" from "nothing happened" — previously identical,
+  // because only confirmed rows existed anywhere in the UI.
+  //
+  // Only when asked by handle: an intent is keyed by handle, not by payout address, so a ?streamer=
+  // query has nothing to match against.
+  const pending = handle ? await listPendingDonations({ handle, limit }) : [];
+
+  return NextResponse.json({
+    donations,
+    pending: pending.map((p) => ({
+      signature: p.signature,
+      donorName: p.donorName,
+      message: p.message,
+      source: p.source,
+      createdAt: p.createdAt,
+    })),
+  });
 }

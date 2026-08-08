@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePublicProfile } from "@/lib/data/usePublicProfile";
-import { useCrown } from "@/lib/data/DataProvider";
+import { useCheer } from "@/lib/data/DataProvider";
 import { Logo } from "@/components/Logo";
 import { ReputationDelta } from "@/components/ReputationDelta";
 import { DonateTopBar } from "@/components/DonateTopBar";
@@ -12,7 +12,7 @@ import { SocialIcon, SOCIAL_LABEL } from "@/components/icons";
 import { normalizeSocialLink } from "@/lib/data/social-links";
 import { usd } from "@/lib/money";
 import { rouletteRules } from "@/lib/data/gameConfig";
-import { topicById, DEFAULT_TOPIC_ID } from "@/lib/data/roulette-topics";
+import { topicNoun } from "@/lib/data/roulette-topics";
 import { RouletteWheel } from "@/components/RouletteWheel";
 import { withRouletteDefaults, addSuggestion, readRound, ensureRound, readRoundMeta, setRoundWinner, newRound, survivors, eliminationWeights, eliminate, type RoundMeta } from "@/lib/data/roulette";
 import { GAME_GENRES, pickWeighted, roundRand, type GameGenre, type RouletteSuggestion } from "@/lib/data/roulette-mock";
@@ -21,7 +21,10 @@ import { useIsWide } from "@/lib/data/useIsWide";
 import { tierInfo } from "@/lib/level";
 import { resolvePublicSession, pullSessions } from "@/lib/data/gameSessions";
 import { GameTabs } from "@/components/games/GameTabs";
-import { useGameSync } from "@/lib/data/gameSync";
+import { GameRules, rouletteLines } from "@/components/games/GameRules";
+import { useGameSyncState } from "@/lib/data/gameSync";
+import { useConfirm } from "@/components/useConfirm";
+import { dangerCopy } from "@/lib/data/dangerous";
 import styles from "./page.module.css";
 
 type SendState = "idle" | "sending" | "done";
@@ -34,15 +37,15 @@ function fmtLeft(ms: number): string {
 
 // The public roulette page — what a viewer opens from the streamer's link or QR: the open
 // round with live odds, and the form to suggest (or back) a game by donating toward it.
-// The content maker is resolved by handle from the Crown DB (usePublicProfile), so the page
+// The content maker is resolved by handle from the Cheer DB (usePublicProfile), so the page
 // renders for any visitor; suggestions still accumulate in localStorage on top of the seeded
 // round — same mock backend as the rest of the app until the indexer owns it.
 export default function RoulettePage({ params }: { params: { handle: string } }) {
   const handle = decodeURIComponent(params.handle).replace(/^@/, "");
-  // Resolve the content maker by handle from the Crown DB, so a viewer sees this page in any
+  // Resolve the content maker by handle from the Cheer DB, so a viewer sees this page in any
   // browser — not just the owner whose localStorage holds the profile.
   const { profile: maker, status } = usePublicProfile(handle);
-  const { getReputation } = useCrown();
+  const { getReputation } = useCheer();
   const isWide = useIsWide();
 
   // Session resolution: ?s=<id> picks a specific session; one live session resolves itself;
@@ -72,12 +75,13 @@ export default function RoulettePage({ params }: { params: { handle: string } })
   const [amount, setAmount] = useState<number | null>(null);
   const [custom, setCustom] = useState("");
   const [send, setSend] = useState<SendState>("idle");
-  const [view, setView] = useState<"suggest" | "wheel">("suggest"); // the top toggle: suggest/back a game vs. the wheel itself
+  const confirm = useConfirm(); // backing a suggestion costs money — ask before it moves
+  const [view, setView] = useState<"suggest" | "wheel" | "rules">("suggest"); // the top toggle: suggest/back a game vs. the wheel itself
 
   // Shared game state: other viewers' suggestions/backings land via the nonce effect below.
   // The meta (clock/verdict) deliberately does NOT re-read here — the per-second catch-up effect
   // owns it, so an adopted verdict replays the wheel's landing instead of snapping to it.
-  const syncNonce = useGameSync(scope);
+  const { nonce: syncNonce, synced } = useGameSyncState(scope);
 
   useEffect(() => {
     if (!scope) return;
@@ -103,7 +107,7 @@ export default function RoulettePage({ params }: { params: { handle: string } })
   const isElimination = (meta?.format ?? rouletteRules(maker, scope).format ?? "single") === "elimination";
 
   // Once a second: catch up with the storage — the streamer may have spun early from the
-  // cabinet ("решение КМ") or started a new round; other tabs may have added suggestions.
+  // cabinet (the maker's call) or started a new round; other tabs may have added suggestions.
   useEffect(() => {
     if (!now || !meta) return;
     const m = readRoundMeta(scope!);
@@ -125,7 +129,7 @@ export default function RoulettePage({ params }: { params: { handle: string } })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [now]);
 
-  // Время вышло: the clock hits zero with no verdict — the wheel spins itself.
+  // Time's up: the clock hits zero with no verdict — the wheel spins itself.
   useEffect(() => {
     if (!now || !meta || meta.winner) return;
     const minutes = rouletteRules(maker, scope).roundMinutes;
@@ -141,7 +145,18 @@ export default function RoulettePage({ params }: { params: { handle: string } })
     // so every spin of the same round is allowed exactly once. Money protects — inverted weights.
     if (isElimination) {
       const left = survivors(r, meta);
-      if (left.length < 2) return;
+      // One suggestion (or one survivor left after knock-outs) wins by default — there's no one to
+      // eliminate. Cheer it directly: eliminate() only sets the winner as a side effect of a spin,
+      // and no spin ever fires here, so without this a lone entry left the round frozen past its
+      // deadline forever (dead wheel, no verdict). Guard on spunFor so we cheer exactly once.
+      if (left.length === 1) {
+        const key = `${meta.startedAt}:solo`;
+        if (spunFor.current === key) return;
+        spunFor.current = key;
+        setMeta(setRoundWinner(scope!, { id: left[0].id, title: left[0].title }));
+        return;
+      }
+      if (left.length < 2) return; // zero survivors — nothing to do
       const key = `${meta.startedAt}:${(meta.eliminated ?? []).length}`;
       if (spunFor.current === key) return;
       const victim = pickWeighted(left, roundRand(meta.startedAt + (meta.eliminated ?? []).length), eliminationWeights(left));
@@ -164,7 +179,7 @@ export default function RoulettePage({ params }: { params: { handle: string } })
     const list = readRound(scope!);
     const w = list.find((s) => s.id === id);
     if (!w) return;
-    // In elimination the wheel lands on the one that's OUT; eliminate() crowns the last survivor.
+    // In elimination the wheel lands on the one that's OUT; eliminate() cheers the last survivor.
     if (isElimination) setMeta(eliminate(scope!, w.id, list));
     else setMeta(setRoundWinner(scope!, { id: w.id, title: w.title }));
   }
@@ -191,7 +206,7 @@ export default function RoulettePage({ params }: { params: { handle: string } })
   // The rules THIS round was opened with — the minimum, the topic and the clock a viewer plays under.
   const cfg = rouletteRules(mine, scope);
   // The wheel isn't games-only: speak the streamer's topic ("Suggest a film", "Tap a dish to back it").
-  const noun = topicById(cfg.topic ?? DEFAULT_TOPIC_ID).noun;
+  const noun = topicNoun(cfg.topic);
   // Who's still in, and their knock-out odds (only meaningful in elimination).
   const aliveNow = isElimination ? survivors(round, meta) : round;
   const elimWeights = isElimination ? eliminationWeights(aliveNow) : [];
@@ -244,11 +259,17 @@ export default function RoulettePage({ params }: { params: { handle: string } })
   const rep = getReputation(handle);
 
   // Rank mode: putting a game on the wheel is free, but gated by the viewer's rank with this
-  // streamer (the КМ picked the tier at session creation). Backing stays a donation for everyone.
+  // streamer (the maker picked the tier at session creation). Backing stays a donation for everyone.
   const rankMode = meta?.mode === "rank";
   const gateTier = rankMode ? mine.tiers.find((t) => t.name === meta?.minTier) ?? mine.tiers[0] : null;
   const canSuggestByRank = !rankMode || (gateTier ? rep >= gateTier.threshold : true);
-  const canSend = send === "idle" && !closed && title.trim().length > 0 && (rankMode ? canSuggestByRank : finalAmount >= cfg.minDonation);
+  // `synced`: the minimum and the round length on screen must be this run's, not the maker's current
+  // (editable) defaults. Rank mode puts a free idea on the wheel, so it isn't gated on money terms.
+  const canSend =
+    send === "idle" &&
+    !closed &&
+    title.trim().length > 0 &&
+    (rankMode ? canSuggestByRank : synced && finalAmount >= cfg.minDonation);
 
   // Clicking an existing suggestion pre-fills the form — backing it grows its pool and odds.
   function back(s: RouletteSuggestion) {
@@ -283,20 +304,23 @@ export default function RoulettePage({ params }: { params: { handle: string } })
           </div>
         </Link>
 
-        <h1 className={styles.headline}>{rl.headline.trim() || "You pick what I play next"}</h1>
+        {rl.headline.trim() && <h1 className={styles.headline}>{rl.headline}</h1>}
         {rl.descriptionEnabled && rl.description && <p className={styles.desc}>{rl.description}</p>}
 
         {/* Tab 1: suggest or back a game (the donation). Tab 2: the wheel itself, live. */}
         <GameTabs
           value={view}
-          onChange={(v) => setView(v as "suggest" | "wheel")}
+          onChange={(v) => setView(v as "suggest" | "wheel" | "rules")}
           tabs={[
             { key: "suggest", label: `Suggest a ${noun}`, count: round.length },
             { key: "wheel", label: "The wheel" },
+            { key: "rules", label: "Rules" },
           ]}
         />
 
         <div className={styles.panel}>
+          {view === "rules" && <GameRules lines={rouletteLines(cfg, mine.name, noun)} mine={mine} />}
+
           {view === "wheel" && (
           <div className={styles.wheelCol} style={{ position: "static" }}>
             <RouletteWheel
@@ -427,7 +451,14 @@ export default function RoulettePage({ params }: { params: { handle: string } })
                     <ReputationDelta rep={rep} gain={finalAmount} tiers={mine.tiers} />
                   </>
                 )}
-                <button type="button" className="btn" disabled={!canSend} onClick={suggest}>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={!canSend}
+                  // Rank mode puts an idea on the wheel for free — nothing to confirm. Paid mode is
+                  // money on the table, so it goes through the same gate as every other spend.
+                  onClick={() => (rankMode ? suggest() : confirm(dangerCopy.roulette(finalAmount), suggest))}
+                >
                   {send === "sending"
                     ? "Sending…"
                     : send === "done"
@@ -474,6 +505,7 @@ export default function RoulettePage({ params }: { params: { handle: string } })
           <Logo />
         </div>
       </div>
+      {confirm.dialog}
     </main>
   );
 }

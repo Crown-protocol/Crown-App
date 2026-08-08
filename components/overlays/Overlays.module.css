@@ -433,12 +433,12 @@
   background: var(--accent-soft);
   color: var(--accent);
 }
-/* The leader's crown springs in on mount — it mounts exactly when the leader identity changes. */
-.topCrown {
+/* The leader's cheer springs in on mount — it mounts exactly when the leader identity changes. */
+.topCheer {
   display: grid;
   place-items: center;
   color: var(--accent);
-  animation: crownIn 400ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: cheerIn 400ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 .topName {
   position: relative;
@@ -456,7 +456,7 @@
   font-weight: 700;
   color: var(--text-1);
 }
-@keyframes crownIn {
+@keyframes cheerIn {
   from {
     transform: scale(0.4);
     opacity: 0;
@@ -497,7 +497,7 @@
   animation: shineSweep 900ms var(--ease) 700ms both;
   pointer-events: none;
 }
-/* The crown visibly lands: 0.4→1.08→1, delayed 120ms behind the card's slide-in. */
+/* The cheer visibly lands: 0.4→1.08→1, delayed 120ms behind the card's slide-in. */
 .rankBadge {
   flex: none;
   width: 46px;
@@ -626,7 +626,7 @@
   font-weight: 700;
   color: var(--text-1);
 }
-/* CrownMark in accent replaces the old gold trophy emoji (charter: no gold). */
+/* CheerMark in accent replaces the old gold trophy emoji (charter: no gold). */
 .winnerMark {
   display: grid;
   place-items: center;

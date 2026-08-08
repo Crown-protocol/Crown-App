@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useCrown } from "@/lib/data/DataProvider";
+import { useCheer } from "@/lib/data/DataProvider";
 import { useSolanaWallet } from "@/lib/chain/wallet";
 import { useMyReputation } from "@/lib/data/useMyReputation";
 import { readDonorName, writeDonorName } from "@/lib/data/donorName";
@@ -17,7 +17,7 @@ import styles from "./page.module.css";
 // and the next rung on each ladder. Reputation is per-maker, never one global score
 // (front.md I §4: $1 donated = 1 point with THAT maker), so the ladders are the page, not a footnote.
 export default function MePage() {
-  const { feed } = useCrown();
+  const { feed } = useCheer();
   const wallet = useSolanaWallet();
   const rep = useMyReputation();
 
@@ -35,11 +35,15 @@ export default function MePage() {
   // Your own donations out of the shared feed: matched by wallet (chain) or by the name you donate
   // under (mock). Best effort — the feed is the public stream, not a private ledger.
   const mine = useMemo(() => {
-    const addr = wallet.address?.toLowerCase();
+    // base58 is case-sensitive — comparing addresses through toLowerCase() never matches (that was
+    // an EVM-era habit; a Solana pubkey uses both cases). Only the human name gets folded.
+    const addr = wallet.address;
     const nm = readDonorName().trim().toLowerCase();
     return feed.filter((d) => {
-      if (addr && d.payer?.toLowerCase() === addr) return true;
-      if (nm && d.from.trim().toLowerCase() === nm) return true;
+      if (addr && d.payer === addr) return true;
+      // Name matching is a mock-mode fallback only: two donors can pick the same name, so it must
+      // never stand in for a wallet we actually know.
+      if (!addr && nm && d.from.trim().toLowerCase() === nm) return true;
       return false;
     });
   }, [feed, wallet.address]);

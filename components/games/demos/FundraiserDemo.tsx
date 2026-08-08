@@ -43,7 +43,6 @@ export function FundraiserDemo() {
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M12 21s-7-4.5-9.2-9C1.3 9.2 2.7 6 5.8 6 8 6 9.2 7.6 12 10.5 14.8 7.6 16 6 18.2 6c3.1 0 4.5 3.2 3 6-2.2 4.5-9.2 9-9.2 9Z" /></svg>
             </span>
             <h3>Watch a goal fill up</h3>
-            <p>Set a promise and a goal, take a few chip-ins, then deliver — or don&apos;t.</p>
             <button className={styles.primary} type="button" style={{ marginTop: 8 }} onClick={() => setStep(1)}>
               Launch the demo
             </button>

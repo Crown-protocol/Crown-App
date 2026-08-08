@@ -94,7 +94,7 @@ export function DemoDonation() {
       </div>
 
       <button type="button" className={styles.btn} onClick={run} disabled={phase === "sending"}>
-        {phase === "sending" ? "Sending…" : phase === "done" ? `Done · ${DEMO_NAME} earned +${rep} reputation` : `Donate ${money(amount).replace(".00", "")}`}
+        {phase === "sending" ? "Sending…" : phase === "done" ? `Done · ${DEMO_NAME} earned +${rep} reputation` : `Cheer ${money(amount).replace(".00", "")}`}
       </button>
 
       <div className={styles.foot}>Demo — no wallet needed. One on-chain transaction, funds land instantly.</div>

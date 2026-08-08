@@ -162,7 +162,6 @@ export function RouletteDemo() {
               <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="12" cy="12" r="9" /><path d="M12 7.5v4.5l3 1.8" /></svg>
             </span>
             <h3>See a round play out</h3>
-            <p>Set it up like a streamer would, then spin — weighted by the pot, just like the real thing.</p>
             <button className={styles.primary} type="button" style={{ marginTop: 8 }} onClick={() => setStep(1)}>
               Launch the demo
             </button>

@@ -1,6 +1,6 @@
 /* Shared shell for the four mini-game demos on /games/<id>. Three screens — intro (Launch) → setup →
    run — inside one card. Neutral chrome; the one colour is each game's own focal viz (wheel, fill,
-   board, progress). Primary buttons keep Crown's purple accent. */
+   board, progress). Primary buttons keep Cheer's purple accent. */
 
 .demo {
   position: relative;

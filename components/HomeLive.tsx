@@ -42,10 +42,12 @@ export function HomeLive({ profile, onOpen }: { profile: Profile; onOpen: (g: Ga
 
       const st = readStatus(frScope);
       const fr = withFundraiserDefaults(profile);
-      const fundraiser =
-        st.state === "collecting" || st.state === "delivering"
-          ? { pledge: fr.pledge, goal: fr.goal, raised: raisedTotal(frScope), state: st.state }
-          : null;
+      const raised = raisedTotal(frScope);
+      // "collecting" is also readStatus()'s default for a page that never ran one, so an untouched
+      // account would otherwise show a fundraiser at $0 as if it were live. Delivering is always
+      // real (something was accepted); collecting counts only once a backer has actually chipped in.
+      const frLive = st.state === "delivering" || (st.state === "collecting" && raised > 0);
+      const fundraiser = frLive ? { pledge: fr.pledge, goal: fr.goal, raised, state: st.state } : null;
 
       const open = readTasks(tkScope).filter((t) => t.state === "pending" || t.state === "active");
       const tasks = open.length
@@ -81,7 +83,29 @@ export function HomeLive({ profile, onOpen }: { profile: Profile; onOpen: (g: Ga
   }, [handle, profile]);
 
   if (!live) return null;
-  if (!live.roulette && !live.fundraiser && !live.tasks && !live.auction) return null;
+
+  // Nothing running: keep the section, say so plainly, and point at the next step. An empty screen
+  // with no explanation is indistinguishable from a broken one.
+  if (!live.roulette && !live.fundraiser && !live.tasks && !live.auction) {
+    return (
+      <section>
+        <div className={styles.head}>Live now</div>
+        <div className={styles.empty}>
+          <div className={styles.emptyIcons} aria-hidden>
+            {(["roulette", "task", "fundraiser", "auction"] as GameId[]).map((id) => (
+              <span className={styles.emptyIcon} key={id}>
+                <GameIcon id={id} width={18} height={18} />
+              </span>
+            ))}
+          </div>
+          <div className={styles.emptyText}>No game is running right now.</div>
+          <button type="button" className="btn-outline" onClick={() => onOpen("roulette")}>
+            Start one
+          </button>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section>

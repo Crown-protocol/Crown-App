@@ -5,7 +5,7 @@
 // Photos are downscaled before they reach this store (see DesignTab), so the library stays well
 // under the localStorage budget even with a dozen images.
 
-const KEY = "crown-bg-library";
+const KEY = "cheer-bg-library";
 const MAX = 12; // keep the newest dozen; plenty for a page's looks, safe for localStorage
 
 export interface BgPhoto {

@@ -19,9 +19,16 @@ export class NotConfiguredError extends Error {
   }
 }
 
-interface CrownCtx {
+interface CheerCtx {
   mode: DataMode;
   setMode: (m: DataMode) => void;
+  // Opt-in demo/sample data, OFF by default. When off, every surface shows only what's real: the
+  // cabinet dashboard shows the page's real (often zero) totals instead of the invented MOCK_DASHBOARD,
+  // and the creator catalog (/discover) lists only real makers instead of padding with MOCK_STREAMERS.
+  // The admin panel flips it on for screenshots/demos; surfaces that show demo data then flag it (the
+  // dashboard paints the numbers red with a "demo" tooltip).
+  demoData: boolean;
+  setDemoData: (on: boolean) => void;
   ready: boolean;
   getStreamer: (handle: string) => Streamer | undefined;
   getCampaign: (handle: string, slug: string) => Campaign | undefined;
@@ -30,14 +37,14 @@ interface CrownCtx {
   getReputation: (handle: string) => number;
   lastGainFor: (handle: string) => number | null;
   // Send a donation. In mock — a simulation with "Sending…". In chain — a real
-  // Solana devnet transaction through the Crown-Core splitter.
+  // Solana devnet transaction through the Cheer-Core splitter.
   donate: (input: DonateInput, walletAddress?: string) => Promise<{ txHash?: string }>;
   // Record settled game money instantly (no "Sending…" simulation): feed + reputation + overlays.
   // Mock-only — the chain path settles through the escrow, and the indexer writes the book.
   applyMockDonation: (input: DonateInput) => void;
 }
 
-const Ctx = createContext<CrownCtx | null>(null);
+const Ctx = createContext<CheerCtx | null>(null);
 
 // Release knob: NEXT_PUBLIC_DEFAULT_MODE=chain flips fresh visitors to real
 // data; unset keeps the mock demo. A visitor's own toggle always wins.
@@ -47,6 +54,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const { profile } = useProfile();
   const wallet = useSolanaWallet();
   const [mode, setModeState] = useState<DataMode>(DEFAULT_MODE);
+  // Demo/sample data off by default (real numbers, real makers). Persisted like `mode`.
+  const [demoData, setDemoDataState] = useState(false);
   const [ready, setReady] = useState(false);
 
   // Mock state (lives in session memory; the chain path replaces pieces of it
@@ -55,7 +64,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // Per-streamer reputation: { handle → points }. The viewer earns reputation with each streamer
   // separately; there is no global number.
   const [reputation, setReputation] = useState<Record<string, number>>(MOCK_REPUTATION);
-  // Chain-mode overlay: the same shape, but read from the crown-index book
+  // Chain-mode overlay: the same shape, but read from the cheer-index book
   // (ICP). Only populated when the canister is configured AND a wallet is
   // connected — until the backend dev hands over a principal this stays empty
   // and mock values show, so nothing on screen ever goes blank.
@@ -64,19 +73,27 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [lastGain, setLastGain] = useState<{ handle: string; amount: number } | null>(null);
 
   useEffect(() => {
-    const saved = typeof window !== "undefined" ? (localStorage.getItem("crown-mode") as DataMode | null) : null;
+    const saved = typeof window !== "undefined" ? (localStorage.getItem("cheer-mode") as DataMode | null) : null;
     if (saved === "mock" || saved === "chain") setModeState(saved);
+    if (typeof window !== "undefined" && localStorage.getItem("cheer-demo-data") === "1") setDemoDataState(true);
     setReady(true);
   }, []);
 
   const setMode = useCallback((m: DataMode) => {
     setModeState(m);
     try {
-      localStorage.setItem("crown-mode", m);
+      localStorage.setItem("cheer-mode", m);
     } catch {}
   }, []);
 
-  // Pages registered on the server (the Crown DB) — so a public /@handle
+  const setDemoData = useCallback((on: boolean) => {
+    setDemoDataState(on);
+    try {
+      localStorage.setItem("cheer-demo-data", on ? "1" : "0");
+    } catch {}
+  }, []);
+
+  // Pages registered on the server (the Cheer DB) — so a public /@handle
   // resolves in ANY browser, not just the one that created it. Loaded once
   // per session; the local profile still wins for your own page (fresher).
   const [serverPages, setServerPages] = useState<Record<string, Streamer>>({});
@@ -113,7 +130,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   );
 
   // Chain mode + wallet connected → refresh the book for every streamer we can
-  // show. Source of truth: crown-index (ICP) when its principal is configured;
+  // show. Source of truth: cheer-index (ICP) when its principal is configured;
   // otherwise OUR mirror (/api/reputation — the DB the indexer fills from
   // devnet). Same unit either way: USDC minor units; 1 point = $1 (front.md §4).
   useEffect(() => {
@@ -170,10 +187,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     let primed = false;
     const load = async () => {
       try {
-        const r = await fetch("/api/feed?limit=60");
+        // ?handle= so the server can attach this page's in-flight donations; intents are keyed by
+        // handle, not by payout address.
+        const mine = profile?.handle ? `&handle=${encodeURIComponent(profile.handle)}` : "";
+        const r = await fetch(`/api/feed?limit=60${mine}`);
         if (!r.ok) return;
-        const { donations } = (await r.json()) as {
+        const { donations, pending = [] } = (await r.json()) as {
           donations: { signature: string; blockTime: number | null; payer: string; streamer?: string; gross: number; source: string; donorName: string | null; message: string | null }[];
+          pending?: { signature: string; donorName: string | null; message: string | null; source: string; createdAt: number }[];
         };
         if (dead) return;
         const addrToHandle = new Map<string, string>();
@@ -210,9 +231,30 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             at: d.blockTime ? d.blockTime * 1000 : undefined,
             sig: d.signature,
             payer: d.payer,
+            streamer: d.streamer,
+            status: "settled",
           };
         });
-        if (rows.length) setFeed(rows);
+
+        // In-flight rows go on top: they are the newest thing that happened, and they are what the
+        // creator is actually waiting on. Amount is unknown until the chain confirms it — the intent
+        // records who and what, not how much — so the panel shows a dash rather than inventing one.
+        const inFlight: Donation[] = pending.map((p) => ({
+          id: p.signature,
+          from: p.donorName ?? "Someone",
+          amount: 0,
+          message: p.message ?? undefined,
+          source: (["task", "roulette", "fundraiser", "auction"].includes(p.source) ? p.source : "direct") as Donation["source"],
+          date: new Date(p.createdAt).toISOString().slice(0, 10),
+          time: "just now",
+          at: p.createdAt,
+          sig: p.signature,
+          streamer: profile?.address,
+          status: "sending",
+        }));
+
+        const merged = [...inFlight, ...rows];
+        if (merged.length) setFeed(merged);
       } catch {}
     };
     void load();
@@ -263,7 +305,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const donate = useCallback<CrownCtx["donate"]>(
+  const donate = useCallback<CheerCtx["donate"]>(
     async (input, walletAddress) => {
       if (mode === "mock") {
         await new Promise((r) => setTimeout(r, 1200));
@@ -288,13 +330,50 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       // Ring the book's doorbell — the reputation row lands in seconds, not on
       // the watchdog's minute. No-op until the canister principal is configured.
       void ingestHint();
-      // Attach the donor's words to the signature (the Crown DB). The indexer
-      // merges them into the mirrored Settled row — the chain stays wordless.
-      void fetch("/api/donations/intent", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ signature: txHash, handle: input.handle, name: input.name, message: input.message, source: input.source }),
-      }).catch(() => {});
+      // Attach the donor's words to the signature (the Cheer DB). The indexer merges them into the
+      // mirrored Settled row — the chain stays wordless.
+      //
+      // Signed, because a tx signature is public the instant it lands: without proof of the paying
+      // wallet, anyone watching could post first and permanently attach their own name and message
+      // to this donation (the intent row is first-writer-wins).
+      //
+      // This costs a SECOND wallet prompt, right after the transaction — wallets ask on every
+      // signMessage, there is no silent path. Only donors who actually typed a name or a message
+      // are asked: with nothing to attach there is nothing to protect, so the prompt would be pure
+      // friction. The text below is written for the person staring at that popup.
+      //
+      // Fire-and-forget: declining costs the donor their caption, never their donation, which is
+      // already on chain by this point.
+      const hasWords = !!(input.name?.trim() || input.message?.trim());
+      if (hasWords) void (async () => {
+        try {
+          const ts = Math.floor(Date.now() / 1000);
+          const human =
+            "Cheer — sign your donation\n\n" +
+            "This proves the name and message are yours, so nobody else can put words on your donation.\n" +
+            "It is not a transaction: no funds move and no fees are paid.\n\n";
+          const msg = new TextEncoder().encode(human + `cheer-app:intent:${txHash.toLowerCase()}:${ts}:-`);
+          const sig = await wallet.signMessage(msg);
+          if (!sig) return;
+          await fetch("/api/donations/intent", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              signature: txHash,
+              handle: input.handle,
+              name: input.name,
+              message: input.message,
+              source: input.source,
+              payer: donor,
+              ts,
+              proof: btoa(String.fromCharCode(...sig)),
+              preamble: human,
+            }),
+          });
+        } catch {
+          // Offline, or the wallet can't sign messages — the donation stands, just uncaptioned.
+        }
+      })();
       // The book only sees the tx after its finalized-ingest pass (~30–90s).
       // No optimistic local bump: chain mode shows honest numbers.
       return { txHash };
@@ -305,8 +384,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const getReputation = useCallback(
     (handle: string) => {
       const key = handle.replace(/^@/, "").toLowerCase();
-      // Chain overlay wins when present (real book beats mock seed).
-      if (mode === "chain" && key in chainRep) return chainRep[key];
+      // In chain mode the real book is the ONLY truth: a streamer with no on-chain reputation reads 0,
+      // never the mock seed — falling back to mock showed a fabricated number in "honest" chain mode.
+      if (mode === "chain") return chainRep[key] ?? 0;
       return reputation[key] ?? 0;
     },
     [mode, chainRep, reputation]
@@ -316,16 +396,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [lastGain]
   );
 
-  const value = useMemo<CrownCtx>(
-    () => ({ mode, setMode, ready, getStreamer, getCampaign, feed, getReputation, lastGainFor, donate, applyMockDonation }),
-    [mode, setMode, ready, getStreamer, getCampaign, feed, getReputation, lastGainFor, donate, applyMockDonation]
+  const value = useMemo<CheerCtx>(
+    () => ({ mode, setMode, demoData, setDemoData, ready, getStreamer, getCampaign, feed, getReputation, lastGainFor, donate, applyMockDonation }),
+    [mode, setMode, demoData, setDemoData, ready, getStreamer, getCampaign, feed, getReputation, lastGainFor, donate, applyMockDonation]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
-export function useCrown() {
+export function useCheer() {
   const ctx = useContext(Ctx);
-  if (!ctx) throw new Error("useCrown must be used inside DataProvider");
+  if (!ctx) throw new Error("useCheer must be used inside DataProvider");
   return ctx;
 }

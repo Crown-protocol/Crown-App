@@ -7,6 +7,7 @@ import { Mono } from "@/components/Mono";
 import { Spark } from "@/components/Spark";
 import { SearchIcon, SocialIcon, SOCIAL_KINDS, SOCIAL_LABEL } from "@/components/icons";
 import { MOCK_STREAMERS, MOCK_REALMS } from "@/lib/data/mock";
+import { useCheer } from "@/lib/data/DataProvider";
 import { USDC_DECIMALS } from "@/lib/chain/config";
 import type { Profile, Social } from "@/lib/data/types";
 import styles from "./page.module.css";
@@ -21,6 +22,10 @@ function money(n: number) {
 }
 
 export default function DiscoverPage() {
+  // Demo streamers are opt-in (admin panel). Off by default: the catalog lists only real registered
+  // makers, so a visitor never sees invented people with invented totals. On → the MOCK seeds are
+  // mixed back in for screenshots/demos.
+  const { demoData } = useCheer();
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>("all");
   const [platforms, setPlatforms] = useState<Social["kind"][]>([]);
@@ -51,7 +56,7 @@ export default function DiscoverPage() {
     queueChange(() => setPlatforms((prev) => (prev.includes(kind) ? prev.filter((k) => k !== kind) : [...prev, kind])));
   }
 
-  // REGISTERED makers come from the Crown DB — the demo seeds alone made every real registration
+  // REGISTERED makers come from the Cheer DB — the demo seeds alone made every real registration
   // invisible here. Their "received" totals are the honest mirrored donations (the indexer's book,
   // /api/feed), which start at $0 for a fresh page — no invented numbers.
   const [dbRows, setDbRows] = useState<{ handle: string; streamer: Profile; receivedAll: number; received7d: number; spark: number[] }[]>([]);
@@ -59,7 +64,8 @@ export default function DiscoverPage() {
     let dead = false;
     void (async () => {
       try {
-        const [pr, fr] = await Promise.all([fetch("/api/profiles"), fetch("/api/feed?limit=200")]);
+        // ?avatars=1 — this page is a wall of faces, so it's the one surface that needs the images.
+        const [pr, fr] = await Promise.all([fetch("/api/profiles?avatars=1"), fetch("/api/feed?limit=200")]);
         if (!pr.ok) return;
         const { profiles } = (await pr.json()) as { profiles: Profile[] };
         const sums = new Map<string, { all: number; d7: number }>();
@@ -97,26 +103,31 @@ export default function DiscoverPage() {
   }, []);
 
   const rows = useMemo(() => {
-    const withStreamer = [...MOCK_REALMS.map((r) => ({ ...r, streamer: MOCK_STREAMERS[r.handle] })).filter((r) => r.streamer), ...dbRows];
+    const demoRows = demoData ? MOCK_REALMS.map((r) => ({ ...r, streamer: MOCK_STREAMERS[r.handle] })).filter((r) => r.streamer) : [];
+    const withStreamer = [...demoRows, ...dbRows];
     const q = query.trim().toLowerCase();
     const filtered = withStreamer.filter((r) => {
       const matchesQuery = !q || r.handle.includes(q) || r.streamer.name.toLowerCase().includes(q);
-      const matchesPlatform = !platforms.length || r.streamer.socials.some((s) => platforms.includes(s.kind));
+      const matchesPlatform = !platforms.length || (r.streamer.socials ?? []).some((s) => platforms.includes(s.kind));
       return matchesQuery && matchesPlatform;
     });
     return filtered.sort((a, b) => (sort === "all" ? b.receivedAll - a.receivedAll : b.received7d - a.received7d));
-  }, [query, sort, platforms, dbRows]);
+  }, [query, sort, platforms, dbRows, demoData]);
 
   const platformCounts = useMemo(() => {
     const counts = Object.fromEntries(SOCIAL_KINDS.map((k) => [k, 0])) as Record<Social["kind"], number>;
-    for (const r of MOCK_REALMS) {
-      const streamer = MOCK_STREAMERS[r.handle];
-      if (!streamer) continue;
-      for (const s of streamer.socials) counts[s.kind] += 1;
+    // Only count demo streamers toward the platform filters when demo data is on — otherwise the
+    // counts would advertise makers the catalog isn't actually showing.
+    if (demoData) {
+      for (const r of MOCK_REALMS) {
+        const streamer = MOCK_STREAMERS[r.handle];
+        if (!streamer) continue;
+        for (const s of streamer.socials ?? []) counts[s.kind] += 1;
+      }
     }
     for (const r of dbRows) for (const s of r.streamer.socials ?? []) counts[s.kind] += 1;
     return counts;
-  }, [dbRows]);
+  }, [dbRows, demoData]);
 
   return (
     <main className={styles.wrap}>
@@ -187,7 +198,7 @@ export default function DiscoverPage() {
                 </div>
 
                 <div className={styles.cardSocials}>
-                  {r.streamer.socials.map((s) => (
+                  {(r.streamer.socials ?? []).map((s) => (
                     <SocialIcon key={s.kind} kind={s.kind} width={16} height={16} />
                   ))}
                 </div>

@@ -87,7 +87,7 @@
   }
 }
 .avatar,
-.crown {
+.cheer {
   width: 36px;
   height: 36px;
   flex: none;
@@ -101,11 +101,11 @@
   background: var(--accent);
   color: var(--accent-grad-ink);
 }
-.crown {
+.cheer {
   background: var(--accent-soft);
   color: var(--accent);
 }
-.crown svg {
+.cheer svg {
   width: 21px;
   height: 21px;
 }
@@ -237,7 +237,7 @@
   color: var(--text-3);
 }
 
-/* ---- fundraiser crown ---- */
+/* ---- fundraiser cheer ---- */
 .fund {
   display: flex;
   align-items: center;

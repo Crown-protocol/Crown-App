@@ -12,7 +12,7 @@ export interface DonationEvent {
   ts: number; // Date.now() at publish
 }
 
-const CHANNEL = "crown-donations";
+const CHANNEL = "cheer-donations";
 
 function norm(handle: string): string {
   return handle.replace(/^@/, "").toLowerCase();
