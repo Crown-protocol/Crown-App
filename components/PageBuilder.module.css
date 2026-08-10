@@ -114,6 +114,22 @@
   min-width: 0;
 }
 
+/* Tabs on the left, the session being edited on the right of the same row. They read as one control
+   bar: which session, and which part of it. The editor column is only 420px, so rather than let the
+   select wrap onto its own line (where it read as an orphan caption under the tabs) the select
+   itself shrinks — min-width:0 on the row's children lets it, and the label hides before the
+   control does, since a truncated session NAME is worse than a missing word "SESSION". */
+.tabsRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+.tabsRow > * {
+  min-width: 0;
+}
+
 .tabs {
   display: inline-flex;
   gap: 4px;
@@ -702,19 +718,6 @@
   align-items: center;
   gap: 14px;
 }
-/* When the session picker is present it pushes the device toggle + preview down. Pull the whole
-   column up by the space the picker adds so the preview stays high — level with the editor's tabs —
-   like it was before the picker existed. That space = the row's own height (34px control + 10px
-   margin-bottom) PLUS the column's 14px flex gap above the next item = 58px. Only when the row is
-   actually rendered (2+ sessions), and only in the side-by-side layout; below 1180px it's stacked. */
-.previewCol:has(.sessionRow) {
-  margin-top: -58px;
-}
-@media (max-width: 1180px) {
-  .previewCol:has(.sessionRow) {
-    margin-top: 0;
-  }
-}
 .deviceSeg {
   display: inline-flex;
   background: var(--bg-1);
@@ -745,31 +748,40 @@
   color: var(--chart-grad-ink);
 }
 
-/* ---- session picker: which run this preview and link point at ----
-   Only rendered with two or more live sessions. Quieter than the device toggle above it — that one
-   changes how you're looking, this one changes what you're looking at, and the names are the
-   maker's own words so they need room to breathe rather than a pill each. */
+/* ---- session picker: which run you're editing ----
+   Only rendered with two or more live sessions. Sits at the right of the tab row; quieter than the
+   tabs beside it — those are always there, this appears only when there's a choice to make. */
 .sessionRow {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-bottom: 10px;
+  gap: 8px;
+  min-width: 0;
+  flex-shrink: 1;
 }
+/* The tabs are three fixed words and always fit; the session name is the maker's own and arbitrarily
+   long, so it's the one that gives ground. */
+.tabs {
+  flex-shrink: 0;
+}
+/* The editor column is 420px and the tabs take 240 of it. Spending 60 more on the word "SESSION"
+   truncated the actual session name to "Friday…", which defeats the control — you pick a session by
+   reading its name. So the word goes and the name gets the room: visually hidden, still read out by
+   screen readers, and the select's own title says what it does on hover. */
 .sessionLabel {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-3);
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
 }
 /* A select, not a row of pills: session names are the maker's own ("Friday run", "Saturday run"),
    so the row grew with every one of them and wrapped onto a second line once a few were live. */
 .sessionSelect {
-  flex: 1;
   min-width: 0;
-  max-width: 260px;
+  flex-shrink: 1;
+  max-width: 170px;
   height: 34px;
+  text-overflow: ellipsis;
   padding: 0 10px;
   border: 1px solid var(--line-strong);
   border-radius: var(--r-2);

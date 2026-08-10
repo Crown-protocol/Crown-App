@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { safeId } from "@/lib/id";
 import { createPortal } from "react-dom";
 import QRCode from "qrcode";
@@ -16,6 +16,7 @@ import {
   SOCIAL_BRAND,
 } from "@/components/icons";
 import { LivePreview } from "@/components/LivePreview";
+import { postPreviewPatch, PREVIEW_MSG, type PreviewPatch } from "@/lib/data/previewOverlay";
 import { DesignTab } from "@/components/DesignTab";
 import { SOCIAL_EXAMPLE, isSocialValid } from "@/lib/data/social-links";
 import { activeSessions, getCurrentSession, pullSessions, type GameSession } from "@/lib/data/gameSessions";
@@ -110,6 +111,10 @@ export function GamePageEditor({
 
   const [origin, setOrigin] = useState("");
   useEffect(() => setOrigin(window.location.origin), []);
+
+  // Show unconfirmed edits in the preview frame — and ONLY there. Nothing is written until Confirm,
+  // so the real page keeps showing the last confirmed version while you're still writing this one.
+  const frameRef = useRef<HTMLIFrameElement | null>(null);
   // The confirm bar is portalled to <body> (below), so `position: fixed` centres on the viewport and
   // isn't captured by a transformed ancestor. Only mount the portal client-side.
   const [mounted, setMounted] = useState(false);
@@ -162,6 +167,34 @@ export function GamePageEditor({
   function stage(next: Partial<GameEditorDraft>) {
     setPendingDraft((p) => ({ ...(p ?? {}), ...next }));
   }
+
+  // Fundraiser stores its headline as `pledge`; the editor speaks `headline` for all four. Send the
+  // draft under the name the page actually reads, or the preview would ignore it.
+  const gameKey: PreviewPatch["gameKey"] =
+    config.slug === "task" ? "taskPage" : (config.slug as "roulette" | "fundraiser" | "auction");
+  const previewDraft: Record<string, unknown> | null = pendingDraft
+    ? config.slug === "fundraiser"
+      ? (({ headline, ...rest }) => ({ ...rest, ...(headline !== undefined ? { pledge: headline } : {}) }))(pendingDraft)
+      : { ...pendingDraft }
+    : null;
+
+  // Push staged edits into the preview whenever they change. Serialised for the dependency list so
+  // this fires on the actual content changing, not on every keystroke re-creating the object.
+  const patchJson = JSON.stringify({ d: previewDraft, s: pendingSocials });
+  useEffect(() => {
+    const { d, s } = JSON.parse(patchJson) as { d: Record<string, unknown> | null; s: Social[] | null };
+    const patch = d || s ? { handle: profile.handle, gameKey, draft: d ?? {}, ...(s ? { socials: s } : {}) } : null;
+    const send = () => postPreviewPatch(frameRef.current, patch);
+    send();
+    // The iframe may still have been loading when we sent that — it announces itself when ready,
+    // and we answer with the current patch so the first paint already carries the staged edits.
+    const onReady = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return;
+      if ((e.data as { type?: string } | null)?.type === `${PREVIEW_MSG}:ready`) send();
+    };
+    window.addEventListener("message", onReady);
+    return () => window.removeEventListener("message", onReady);
+  }, [patchJson, profile.handle, gameKey]);
 
   const payForm = shown.widgets.find((w) => w.kind === "donate");
   const socials = shown.widgets.find((w) => w.kind === "socials");
@@ -243,19 +276,49 @@ export function GamePageEditor({
     <div className={styles.wrap}>
       <div className={styles.builder}>
         <div className={styles.editor}>
-          <div className={styles.tabs} role="tablist" aria-label={`${config.title} builder`}>
-            {TABS.map((t) => (
-              <button
-                key={t.key}
-                type="button"
-                role="tab"
-                aria-selected={tab === t.key}
-                className={tab === t.key ? styles.tabOn : ""}
-                onClick={() => setTab(t.key)}
-              >
-                {t.label}
-              </button>
-            ))}
+          {/* Tabs and session sit on one row because they answer two halves of the same question:
+              WHICH session you're editing, and WHICH part of it. The session used to live over the
+              preview, where it read as a preview control — but it decides what every tab here edits
+              and where the link below points, so it belongs with the tabs it governs.
+
+              A select rather than a row of chips: sessions are named by the maker ("Friday run"),
+              so a chip row grew as wide as those names and wrapped once a few were running. */}
+          <div className={styles.tabsRow}>
+            <div className={styles.tabs} role="tablist" aria-label={`${config.title} builder`}>
+              {TABS.map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === t.key}
+                  className={tab === t.key ? styles.tabOn : ""}
+                  onClick={() => setTab(t.key)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            {sessions.length > 1 && (
+              <div className={styles.sessionRow}>
+                <label className={styles.sessionLabel} htmlFor="preview-session">
+                  Session
+                </label>
+                <select
+                  id="preview-session"
+                  className={styles.sessionSelect}
+                  value={sessionId ?? ""}
+                  onChange={(e) => setSessionId(e.target.value)}
+                  title="Which session you're editing — it sets the preview and the link below"
+                >
+                  {sessions.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           {tab === "page" && (
@@ -520,33 +583,6 @@ export function GamePageEditor({
         </div>
 
         <div className={styles.previewCol}>
-          {/* Which session, then how it's displayed. The session decides WHAT the preview and the
-              link below point at — a different board and a different URL — while phone/desktop only
-              changes how the same page is drawn. The bigger choice reads first.
-
-              A select rather than a row of tabs: sessions are named by the maker ("Friday run"), so
-              the row grew as wide as those names and wrapped once a few were running. */}
-          {sessions.length > 1 && (
-            <div className={styles.sessionRow}>
-              <label className={styles.sessionLabel} htmlFor="preview-session">
-                Session
-              </label>
-              <select
-                id="preview-session"
-                className={styles.sessionSelect}
-                value={sessionId ?? ""}
-                onChange={(e) => setSessionId(e.target.value)}
-                title="Which session the preview and the link below are for"
-              >
-                {sessions.map((x) => (
-                  <option key={x.id} value={x.id}>
-                    {x.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
           <div className={styles.deviceSeg} role="group" aria-label="Preview device">
             <button type="button" className={device === "phone" ? styles.deviceOn : ""} onClick={() => setDevice("phone")}>
               <PhoneIcon /> Phone
@@ -555,7 +591,7 @@ export function GamePageEditor({
               <DesktopIcon /> Desktop
             </button>
           </div>
-          <LivePreview src={path} device={device} />
+          <LivePreview src={path} device={device} frameRef={frameRef} />
 
           <div className={styles.linkRow}>
             <div className={styles.linkLabel}>{config.linkLabel}</div>

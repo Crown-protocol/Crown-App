@@ -129,6 +129,15 @@ export default function DiscoverPage() {
     return counts;
   }, [dbRows, demoData]);
 
+  // A platform nobody here is on is a dead row: it can only ever filter the grid down to nothing.
+  // Hide it. A platform that's currently SELECTED stays listed even at zero — the counts move as the
+  // catalog changes, and dropping an active filter's own row would strand it with no way to switch
+  // it off (the Clear button only appears alongside it).
+  const shownPlatforms = useMemo(
+    () => SOCIAL_KINDS.filter((k) => platformCounts[k] > 0 || platforms.includes(k)),
+    [platformCounts, platforms]
+  );
+
   return (
     <main className={styles.wrap}>
       <TopNav active="discover" />
@@ -155,6 +164,9 @@ export default function DiscoverPage() {
               </div>
             </div>
 
+            {/* On an empty catalog every count is zero, which would leave the heading standing over
+                nothing. Drop the whole group rather than show an empty filter. */}
+            {shownPlatforms.length > 0 && (
             <div className={styles.filterGroup}>
               <div className={styles.filterHead}>
                 <span className={styles.filterLabel}>Platforms</span>
@@ -169,7 +181,7 @@ export default function DiscoverPage() {
                 )}
               </div>
               <div className={styles.platformList}>
-                {SOCIAL_KINDS.map((kind) => (
+                {shownPlatforms.map((kind) => (
                   <button
                     key={kind}
                     type="button"
@@ -184,6 +196,7 @@ export default function DiscoverPage() {
                 ))}
               </div>
             </div>
+            )}
           </aside>
 
           <div className={`${styles.grid} ${styles[anim]}`}>

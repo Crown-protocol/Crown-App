@@ -15,10 +15,20 @@ import styles from "./LivePreview.module.css";
 // no content is ever cut off at the bottom.
 const LOGICAL_WIDTH = { phone: 390, desktop: 1280 } as const;
 
-export function LivePreview({ src, device }: { src: string; device: "phone" | "desktop" }) {
+export function LivePreview({
+  src,
+  device,
+  frameRef,
+}: {
+  src: string;
+  device: "phone" | "desktop";
+  // Lets the builder reach the iframe to post its unconfirmed edits in (previewOverlay.ts).
+  frameRef?: React.MutableRefObject<HTMLIFrameElement | null>;
+}) {
   const isDesktop = device === "desktop";
   const screenRef = useRef<HTMLDivElement>(null);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  // Nullable so the callback ref below can assign it — `useRef<T>(null)` is a read-only RefObject.
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const roRef = useRef<ResizeObserver | null>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   const [contentH, setContentH] = useState(0);
@@ -96,7 +106,10 @@ export function LivePreview({ src, device }: { src: string; device: "phone" | "d
         {scale > 0 && (
           <div className={styles.scaler} style={{ height: scaledH, width: logicalW * scale }}>
             <iframe
-              ref={iframeRef}
+              ref={(el) => {
+                iframeRef.current = el;
+                if (frameRef) frameRef.current = el;
+              }}
               onLoad={onLoad}
               title="Live page preview"
               src={src}

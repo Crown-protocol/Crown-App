@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useProfile } from "./ProfileProvider";
 import { MOCK_STREAMERS } from "./mock";
+import { usePreviewPatch, applyPreviewPatch } from "./previewOverlay";
 import type { Profile } from "./types";
 
 // Resolve the FULL profile behind a public game page (/@handle/task|roulette|fundraiser|auction)
@@ -70,5 +71,10 @@ export function usePublicProfile(handle: string): { profile: Profile | null; sta
     };
   }, [ready, key, local]);
 
-  return { profile: resolved, status };
+  // Inside the builder's preview frame, paint the edits being typed on top of what we resolved —
+  // see previewOverlay.ts. Every ordinary visitor gets `patch === null` and the profile untouched.
+  const patch = usePreviewPatch(key);
+  const shown = useMemo(() => applyPreviewPatch(resolved, patch), [resolved, patch]);
+
+  return { profile: shown, status };
 }
