@@ -5,6 +5,7 @@ import QRCode from "qrcode";
 import { Mono } from "@/components/Mono";
 import { CheerMark } from "@/components/icons";
 import { useDonationStream } from "@/lib/data/useDonationStream";
+import { usd } from "@/lib/money";
 import { useCountUp, useChangeNonce } from "@/components/overlays/fx";
 import type { DonationEvent } from "@/lib/data/donationStream";
 import styles from "./Extras.module.css";
@@ -107,7 +108,7 @@ export function TickerOverlay({ handle, demo }: Common) {
             }
           >
             <span className={styles.tickerName}>{e.from}</span>
-            <span className={`${styles.tickerAmt} num`}>${e.amount}</span>
+            <span className={`${styles.tickerAmt} num`}>{usd(e.amount)}</span>
           </span>
           {/* trailing dot on every entry so the loop seam is spaced exactly like the interior */}
           <span className={styles.tickerDot} />
@@ -176,7 +177,7 @@ export function QrOverlay({ handle, demo }: Common) {
         <div className={styles.qrMicroSlot}>
           {last && (
             <div key={last.ts} className={styles.qrMicro}>
-              {last.from} just gave <b className="num">${last.amount}</b>
+              {last.from} just gave <b className="num">{usd(last.amount)}</b>
             </div>
           )}
         </div>
@@ -475,7 +476,7 @@ export function TrainOverlay({ handle, demo }: Common) {
               ×{train.count}
             </span>
           </div>
-          <div className={`${styles.trainTotal} num`}>${train.total}</div>
+          <div className={`${styles.trainTotal} num`}>{usd(train.total)}</div>
           <div className={styles.trainFuse}>
             {/* keyed by lastTs: every donation remounts the fill → refill to 100% + fresh drain */}
             <span key={train.lastTs} className={styles.trainFuseFill} style={{ animationDuration: `${windowMs}ms` }} />

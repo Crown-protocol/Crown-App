@@ -28,7 +28,6 @@ const KIND_LABEL: Record<string, string> = {
   task: "Set a task",
   roulette: "Game roulette",
   fundraiser: "Fundraiser",
-  auction: "Auction",
 };
 
 const ACCENT = "#8B7CF6";

@@ -3,7 +3,7 @@
 //
 // Why the same shapes get a second home: `profile.<game>Config` is the maker's STANDING default
 // (Settings → the game's rules), and a session is one run of the game that may differ from it —
-// two auctions in parallel with different opening prices, a 10-minute wheel spun while
+// two task queues in parallel with different floors, a 10-minute wheel spun while
 // yesterday's hour-long one is still settling. So a session SNAPSHOTS its rules at birth:
 // changing your defaults later must never move the goalposts under money already in escrow.
 //
@@ -15,11 +15,10 @@
 import { withFundraiserDefaults, DEFAULT_FUNDRAISER } from "./fundraiser";
 import { sendOp } from "./gameSync";
 import type { GameId } from "./games";
-import type { AuctionConfig, FundraiserConfig, Profile, RouletteConfig, TaskGameConfig } from "./types";
+import type { FundraiserConfig, Profile, RouletteConfig, TaskGameConfig } from "./types";
 import { DEFAULT_TASK_CONFIG } from "@/components/TaskGameSettings";
 import { DEFAULT_ROULETTE_CONFIG } from "@/components/RouletteGameSettings";
 import { DEFAULT_FUNDRAISER_CONFIG } from "@/components/FundraiserGameSettings";
-import { DEFAULT_AUCTION_CONFIG } from "@/components/AuctionGameSettings";
 
 // The fundraiser is the one game whose target belongs to the RUN, not to the standing rules:
 // every collection is opened for its own amount ("$300 for the new mic"), and it's what the
@@ -32,7 +31,6 @@ export interface ScopeRules {
   task?: TaskGameConfig;
   roulette?: RouletteConfig;
   fundraiser?: FundraiserSessionRules;
-  auction?: AuctionConfig;
 }
 
 export const RULES_KEY = "cheer-game-config";
@@ -100,6 +98,3 @@ export function fundraiserRules(profile: Profile | null | undefined, scope: stri
   };
 }
 
-export function auctionRules(profile: Profile | null | undefined, scope: string | null): AuctionConfig {
-  return { ...DEFAULT_AUCTION_CONFIG, ...profile?.auctionConfig, ...(scope ? readScopeRules(scope).auction : undefined) };
-}

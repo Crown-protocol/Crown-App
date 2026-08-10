@@ -5,7 +5,6 @@ import { GameIcon } from "@/components/icons";
 import { readRound, readRoundMeta } from "@/lib/data/roulette";
 import { readStatus, raisedTotal, withFundraiserDefaults } from "@/lib/data/fundraiser";
 import { readTasks } from "@/lib/data/tasks";
-import { readLots, readAuctionMeta, auctionTotals, lotSum } from "@/lib/data/auction";
 import { firstActiveScope } from "@/lib/data/gameSessions";
 import { pullScope } from "@/lib/data/gameSync";
 import type { GameId } from "@/lib/data/games";
@@ -17,7 +16,6 @@ interface Live {
   roulette: { pot: number; count: number } | null;
   fundraiser: { pledge: string; goal: number; raised: number; state: string } | null;
   tasks: { active: number; pending: number; texts: string[] } | null;
-  auction: { state: string; top: number; pending: number; lots: number; topText: string } | null;
 }
 
 // The games that are running right now, surfaced on Home so the streamer sees them without
@@ -33,7 +31,6 @@ export function HomeLive({ profile, onOpen }: { profile: Profile; onOpen: (g: Ga
     const rlScope = firstActiveScope(handle, "roulette");
     const frScope = firstActiveScope(handle, "fundraiser");
     const tkScope = firstActiveScope(handle, "task");
-    const auScope = firstActiveScope(handle, "auction");
 
     const load = () => {
       const round = readRound(rlScope);
@@ -58,21 +55,14 @@ export function HomeLive({ profile, onOpen }: { profile: Profile; onOpen: (g: Ga
           }
         : null;
 
-      const am = readAuctionMeta(auScope);
-      const at = auctionTotals(readLots(auScope));
-      const auction =
-        am && am.state !== "settled" && am.state !== "refunded" && am.state !== "cancelled" && (at.accepted > 0 || at.pending > 0)
-          ? { state: am.state, top: at.top ? lotSum(at.top) : 0, pending: at.pending, lots: at.accepted, topText: at.top?.text ?? "" }
-          : null;
-
-      setLive({ roulette, fundraiser, tasks, auction });
+      setLive({ roulette, fundraiser, tasks });
     };
 
     // The dashboard is where the streamer LANDS — pull the shared game state so viewers' tasks,
     // backings and bids from other browsers show here too, not only after opening a game tab.
     load();
     let dead = false;
-    const scopes = [...new Set([rlScope, frScope, tkScope, auScope])];
+    const scopes = [...new Set([rlScope, frScope, tkScope])];
     const sync = () => Promise.all(scopes.map((s) => pullScope(s))).then(() => !dead && load());
     void sync();
     const t = setInterval(() => void sync(), 5000);
@@ -86,13 +76,13 @@ export function HomeLive({ profile, onOpen }: { profile: Profile; onOpen: (g: Ga
 
   // Nothing running: keep the section, say so plainly, and point at the next step. An empty screen
   // with no explanation is indistinguishable from a broken one.
-  if (!live.roulette && !live.fundraiser && !live.tasks && !live.auction) {
+  if (!live.roulette && !live.fundraiser && !live.tasks) {
     return (
       <section>
         <div className={styles.head}>Live now</div>
         <div className={styles.empty}>
           <div className={styles.emptyIcons} aria-hidden>
-            {(["roulette", "task", "fundraiser", "auction"] as GameId[]).map((id) => (
+            {(["roulette", "task", "fundraiser"] as GameId[]).map((id) => (
               <span className={styles.emptyIcon} key={id}>
                 <GameIcon id={id} width={18} height={18} />
               </span>
@@ -179,36 +169,6 @@ export function HomeLive({ profile, onOpen }: { profile: Profile; onOpen: (g: Ga
             <div className={styles.spacer} />
             <button type="button" className="btn-outline" style={{ alignSelf: "flex-start" }} onClick={() => onOpen("task")}>
               Manage tasks
-            </button>
-          </div>
-        )}
-        {live.auction && (
-          <div className={styles.card}>
-            <div className={styles.cardHead}>
-              <GameIcon id="auction" width={18} height={18} />
-              <span className={styles.cardTitle}>Auction</span>
-              <span className={`pill ${live.auction.pending ? "attn" : "ok"}`} style={{ marginLeft: "auto" }}>
-                <span className="dot" />
-                {live.auction.state === "bidding"
-                  ? live.auction.pending
-                    ? `${live.auction.pending} to review`
-                    : "Bidding"
-                  : live.auction.state === "performing"
-                    ? "Deliver it"
-                    : "Voting"}
-              </span>
-            </div>
-            <div className={styles.stat}>
-              <b className="num">{usd(live.auction.top)}</b> leading lot · {live.auction.lots} in play
-            </div>
-            {live.auction.topText && (
-              <div className={styles.tlist}>
-                <div className={styles.titem}>{live.auction.topText}</div>
-              </div>
-            )}
-            <div className={styles.spacer} />
-            <button type="button" className="btn-outline" style={{ alignSelf: "flex-start" }} onClick={() => onOpen("auction")}>
-              Manage auction
             </button>
           </div>
         )}

@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
 import { getProfile } from "@/lib/server/store";
-import { MOCK_STREAMERS } from "@/lib/data/mock";
 
 // Everything the public share cards need to know about a content maker, resolved server-side so
 // generateMetadata (and the OG image route) can run before any client JS. Built-in demo streamers
-// live in code (MOCK_STREAMERS); real pages live in the DB — check both, DB first.
-export type MetaKind = "page" | "task" | "roulette" | "fundraiser" | "auction";
+// Pages live in the DB; a handle with no row there is a handle that does not exist.
+export type MetaKind = "page" | "task" | "roulette" | "fundraiser";
 
 export interface PublicMaker {
   handle: string;
@@ -16,7 +15,7 @@ export interface PublicMaker {
 export async function resolveMaker(handleRaw: string): Promise<PublicMaker | null> {
   const handle = decodeURIComponent(handleRaw).replace(/^@/, "").toLowerCase();
   const db = await getProfile(handle).catch(() => null);
-  const m = db ?? MOCK_STREAMERS[handle];
+  const m = db;
   if (!m) return null;
   // Owner can hide the avatar; honour that in the share card too.
   const avatarUrl = m.avatarEnabled === false ? undefined : m.avatarUrl;
@@ -28,7 +27,6 @@ const KIND_TITLE: Record<MetaKind, string> = {
   task: "Set a task",
   roulette: "Game roulette",
   fundraiser: "Fundraiser",
-  auction: "Auction",
 };
 
 // Since profile bios are gone, this generated line IS the share description — one sentence per surface.
@@ -37,7 +35,6 @@ const KIND_DESC: Record<MetaKind, (n: string) => string> = {
   task: (n) => `Set ${n} a paid task on Cheer. They do it, or you're refunded automatically.`,
   roulette: (n) => `Back what ${n} plays next — donate toward a pick and the wheel decides. On Cheer.`,
   fundraiser: (n) => `Chip in to ${n}'s goal on Cheer — refunded in full if it isn't delivered.`,
-  auction: (n) => `Bid for ${n}'s time on Cheer — outbid the board; the winner pays only once it's delivered.`,
 };
 
 // One page's worth of share metadata: title, the generated description, canonical URL, and the

@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useCheer } from "./DataProvider";
-import { MOCK_STREAMERS } from "./mock";
 import { tierInfo } from "@/lib/level";
 import type { Profile, Streamer, Tier } from "./types";
 
@@ -43,9 +42,6 @@ export function useMyReputation(): MyReputation {
     let dead = false;
     void (async () => {
       const base: Record<string, Omit<MyMaker, "rep" | "current" | "next" | "pct">> = {};
-      for (const s of Object.values(MOCK_STREAMERS) as Streamer[]) {
-        base[s.handle.toLowerCase()] = { handle: s.handle, name: s.name, avatarUrl: s.avatarUrl, avatarEnabled: s.avatarEnabled, tiers: s.tiers };
-      }
       try {
         // ?avatars=1 — the reputation page shows each maker's face beside their ladder.
         const r = await fetch("/api/profiles?avatars=1");

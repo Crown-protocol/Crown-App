@@ -66,7 +66,52 @@ export function addCollected(handle: string, amount: number): number {
   return next;
 }
 
-// ---- campaign state + backers (mock) ----
+// ---- contributions: the escrows this collection is actually made of ----
+//
+// A collection is N escrows, one per chip-in, and settling it means claiming
+// every one of them. The running total above cannot do that: it is a number, and
+// a claim needs an address, a donor and the exact birth fields the escrow was
+// derived from. So each contribution is recorded here as it is born.
+//
+// Shared like the task queue is, and for the same reason: the person who settles
+// (or refunds) is the creator, in a different browser from every donor.
+
+export interface Contribution {
+  id: string; // the escrow address — unique by construction
+  escrow: string;
+  donor: string;
+  amount: number; // dollars, for the UI
+  when: string;
+  // Unix seconds. Past it this contribution refunds to its donor with no verdict
+  // and no signature — the escape hatch a silent resolver leaves intact.
+  deadline?: number;
+}
+
+const CONTRIB_KEY = "cheer-fundraiser-contributions";
+
+export function readContributions(handle: string): Contribution[] {
+  try {
+    const raw = localStorage.getItem(`${CONTRIB_KEY}:${handle}`);
+    const list = raw ? JSON.parse(raw) : [];
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+export function addContribution(handle: string, c: Omit<Contribution, "id" | "when">): Contribution[] {
+  const item: Contribution = { ...c, id: c.escrow, when: "just now" };
+  const next = [item, ...readContributions(handle).filter((x) => x.id !== item.id)];
+  try {
+    localStorage.setItem(`${CONTRIB_KEY}:${handle}`, JSON.stringify(next));
+  } catch {}
+  // `append` dedups by id, and the id IS the escrow address — two browsers
+  // recording the same contribution converge instead of double-counting it.
+  sendOp(handle, CONTRIB_KEY, { type: "append", item: item as unknown as { id: string } & Record<string, unknown> });
+  return next;
+}
+
+// ---- campaign state + backers ----
 // The public page only tracks a running total (readCollected); the cabinet's Overview also needs
 // individual backers to show, and where the campaign is in its lifecycle. Both are mocked here —
 // the real ones come from the escrow set + its verdict later.
@@ -87,28 +132,26 @@ export interface Backer {
 
 // Seed backers — sums to $720, so against the default $1,000 goal the campaign sits ~72%:
 // past a 50% accept threshold, short of the full goal. A good state to demo the Accept decision.
-export const MOCK_BACKERS: Backer[] = [
-  { name: "Timur", amount: 250, when: "2h ago" },
-  { name: "anna_k", amount: 100, when: "5h ago" },
-  { name: "Max", amount: 200, when: "Yesterday" },
-  { name: "lena", amount: 90, when: "Yesterday" },
-  { name: "Dan", amount: 80, when: "2 days ago" },
-];
 
-const MOCK_BACKERS_TOTAL = MOCK_BACKERS.reduce((sum, b) => sum + b.amount, 0);
-
-// Raised = the seeded backers plus any real chip-ins made on the public page while testing.
+// Raised = what has actually been chipped in on this collection.
 export function raisedTotal(handle: string): number {
-  // A fresh session starts at zero — the seeded backers belong to the first scope only.
-  return (isFreshScope(handle) ? 0 : MOCK_BACKERS_TOTAL) + readCollected(handle);
+  return readCollected(handle);
 }
 
-// Backers list that adds up to raisedTotal: the seed, plus a single row for test chip-ins.
+// Backers list that adds up to raisedTotal — one row per contribution actually
+// recorded on this collection. On-chain contributions carry their donor wallet;
+// anything collected before the chain path was live shows as one summary row so
+// the list still adds up to the total on screen.
 export function readBackers(handle: string): Backer[] {
-  const list = isFreshScope(handle) ? [] : MOCK_BACKERS.map((b) => ({ ...b }));
-  const collected = readCollected(handle);
-  if (collected > 0) list.unshift({ name: "Your test chip-ins", amount: collected, when: "just now" });
-  return list;
+  const contributions = readContributions(handle);
+  const named = contributions.map((c) => ({
+    name: `${c.donor.slice(0, 4)}…${c.donor.slice(-4)}`,
+    amount: c.amount,
+    when: c.when,
+  }));
+  const accounted = contributions.reduce((sum, c) => sum + c.amount, 0);
+  const rest = readCollected(handle) - accounted;
+  return rest > 0.005 ? [...named, { name: "Chipped in", amount: rest, when: "" }] : named;
 }
 
 const STATUS_KEY = "cheer-fundraiser-status";

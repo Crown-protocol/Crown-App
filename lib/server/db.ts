@@ -141,7 +141,7 @@ const MIGRATIONS: string[][] = [
   [`ALTER TABLE profiles ADD COLUMN owner TEXT NOT NULL DEFAULT ''`],
   // v3 — shared game state: the server copy of the per-scope keys the mini-games
   // used to keep only in each browser's localStorage (task queue, roulette round,
-  // auction lots, fundraiser total). One row per (scope, k); v is the same JSON
+  // task queue, fundraiser total). One row per (scope, k); v is the same JSON
   // the client stores locally, so the sync layer adopts it verbatim.
   [
     `CREATE TABLE IF NOT EXISTS game_state (
@@ -211,6 +211,53 @@ const MIGRATIONS: string[][] = [
       expires_at INTEGER NOT NULL
     )`,
     `CREATE INDEX IF NOT EXISTS idx_consumed_expires ON consumed_sigs(expires_at)`,
+  ],
+  // v7 — the submitter's ledger of paid ingests (`crown-spec/docs/07-build-plan.md
+  // §Контракт подающего впись`). One row per Solana signature we have paid, or
+  // tried to pay, the index to fold.
+  //
+  // It exists for one reason: the index deliberately keeps NO attempt budget (a
+  // self-limit there would let anyone poison someone else's signature), so the
+  // only thing that can stop us paying for a read that will never succeed is our
+  // own count — and a count that lives in memory resets on every deploy, which
+  // is the same as not having one. `attempts` is that ceiling; `status` is why we
+  // stopped.
+  [
+    `CREATE TABLE IF NOT EXISTS ingest_jobs (
+      signature TEXT PRIMARY KEY,
+      kind TEXT NOT NULL,
+      escrow TEXT,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'pending',
+      last_result TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_ingest_status ON ingest_jobs(status, updated_at)`,
+  ],
+  // v8 — a recipient's signed `create` for a collection, held until it can be
+  // spent. conditional-funding creates lazily: `create_collection` is signed by
+  // the RECIPIENT but demands the birth proof of the FIRST contribution, which
+  // only exists once a donor has funded one. Without somewhere to keep the
+  // signed message in between, opening a collection would mean asking the
+  // recipient to be present at the moment a stranger chips in.
+  //
+  // The row holds only what the recipient already signed in public plus the
+  // fields the id commits — no secret, and it authorizes exactly one message.
+  [
+    `CREATE TABLE IF NOT EXISTS collection_intents (
+      collection_hex TEXT PRIMARY KEY,
+      recipient TEXT NOT NULL,
+      recipient_nonce TEXT NOT NULL,
+      duration INTEGER NOT NULL,
+      goal TEXT NOT NULL,
+      signed_message TEXT NOT NULL,
+      pubkey TEXT NOT NULL,
+      signature TEXT NOT NULL,
+      materialized_at INTEGER,
+      created_at INTEGER NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_collection_recipient ON collection_intents(recipient)`,
   ],
 ];
 

@@ -7,7 +7,7 @@ import { useSolanaWallet } from "@/lib/chain/wallet";
 import { useProfile } from "@/lib/data/ProfileProvider";
 import { useCheer } from "@/lib/data/DataProvider";
 import { SpaceGate } from "@/components/SpaceGate";
-import { isDemoAddress, isOwnerAddress, readDemoSession, startDemoSession, endDemoSession, OWNER_ADDRESS } from "@/lib/data/session";
+import { isOwnerAddress, OWNER_ADDRESS } from "@/lib/data/session";
 import { lookupAccountByOwner } from "@/lib/data/lookupAccount";
 import { proveOwnership, clearProof, hasProof } from "@/lib/data/proveOwnership";
 import { Logo } from "@/components/Logo";
@@ -25,14 +25,12 @@ import { FundraiserPanel } from "@/components/FundraiserPanel";
 import { FundraiserOverview } from "@/components/FundraiserOverview";
 import { RoulettePanel } from "@/components/RoulettePanel";
 import { RouletteOverview } from "@/components/RouletteOverview";
-import { AuctionPanel } from "@/components/AuctionPanel";
-import { AuctionOverview } from "@/components/AuctionOverview";
 import { GameSessions, SessionBar } from "@/components/GameSessions";
 import { getCurrentSession, activeSessions, pullSessions, readSessions } from "@/lib/data/gameSessions";
 import { pullScope } from "@/lib/data/gameSync";
 import { NavIcon, GameIcon, ChevronDown } from "@/components/icons";
 import { usd } from "@/lib/money";
-import { MOCK_DASHBOARD, type DashboardPeriodKey } from "@/lib/data/mock";
+import type { DashboardPeriodKey } from "@/lib/data/dashboard";
 import { buildDashboard } from "@/lib/data/dashboard";
 import { GAMES, type GameId } from "@/lib/data/games";
 
@@ -59,23 +57,20 @@ const GAME_TABS: Record<GameId, { key: GameTab; label: string }[]> = {
   task: GAME_SUBTABS,
   roulette: GAME_SUBTABS,
   fundraiser: GAME_SUBTABS,
-  auction: GAME_SUBTABS,
 };
 
 export default function SpacePage() {
   const router = useRouter();
   const { address, connected: isConnected, disconnect, signMessage } = useSolanaWallet();
-  const { mode, feed, demoData } = useCheer();
+  const { feed } = useCheer();
   const { ready, registered, profile, hasSession, sessionChecked, markSession, saveDeferred, hydrate, signOut, reset } = useProfile();
   const [section, setSection] = useState<Section>("home");
   const [period, setPeriod] = useState<DashboardPeriodKey>("30");
 
   // Signing in: the wallet is the login, with an explicit demo way in (see lib/data/session).
   // Read after mount — localStorage doesn't exist during SSR.
-  const [demoSession, setDemoSession] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
   useEffect(() => {
-    setDemoSession(readDemoSession());
     setSessionReady(true);
   }, []);
 
@@ -230,19 +225,10 @@ export default function SpacePage() {
     if (isConnected && address) {
       return <main className="page" />;
     }
-    // Demo way in but no page exists — there's nothing to show a space for; go make one.
-    if (demoSession) {
-      router.replace("/create");
-      return <main className="page" />;
-    }
     // Cold open, no wallet: ask for it. Connecting then routes via the same owner lookup (the probe),
     // so an existing account logs in and a new wallet lands on /create.
     return (
-      <SpaceGate
-        pageAddress=""
-        allowDemo={mode === "mock"}
-        onDemoEnter={() => router.replace("/create")}
-      />
+      <SpaceGate pageAddress="" />
     );
   }
 
@@ -272,7 +258,7 @@ export default function SpacePage() {
   // at all". On a shared browser hasAnyProof() let whoever signed in last walk into a cabinet cached
   // from someone else's session; the server refused every save, but the page had already been read.
   const proven = isConnected && !!address ? hasProof(address) : !!profile.address && hasProof(profile.address);
-  const signedIn = hasSession || proven || demoSession;
+  const signedIn = hasSession || proven;
   if (!signedIn) {
     // Either nothing is connected (cold open on a device that holds a profile), or a wallet IS
     // connected but hasn't proved it owns this account — the probe above is asking it to sign, and if
@@ -281,24 +267,19 @@ export default function SpacePage() {
       <SpaceGate
         pageAddress={profile.address}
         connectedAddress={isConnected && address ? address : undefined}
-        allowDemo={isDemoAddress(profile.address) || mode === "mock"}
         onRetry={() => setSignRetry((n) => n + 1)}
-        onDemoEnter={() => {
-          startDemoSession();
-          setDemoSession(true);
-        }}
       />
     );
   }
 
-  // Real numbers by default (built from this page's own donations). Demo numbers are opt-in via the
-  // admin panel — when on, we hand the tiles/chart the MOCK_DASHBOARD sample AND flag it visually
-  // (red tint + "demo" tooltip) so an invented $1,284 can never be mistaken for real money.
-  const d = demoData ? MOCK_DASHBOARD[period] : buildDashboard(feed, period, profile.address);
+  // Built from this page's own donations, always. There is no sample dataset to
+  // switch to any more: a dashboard that can show an invented $1,284 is one that
+  // has to be flagged forever after, and the flag is easier to miss than to add.
+  const d = buildDashboard(feed, period, profile.address);
   // Has this page ever been donated to? Deliberately asked of ALL time, not the selected period —
   // keying it on `d.donations` would make the switcher vanish the moment someone picked a quiet week,
   // taking away the only control that could get them back.
-  const hasData = demoData || buildDashboard(feed, "all", profile.address).donations > 0;
+  const hasData = buildDashboard(feed, "all", profile.address).donations > 0;
   const game = GAMES.find((g) => g.id === gameId)!;
 
   // Which sub-tabs a game shows. With nothing running, "Page" and "Overview" have nothing to be
@@ -492,17 +473,17 @@ export default function SpacePage() {
                   anonymous ones sharing a name collapsed into one. Money received and how many times
                   are both exact and are what a maker actually opens this page for. */}
               <div className="tiles tiles-2">
-                <div className={`card tile${demoData ? " tile-demo" : ""}`} title={demoData ? "demo numbers" : undefined}>
+                <div className={`card tile`}>
                   <div className="v num">{usd(d.received)}</div>
                   <div className="k">received</div>
                 </div>
-                <div className={`card tile${demoData ? " tile-demo" : ""}`} title={demoData ? "demo numbers" : undefined}>
+                <div className={`card tile`}>
                   <div className="v num">{d.donations}</div>
                   <div className="k">donations</div>
                 </div>
               </div>
 
-              <div className={`card chart-card${demoData ? " chart-demo" : ""}`} title={demoData ? "demo numbers" : undefined}>
+              <div className={`card chart-card`}>
                 <DonationsChart d={d} periodLabel={period === "7" ? "7 days" : period === "30" ? "30 days" : "All time"} />
               </div>
 
@@ -578,14 +559,6 @@ export default function SpacePage() {
                   <FundraiserPanel profile={profile} onSave={saveDeferred} />
                 </>
               )}
-              {game.id === "auction" && (
-                <>
-                  <p className="hint" style={{ marginBottom: 8 }}>
-                    Build the auction page, then share the link or QR — viewers open it and bid their lots.
-                  </p>
-                  <AuctionPanel profile={profile} onSave={saveDeferred} />
-                </>
-              )}
             </>
           )}
 
@@ -641,8 +614,6 @@ export default function SpacePage() {
               {game.id === "fundraiser" && gameTab === "overview" && (liveSessions.length > 0 || currentSession) && <FundraiserOverview profile={profile} scope={gameScope} />}
 
               {game.id === "roulette" && gameTab === "overview" && (liveSessions.length > 0 || currentSession) && <RouletteOverview profile={profile} scope={gameScope} shareQuery={shareQuery} />}
-
-              {game.id === "auction" && gameTab === "overview" && (liveSessions.length > 0 || currentSession) && <AuctionOverview profile={profile} scope={gameScope} shareQuery={shareQuery} />}
             </>
           )}
 
@@ -671,8 +642,6 @@ export default function SpacePage() {
                   // the remembered wallet, otherwise the /space probe would re-hydrate on the next load.
                   clearProof(address);
                   disconnect();
-                  endDemoSession();
-                  setDemoSession(false);
                   router.push("/");
                   // Re-arm once the navigation is under way. Left stuck true, coming BACK to /space
                   // (back button / any in-app link, which reuses the cached route segment) rendered a
@@ -687,13 +656,11 @@ export default function SpacePage() {
                   // so after a reload Log out looked like it did nothing.
                   leavingRef.current = true;
                   // Forget this device: proof for THIS wallet (captured before disconnect nulls the
-                  // address), the wallet connection, the cached profile and any demo session. The page
+                  // address), the wallet connection and the cached profile. The page
                   // stays in the DB — but the next sign-in must connect AND sign again.
                   clearProof(address); // no address (wallet already gone) → clears every proof on this device
                   disconnect(); // also clears the remembered wallet, so no silent auto-reconnect
                   signOut(); // drop the local profile, so the next login runs the full flow (+ signature)
-                  endDemoSession();
-                  setDemoSession(false);
                   router.push("/");
                   setTimeout(() => { leavingRef.current = false; }, 1500);
                 }}

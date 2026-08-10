@@ -37,7 +37,6 @@ const OBS_SIZE: Record<string, [number, number]> = {
   roulette: [480, 300],
   task: [520, 220],
   fundraiser: [420, 160],
-  auction: [480, 300],
   ticker: [1920, 64],
   qr: [220, 220],
   session: [320, 80],

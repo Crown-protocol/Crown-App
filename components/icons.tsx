@@ -91,9 +91,6 @@ export function GameIcon({ id, ...props }: { id: GameId } & SVGProps<SVGSVGEleme
       return (<svg {...p}><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="3.2" /><path d="M12 3v3.8M12 17.2V21M3 12h3.8M17.2 12H21M5.64 5.64l2.68 2.68M15.68 15.68l2.68 2.68M18.36 5.64l-2.68 2.68M8.32 15.68l-2.68 2.68" /><circle cx="12" cy="12" r="0.9" fill="currentColor" stroke="none" /></svg>);
     case "fundraiser":
       return (<svg {...p}><path d="M6 21V4" /><path d="M6 4.5c2.2-1.4 4.3-1.4 6 0s3.8 1.4 6 0V13c-2.2 1.4-4.3 1.4-6 0s-3.8-1.4-6 0" /></svg>);
-    case "auction":
-      // gavel — the auctioneer's hammer
-      return (<svg {...p}><path d="m14 13-7.5 7.5a2.12 2.12 0 0 1-3-3L11 10" /><path d="m16 16 6-6" /><path d="m8 8 6-6" /><path d="m9 7 8 8" /><path d="m21 11-8-8" /></svg>);
   }
 }
 

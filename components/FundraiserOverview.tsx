@@ -11,12 +11,15 @@ import { fundraiserRules } from "@/lib/data/gameConfig";
 import {
   withFundraiserDefaults,
   readBackers,
+  readContributions,
   raisedTotal,
   readStatus,
   writeStatus,
   type Backer,
+  type Contribution,
   type FundraiserStatus,
 } from "@/lib/data/fundraiser";
+import { SettleCollectionPanel } from "@/components/games/SettlePanel";
 import type { Profile } from "@/lib/data/types";
 import { useConfirm } from "@/components/useConfirm";
 import { dangerCopy } from "@/lib/data/dangerous";
@@ -37,6 +40,7 @@ export function FundraiserOverview({ profile, scope }: { profile: Profile; scope
   const [raised, setRaised] = useState(0);
   const [backers, setBackers] = useState<Backer[]>([]);
   const [status, setStatus] = useState<FundraiserStatus>({ state: "collecting" });
+  const [contributions, setContributions] = useState<Contribution[]>([]);
 
   // Shared game state: viewers' chip-ins from other browsers land via the nonce dep.
   const syncNonce = useGameSync(handle);
@@ -44,6 +48,7 @@ export function FundraiserOverview({ profile, scope }: { profile: Profile; scope
     setRaised(raisedTotal(handle));
     setBackers(readBackers(handle));
     setStatus(readStatus(handle));
+    setContributions(readContributions(handle));
   }, [handle, syncNonce]);
 
   const goal = cfg.goal;
@@ -147,6 +152,14 @@ export function FundraiserOverview({ profile, scope }: { profile: Profile; scope
           </>
         )}
 
+        {/* Appears the moment the canister has a verdict, whatever the local
+            status says: the chain decided, and the money is claimable from here. */}
+        <SettleCollectionPanel
+          collection={status.chainCollection}
+          contributions={contributions}
+          recipient={profile.address}
+        />
+
         {status.state === "delivered" && (
           <>
             <span className="pill ok" style={{ alignSelf: "flex-start" }}>
@@ -155,7 +168,7 @@ export function FundraiserOverview({ profile, scope }: { profile: Profile; scope
             </span>
             <div className="footnote">Every backer earned reputation for exactly what they put in.</div>
             <button type="button" className="btn-outline" style={{ alignSelf: "flex-start" }} onClick={() => set({ state: "collecting" })}>
-              Reset demo
+              Start another collection
             </button>
           </>
         )}
@@ -168,7 +181,7 @@ export function FundraiserOverview({ profile, scope }: { profile: Profile; scope
             </span>
             <div className="footnote">Nobody earned reputation — the promise wasn&apos;t delivered.</div>
             <button type="button" className="btn-outline" style={{ alignSelf: "flex-start" }} onClick={() => set({ state: "collecting" })}>
-              Reset demo
+              Start another collection
             </button>
           </>
         )}

@@ -12,6 +12,7 @@ import {
   type NotifUrgency,
 } from "@/lib/data/notifications";
 import { useDonationStream } from "@/lib/data/useDonationStream";
+import { usd } from "@/lib/money";
 import styles from "./NotificationBell.module.css";
 
 function BellIcon({ ringing }: { ringing: boolean }) {
@@ -94,7 +95,7 @@ export function NotificationBell({ handle }: { handle?: string }) {
       id: `live-${e.ts}-${Math.random().toString(36).slice(2, 6)}`,
       kind: "donation",
       urgency: URGENCY_OF.donation,
-      title: `${e.from} donated $${e.amount}`,
+      title: `${e.from} donated ${usd(e.amount)}`,
       body: e.message ?? "",
       at: Date.now(),
       read: openRef.current,

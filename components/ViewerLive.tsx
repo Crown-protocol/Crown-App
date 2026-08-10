@@ -6,7 +6,6 @@ import { GameIcon } from "@/components/icons";
 import { readRound, readRoundMeta } from "@/lib/data/roulette";
 import { readStatus, raisedTotal, withFundraiserDefaults } from "@/lib/data/fundraiser";
 import { readTasks } from "@/lib/data/tasks";
-import { readLots, readAuctionMeta, leaderboard as auctionBoard, lotSum } from "@/lib/data/auction";
 import { firstActiveScope, pullSessions } from "@/lib/data/gameSessions";
 import { pullScope } from "@/lib/data/gameSync";
 import { usd } from "@/lib/money";
@@ -17,7 +16,6 @@ interface Live {
   roulette: { pot: number; count: number } | null;
   fundraiser: { pledge: string; goal: number; raised: number } | null;
   tasks: { active: number; pending: number; texts: string[] } | null;
-  auction: { top: number; topText: string; lots: number } | null;
 }
 
 // The viewer's side of "Live now": the games running on this stream right now, each with a way to
@@ -35,7 +33,6 @@ export function ViewerLive({ handle, name, profile }: { handle: string; name: st
     let rlScope = firstActiveScope(handle, "roulette");
     let frScope = firstActiveScope(handle, "fundraiser");
     let tkScope = firstActiveScope(handle, "task");
-    let auScope = firstActiveScope(handle, "auction");
 
     const load = () => {
       const round = readRound(rlScope);
@@ -52,12 +49,7 @@ export function ViewerLive({ handle, name, profile }: { handle: string; name: st
         ? { active: open.filter((t) => t.state === "active").length, pending: open.filter((t) => t.state === "pending").length, texts: open.slice(0, 3).map((t) => t.text) }
         : null;
 
-      const am = readAuctionMeta(auScope);
-      const ab = auctionBoard(readLots(auScope));
-      const auction =
-        am?.state === "bidding" && ab.length > 0 ? { top: lotSum(ab[0]), topText: ab[0].text, lots: ab.length } : null;
-
-      setLive({ roulette, fundraiser, tasks, auction });
+      setLive({ roulette, fundraiser, tasks });
     };
 
     // This widget renders in the VIEWER's browser, where localStorage starts empty — pull the
@@ -66,12 +58,11 @@ export function ViewerLive({ handle, name, profile }: { handle: string; name: st
     load();
     let dead = false;
     const sync = async () => {
-      await Promise.all((["roulette", "fundraiser", "task", "auction"] as const).map((g) => pullSessions(handle, g)));
+      await Promise.all((["roulette", "fundraiser", "task"] as const).map((g) => pullSessions(handle, g)));
       rlScope = firstActiveScope(handle, "roulette");
       frScope = firstActiveScope(handle, "fundraiser");
       tkScope = firstActiveScope(handle, "task");
-      auScope = firstActiveScope(handle, "auction");
-      await Promise.all([...new Set([rlScope, frScope, tkScope, auScope])].map((s) => pullScope(s)));
+      await Promise.all([...new Set([rlScope, frScope, tkScope])].map((s) => pullScope(s)));
       if (!dead) load();
     };
     void sync();
@@ -82,7 +73,7 @@ export function ViewerLive({ handle, name, profile }: { handle: string; name: st
     };
   }, [handle, profile]);
 
-  if (!live || (!live.roulette && !live.fundraiser && !live.tasks && !live.auction)) return null;
+  if (!live || (!live.roulette && !live.fundraiser && !live.tasks)) return null;
 
   const pct = live.fundraiser ? Math.min(100, Math.round((live.fundraiser.raised / Math.max(1, live.fundraiser.goal)) * 100)) : 0;
 
@@ -156,26 +147,6 @@ export function ViewerLive({ handle, name, profile }: { handle: string; name: st
                 </div>
               ))}
             </div>
-          </div>
-        )}
-        {live.auction && (
-          <div className={styles.card}>
-            <div className={styles.cardHead}>
-              <GameIcon id="auction" width={18} height={18} />
-              <span className={styles.cardTitle}>Auction</span>
-              <span className="pill ok" style={{ marginLeft: "auto" }}>
-                <span className="dot" />
-                Bidding open
-              </span>
-            </div>
-            <div className={styles.stat}>
-              <b className="num">{usd(live.auction.top)}</b> leads · {live.auction.lots} lot{live.auction.lots > 1 ? "s" : ""} on the board
-            </div>
-            <p className={styles.blurb}>“{live.auction.topText}” — outbid it, top it up, or place your own condition.</p>
-            <div className={styles.spacer} />
-            <Link className={styles.cta} href={`/@${handle}/auction`}>
-              Outbid it →
-            </Link>
           </div>
         )}
       </div>

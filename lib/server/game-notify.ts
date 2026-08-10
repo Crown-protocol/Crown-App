@@ -60,28 +60,6 @@ export function notifyGameEvent(scope: string, key: string, op: GameOp): void {
         }
 
         // ---- Auction: a new lot is money offered; the close is a decision point ----
-        case "cheer-auction-lots": {
-          if (op.type === "append") {
-            const l = op.item as { amount?: number; text?: string; from?: string };
-            await send(
-              "auction_lot_offered",
-              `New lot — ${usd(l.amount)}`,
-              `${clip(l.from) || "Someone"} bid on: ${clip(l.text)}`
-            );
-          }
-          break;
-        }
-        case "cheer-auction-meta": {
-          if (op.type === "replace") {
-            const m = op.value as { state?: string; winnerId?: string };
-            if (m?.state === "performing") {
-              await send("auction_closing", "Auction closed", "The winning lot is yours to deliver — open your space for the details.");
-            } else if (m?.state === "settled") {
-              await send("payout", "Auction settled", "The money is on its way to your wallet.");
-            }
-          }
-          break;
-        }
 
         // ---- Fundraiser: the goal and the delivery window ----
         case "cheer-fundraiser-collected": {

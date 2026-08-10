@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePublicProfile } from "@/lib/data/usePublicProfile";
 import { useCheer } from "@/lib/data/DataProvider";
+import { useWallet } from "@/lib/chain/useWallet";
 import { Logo } from "@/components/Logo";
 import { ReputationDelta } from "@/components/ReputationDelta";
 import { DonateTopBar } from "@/components/DonateTopBar";
@@ -22,6 +23,8 @@ import { tierInfo } from "@/lib/level";
 import { resolvePublicSession, pullSessions } from "@/lib/data/gameSessions";
 import { GameTabs } from "@/components/games/GameTabs";
 import { GameRules, rouletteLines } from "@/components/games/GameRules";
+import { MinNote } from "@/components/games/MinNote";
+import { rouletteFloor } from "@/lib/data/floors";
 import { useGameSyncState } from "@/lib/data/gameSync";
 import { useConfirm } from "@/components/useConfirm";
 import { dangerCopy } from "@/lib/data/dangerous";
@@ -45,7 +48,7 @@ export default function RoulettePage({ params }: { params: { handle: string } })
   // Resolve the content maker by handle from the Cheer DB, so a viewer sees this page in any
   // browser — not just the owner whose localStorage holds the profile.
   const { profile: maker, status } = usePublicProfile(handle);
-  const { getReputation } = useCheer();
+  const { getReputation, donate } = useCheer();
   const isWide = useIsWide();
 
   // Session resolution: ?s=<id> picks a specific session; one live session resolves itself;
@@ -76,6 +79,8 @@ export default function RoulettePage({ params }: { params: { handle: string } })
   const [custom, setCustom] = useState("");
   const [send, setSend] = useState<SendState>("idle");
   const confirm = useConfirm(); // backing a suggestion costs money — ask before it moves
+  const wallet = useWallet();
+  const [chainErr, setChainErr] = useState("");
   const [view, setView] = useState<"suggest" | "wheel" | "rules">("suggest"); // the top toggle: suggest/back a game vs. the wheel itself
 
   // Shared game state: other viewers' suggestions/backings land via the nonce effect below.
@@ -263,13 +268,16 @@ export default function RoulettePage({ params }: { params: { handle: string } })
   const rankMode = meta?.mode === "rank";
   const gateTier = rankMode ? mine.tiers.find((t) => t.name === meta?.minTier) ?? mine.tiers[0] : null;
   const canSuggestByRank = !rankMode || (gateTier ? rep >= gateTier.threshold : true);
+  // Backing a suggestion is an ordinary donation carrying words, so the paid
+  // floor applies — unless the creator asked for more, in which case theirs wins.
+  const floor = rouletteFloor(cfg.minDonation);
   // `synced`: the minimum and the round length on screen must be this run's, not the maker's current
   // (editable) defaults. Rank mode puts a free idea on the wheel, so it isn't gated on money terms.
   const canSend =
     send === "idle" &&
     !closed &&
     title.trim().length > 0 &&
-    (rankMode ? canSuggestByRank : synced && finalAmount >= cfg.minDonation);
+    (rankMode ? canSuggestByRank : synced && finalAmount >= floor.amount);
 
   // Clicking an existing suggestion pre-fills the form — backing it grows its pool and odds.
   function back(s: RouletteSuggestion) {
@@ -278,18 +286,49 @@ export default function RoulettePage({ params }: { params: { handle: string } })
     setGenre(s.genre);
   }
 
-  function suggest() {
+  // Backing a game costs real money and goes down the ordinary donation path: the
+  // suggestion's title IS the message, so it takes the paid shape (2%) and shows up
+  // in the creator's feed and alerts like any other donation with words. Rank mode
+  // is the exception the game defines — a free suggestion moves nothing, so there
+  // is nothing to send.
+  async function suggest() {
     if (!canSend) return;
-    setSend("sending");
-    setTimeout(() => {
-      setRound(addSuggestion(scope!, title.trim(), genreValue, rankMode ? 0 : finalAmount));
-      // Clear the form right as the suggestion lands — a delayed reset would clobber
-      // whatever the viewer already started typing for their next one.
+    setChainErr("");
+
+    if (rankMode) {
+      setSend("sending");
+      setRound(addSuggestion(scope!, title.trim(), genreValue, 0));
       setTitle("");
       setCustom("");
       setSend("done");
       setTimeout(() => setSend("idle"), 2200);
-    }, 1100);
+      return;
+    }
+
+    if (!wallet.connected) {
+      if (!wallet.hasWallet) {
+        setChainErr("No Solana wallet found in the browser. Install Phantom or Solflare.");
+        return;
+      }
+      wallet.connect();
+      return;
+    }
+
+    setSend("sending");
+    try {
+      await donate({ handle, amount: finalAmount, message: title.trim(), source: "roulette" }, wallet.address);
+      // The wheel only moves once the money has: the pool a viewer sees is money
+      // that was actually sent, never an optimistic bump that a failed transaction
+      // would leave behind.
+      setRound(addSuggestion(scope!, title.trim(), genreValue, finalAmount));
+      setTitle("");
+      setCustom("");
+      setSend("done");
+      setTimeout(() => setSend("idle"), 2200);
+    } catch (e) {
+      setChainErr(e instanceof Error ? e.message.split("\n")[0] : "That didn't go through.");
+      setSend("idle");
+    }
   }
 
   return (
@@ -442,12 +481,13 @@ export default function RoulettePage({ params }: { params: { handle: string } })
                       <input
                         className={styles.customAmount}
                         type="number"
-                        min={cfg.minDonation}
+                        min={floor.amount}
                         placeholder="Custom"
                         value={custom}
                         onChange={(e) => setCustom(e.target.value)}
                       />
                     </div>
+                    <MinNote floor={floor} amount={finalAmount} />
                     <ReputationDelta rep={rep} gain={finalAmount} tiers={mine.tiers} />
                   </>
                 )}
@@ -465,13 +505,19 @@ export default function RoulettePage({ params }: { params: { handle: string } })
                       ? rankMode ? "On the wheel ✓" : "In the pot ✓"
                       : rankMode ? "Put it on the wheel" : `Suggest for ${usd(finalAmount)}`}
                 </button>
-                <div className="footnote">
-                  {send === "done"
-                    ? rankMode ? "On the wheel — anyone can back it with a donation." : "Counted — the odds just moved."
-                    : rankMode
-                      ? `Free for ${gateTier?.name ?? "ranked"}+ viewers. Backing a ${noun} is a donation, open to everyone.`
-                      : `From ${usd(cfg.minDonation)}. It's a donation either way — win or lose, it stays with the content maker.`}
-                </div>
+                {chainErr ? (
+                  <div className="footnote" style={{ color: "var(--error)" }}>
+                    {chainErr}
+                  </div>
+                ) : (
+                  <div className="footnote">
+                    {send === "done"
+                      ? rankMode ? "On the wheel — anyone can back it with a donation." : "Counted — the odds just moved."
+                      : rankMode
+                        ? `Free for ${gateTier?.name ?? "ranked"}+ viewers. Backing a ${noun} is a donation, open to everyone.`
+                        : "It's a donation either way — win or lose, it stays with the content maker."}
+                  </div>
+                )}
               </div>
             )}
 

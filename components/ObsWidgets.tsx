@@ -125,31 +125,6 @@ export function Widget({ kind }: { kind: OverlayKind }) {
       </div>
     );
   }
-  if (kind === "auction") {
-    return (
-      <div className={styles.game}>
-        <div className={styles.gameHead}>
-          <GameIcon id="auction" width={16} height={16} />
-          Auction
-          <span className={styles.gamePot}>$120 leads</span>
-        </div>
-        <div className={styles.gameRow}>
-          <span className={styles.gameName}>Hardest difficulty</span>
-          <span className={styles.gameBar}>
-            <span style={{ width: "100%" }} />
-          </span>
-          <span className={styles.gamePct}>$120</span>
-        </div>
-        <div className={styles.gameRow}>
-          <span className={styles.gameName}>Cam upside down</span>
-          <span className={styles.gameBar}>
-            <span style={{ width: "71%" }} />
-          </span>
-          <span className={styles.gamePct}>$85</span>
-        </div>
-      </div>
-    );
-  }
   if (kind === "fundraiser") {
     return (
       <div className={styles.fund}>

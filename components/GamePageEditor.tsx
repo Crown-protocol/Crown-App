@@ -118,7 +118,7 @@ export function GamePageEditor({
   // which one a viewer means — the public page answers it with a "Pick a session" screen, which is
   // exactly what the preview here was showing. So the builder picks one and every link it hands out
   // (address bar, Copy, QR, preview) carries that session's ?s=<id>.
-  // The slug IS the game id for all four games (task/roulette/fundraiser/auction) — no separate field
+  // The slug IS the game id for all three games (task/roulette/fundraiser) — no separate field
   // to keep in step across the four panels.
   const gameId = config.slug as GameId;
   const [sessions, setSessions] = useState<GameSession[]>([]);

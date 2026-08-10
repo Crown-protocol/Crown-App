@@ -10,7 +10,6 @@ import { ObsWidgets } from "@/components/ObsWidgets";
 import { HeroPhones } from "@/components/HeroPhones";
 import { MoneyFlow } from "@/components/MoneyFlow";
 import { SiteFooter } from "@/components/SiteFooter";
-import { RepDemo } from "@/components/RepDemo";
 import { AuthButton } from "@/components/AuthButton";
 import { useProfile } from "@/lib/data/ProfileProvider";
 import styles from "./page.module.css";
@@ -149,12 +148,8 @@ export default function HomePage() {
               </h2>
               <p className={styles.repLead}>
                 Each dollar builds a viewer&apos;s reputation <b>with you</b> — and climbs the tiers you set.
-                Try it.
+                It is kept in an open ledger, not by us.
               </p>
-            </div>
-
-            <div className={styles.repViz}>
-              <RepDemo />
             </div>
           </div>
         </div>

@@ -6,7 +6,6 @@ import { TopNav } from "@/components/TopNav";
 import { Mono } from "@/components/Mono";
 import { Spark } from "@/components/Spark";
 import { SearchIcon, SocialIcon, SOCIAL_KINDS, SOCIAL_LABEL } from "@/components/icons";
-import { MOCK_STREAMERS, MOCK_REALMS } from "@/lib/data/mock";
 import { useCheer } from "@/lib/data/DataProvider";
 import { USDC_DECIMALS } from "@/lib/chain/config";
 import type { Profile, Social } from "@/lib/data/types";
@@ -22,10 +21,8 @@ function money(n: number) {
 }
 
 export default function DiscoverPage() {
-  // Demo streamers are opt-in (admin panel). Off by default: the catalog lists only real registered
-  // makers, so a visitor never sees invented people with invented totals. On → the MOCK seeds are
-  // mixed back in for screenshots/demos.
-  const { demoData } = useCheer();
+  // The catalog lists registered creators and nobody else — there is no seed to
+  // mix in any more, so a visitor never meets an invented person.
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>("all");
   const [platforms, setPlatforms] = useState<Social["kind"][]>([]);
@@ -83,7 +80,6 @@ export default function DiscoverPage() {
         if (dead) return;
         setDbRows(
           (profiles ?? [])
-            .filter((p) => !MOCK_STREAMERS[p.handle.toLowerCase()])
             .map((p) => {
               const sum = sums.get(p.address) ?? { all: 0, d7: 0 };
               return {
@@ -103,8 +99,7 @@ export default function DiscoverPage() {
   }, []);
 
   const rows = useMemo(() => {
-    const demoRows = demoData ? MOCK_REALMS.map((r) => ({ ...r, streamer: MOCK_STREAMERS[r.handle] })).filter((r) => r.streamer) : [];
-    const withStreamer = [...demoRows, ...dbRows];
+    const withStreamer = dbRows;
     const q = query.trim().toLowerCase();
     const filtered = withStreamer.filter((r) => {
       const matchesQuery = !q || r.handle.includes(q) || r.streamer.name.toLowerCase().includes(q);
@@ -112,22 +107,15 @@ export default function DiscoverPage() {
       return matchesQuery && matchesPlatform;
     });
     return filtered.sort((a, b) => (sort === "all" ? b.receivedAll - a.receivedAll : b.received7d - a.received7d));
-  }, [query, sort, platforms, dbRows, demoData]);
+  }, [query, sort, platforms, dbRows]);
 
   const platformCounts = useMemo(() => {
     const counts = Object.fromEntries(SOCIAL_KINDS.map((k) => [k, 0])) as Record<Social["kind"], number>;
-    // Only count demo streamers toward the platform filters when demo data is on — otherwise the
-    // counts would advertise makers the catalog isn't actually showing.
-    if (demoData) {
-      for (const r of MOCK_REALMS) {
-        const streamer = MOCK_STREAMERS[r.handle];
-        if (!streamer) continue;
-        for (const s of streamer.socials ?? []) counts[s.kind] += 1;
-      }
-    }
+    // Counted from the rows the catalog actually shows, so a filter never
+    // advertises creators that are not there.
     for (const r of dbRows) for (const s of r.streamer.socials ?? []) counts[s.kind] += 1;
     return counts;
-  }, [dbRows, demoData]);
+  }, [dbRows]);
 
   return (
     <main className={styles.wrap}>

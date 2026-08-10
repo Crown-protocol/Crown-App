@@ -4,8 +4,6 @@ import { verifySignedRequest } from "@/lib/server/auth";
 import { readSession } from "@/lib/server/session";
 import { allow } from "@/lib/server/ratelimit";
 import { isValidAddress } from "@/lib/chain/config";
-import { isDemoAddress } from "@/lib/data/session";
-import { MOCK_STREAMERS } from "@/lib/data/mock";
 import type { Profile } from "@/lib/data/types";
 
 export const runtime = "nodejs";
@@ -48,14 +46,10 @@ export async function POST(req: NextRequest) {
   if (!p?.handle?.trim() || !p?.name?.trim()) {
     return NextResponse.json({ error: "handle and name required" }, { status: 400 });
   }
-  // Built-in demo streamers (/@nova) resolve from code, not the DB. Letting anyone register the
-  // same handle would split the identity: the profile page would show the DB row while the game
-  // pages show the demo — two different people behind one link. Reserved outright.
-  if (MOCK_STREAMERS[p.handle.trim().replace(/^@/, "").toLowerCase()]) {
-    return NextResponse.json({ error: "this handle is reserved" }, { status: 409 });
-  }
-  const demoPage = !p.address || isDemoAddress(p.address);
-  if (!demoPage && !isValidAddress(p.address)) {
+  // Every page pays someone, so every page needs a real payout address. The
+  // address-less "demo page" that used to be writable with no signature at all
+  // is gone: it was the one path into this table that nobody had to own.
+  if (!isValidAddress(p.address)) {
     return NextResponse.json({ error: "invalid payout address" }, { status: 400 });
   }
 
@@ -90,13 +84,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  // New or demo-owned page.
-  if (demoPage && !signer) {
-    await upsertProfile(p, "");
-    return NextResponse.json({ ok: true });
-  }
+  // A new page: claiming a handle requires proving the wallet behind it.
   if (!signer) {
-    return NextResponse.json({ error: "wallet signature required for a real payout address" }, { status: 401 });
+    return NextResponse.json({ error: "wallet signature required" }, { status: 401 });
   }
   await upsertProfile(p, signer.pubkey);
   return NextResponse.json({ ok: true });

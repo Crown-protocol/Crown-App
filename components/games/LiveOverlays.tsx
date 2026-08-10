@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { CheerMark, GameIcon } from "@/components/icons";
 import { FundraiserFill } from "@/components/FundraiserFill";
 import { OVERLAY_TIERS } from "@/lib/data/overlays";
+import { usd } from "@/lib/money";
 import type { GameId } from "@/lib/data/games";
 import styles from "./LiveOverlays.module.css";
 
@@ -86,7 +87,7 @@ export function LiveOverlays({
                 <div className={styles.alertBody}>
                   <div className={styles.alertRow}>
                     <b className={styles.alertName}>{alert.name}</b>
-                    <span className={styles.pill}>${alert.amount}</span>
+                    <span className={styles.pill}>{usd(alert.amount)}</span>
                   </div>
                   {alert.text && <span className={styles.alertMsg}>{alert.text}</span>}
                 </div>
@@ -100,34 +101,11 @@ export function LiveOverlays({
         {/* the game's own widget */}
         <div className={styles.pane}>
           <span className={styles.paneTag}>
-            {id === "roulette" ? "Roulette" : id === "task" ? "Task" : id === "auction" ? "Auction" : "Fundraiser"}
+            {id === "roulette" ? "Roulette" : id === "task" ? "Task" : "Fundraiser"}
           </span>
           <div className={styles.screen}>
             {pools.length === 0 ? (
               <span className={styles.idle}>nothing running yet…</span>
-            ) : id === "auction" ? (
-              <div className={styles.game}>
-                <div className={styles.gameHead}>
-                  <GameIcon id="auction" width={15} height={15} />
-                  {winner ? "Sold" : running ? "Going once…" : "Bidding open"}
-                  <span className={styles.gamePot}>
-                    ${winner ? pools.find(([lbl]) => lbl === winner)?.[1] ?? 0 : top[0]?.[1] ?? 0} {winner ? "sold" : "leads"}
-                  </span>
-                </div>
-                {winner ? (
-                  <div className={styles.winnerBig}>“{winner}”</div>
-                ) : (
-                  top.map(([lbl, sum]) => (
-                    <div className={styles.gameRow} key={lbl}>
-                      <span className={styles.gameName}>{lbl}</span>
-                      <span className={styles.gameBar}>
-                        <span style={{ width: `${(sum / (top[0]?.[1] || 1)) * 100}%` }} />
-                      </span>
-                      <span className={styles.gamePct}>${sum}</span>
-                    </div>
-                  ))
-                )}
-              </div>
             ) : id === "roulette" ? (
               <div className={styles.game}>
                 <div className={styles.gameHead}>

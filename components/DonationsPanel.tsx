@@ -17,7 +17,7 @@ type StatusFilter = "all" | "settled" | "sending";
 type Sort = "new" | "old" | "top";
 type Range = "all" | "1" | "7" | "30";
 
-const GAME_OPTIONS: (GameId | "direct")[] = ["direct", "task", "roulette", "fundraiser", "auction"];
+const GAME_OPTIONS: (GameId | "direct")[] = ["direct", "task", "roulette", "fundraiser"];
 const RANGES: { key: Range; label: string }[] = [
   { key: "all", label: "All time" },
   { key: "1", label: "24h" },

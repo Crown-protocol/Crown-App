@@ -6,6 +6,8 @@ import { NumberInput } from "@/components/NumberInput";
 import { HelpTip } from "@/components/HelpTip";
 import { RulesSummary, minutesText } from "@/components/RulesSummary";
 import { usd } from "@/lib/money";
+import { PLATFORM_FLOOR, knobFloorNote } from "@/lib/data/floors";
+import { FloorBump, useFloorClamp } from "@/components/games/MinNote";
 import { topicNoun } from "@/lib/data/roulette-topics";
 import { RulesScopeNote } from "@/components/games/RulesScopeNote";
 
@@ -41,6 +43,9 @@ export const PLAY_OPTIONS = [
 // SettingsPanel: no separate "Save" step.
 export function RouletteGameSettings({ profile, onSave }: { profile: Profile; onSave: (p: Profile) => void }) {
   const cfg = profile.rouletteConfig ?? DEFAULT_ROULETTE_CONFIG;
+  // The knob clamps to the network's floor; the explanation appears only if that
+  // clamp actually did something.
+  const { clamp: clampMin, bumpNote: minBump } = useFloorClamp(PLATFORM_FLOOR.donationWithWords, knobFloorNote(PLATFORM_FLOOR.donationWithWords, "suggestion"));
   const [newCat, setNewCat] = useState("");
 
   function patch(next: Partial<RouletteConfig>) {
@@ -88,7 +93,16 @@ export function RouletteGameSettings({ profile, onSave }: { profile: Profile; on
           </label>
           <div className="affix has-pre">
             <span className="affix-pre">$</span>
-            <NumberInput id="roul-min" min={1} value={cfg.minDonation} onCommit={(n) => patch({ minDonation: n })} />
+            <NumberInput
+              id="roul-min"
+              min={PLATFORM_FLOOR.donationWithWords}
+              value={cfg.minDonation}
+              onCommit={(n) => patch({ minDonation: clampMin(n) })}
+            />
+            {/* The network refuses anything below this, and it refuses it AFTER the
+                money has moved — so the knob stops here rather than letting a page
+                advertise a minimum that cannot be honoured. */}
+            <FloorBump note={minBump} />
           </div>
         </div>
       </section>

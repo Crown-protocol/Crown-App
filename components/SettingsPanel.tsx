@@ -7,7 +7,6 @@ import QRCode from "qrcode";
 import { UploadIcon, CopyIcon, QrIcon, SocialIcon, SOCIAL_LABEL, SOCIAL_KINDS, SOCIAL_BRAND } from "@/components/icons";
 import { SOCIAL_EXAMPLE, isSocialValid } from "@/lib/data/social-links";
 import { isValidAddress } from "@/lib/chain/config";
-import { isDemoAddress } from "@/lib/data/session";
 import { TierEditor } from "@/components/TierEditor";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { dangerCopy } from "@/lib/data/dangerous";
@@ -86,7 +85,7 @@ export function SettingsPanel({
   const changes = changedFields.length;
   // A garbage payout address must not be confirmable — that typo costs real money.
   const draftPayout = draft.address.trim();
-  const draftPayoutValid = isDemoAddress(draftPayout) || isValidAddress(draftPayout);
+  const draftPayoutValid = isValidAddress(draftPayout);
 
   function confirmChanges() {
     if (!changes || !draftPayoutValid) return;
@@ -147,8 +146,7 @@ export function SettingsPanel({
     patch({ socials: draft.socials.filter((_, j) => j !== i) });
   }
 
-  const payoutDemo = isDemoAddress(draftPayout);
-  const loginDiffers = !!walletAddress && !payoutDemo && walletAddress !== draftPayout;
+  const loginDiffers = !!walletAddress && walletAddress !== draftPayout;
 
   const short = (a: string) => (a.length > 16 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a);
 
@@ -321,8 +319,6 @@ export function SettingsPanel({
           {/* live validation — the one place a typo costs real money */}
           {!draftPayoutValid ? (
             <div className={`${styles.addrState} ${styles.addrBad}`}>Not a valid Solana address — donations would go nowhere.</div>
-          ) : payoutDemo ? (
-            <div className={`${styles.addrState} ${styles.addrOk}`}>Demo placeholder — set a real address before taking real money.</div>
           ) : null}
         </div>
 
@@ -409,19 +405,10 @@ export function SettingsPanel({
           onCancel={() => setConfirm(null)}
           onConfirm={onLogOut}
           body={
-            // A demo page has no owning wallet, so "connect the same wallet again" is a promise this
-            // build cannot keep for it: there is nothing to connect, and sign-in resolves accounts by
-            // owner — a lookup that can never match a page nobody owns. Signing out of one is
-            // one-way, so say so BEFORE the click rather than leaving them on the registration wizard
-            // wondering where their page went.
-            isDemoAddress(draft.address) ? (
-              <>
-                <b>This is a one-way door.</b> This page was created in demo mode, so no wallet owns it — there is
-                nothing to sign back in with, and logging out here gives up access to it for good. The page itself
-                keeps working at <b>/@{draft.handle}</b>. Want an account you can return to? Connect a wallet and
-                register a page with it.
-              </>
-            ) : (
+            // Every page is owned by the wallet it pays out to now, so signing back
+            // in is always possible — the one-way-door warning belonged to pages
+            // nobody owned, and those cannot be created any more.
+            (
               <>
                 You&apos;ll be signed out and your wallet disconnected. <b>Your page, tiers and game settings stay
                 exactly as they are</b> — connect the same wallet again to pick up where you left off.

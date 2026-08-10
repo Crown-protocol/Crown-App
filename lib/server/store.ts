@@ -130,7 +130,7 @@ export async function insertDonation(d: DonationRow): Promise<boolean> {
     // otherwise. The intent's `source` is a client hint that defaults to "direct"; taking it
     // unconditionally overwrote a real "escrow" settle as "direct" — a permanently-wrong provenance.
     // So the indexer's own value wins whenever it determined an escrow settle; only when the indexer
-    // saw a plain "direct" do we let a more specific intent hint (task/roulette/fundraiser/auction)
+    // saw a plain "direct" do we let a more specific intent hint (task/roulette/fundraiser)
     // refine which game it came through.
     const intentSource = intent.rows.length ? String(intent.rows[0].source) : "";
     const source = d.source !== "direct" ? d.source : intentSource || d.source;
@@ -301,6 +301,113 @@ export async function stats(): Promise<{ donations: number; profiles: number; re
     reputationRows: Number(rep.rows[0].n),
     cursor: cur,
   };
+}
+
+// ---- operations: the platform's own numbers, all of them measured ----
+//
+// Everything here is a query over rows the indexer wrote from finalized `Settled`
+// events, i.e. money that actually moved. There is deliberately no "estimated",
+// "projected" or seeded figure: the admin panel used to open on invented totals,
+// and a dashboard that can show a plausible number nobody earned is worse than
+// an empty one.
+
+export interface OpsOverview {
+  profiles: number;
+  donations: number;
+  grossTotal: number; // USDC minor units
+  gross30d: number;
+  donations30d: number;
+  donors: number; // distinct paying wallets
+  recipients: number; // distinct paid wallets
+  cursor: string | null;
+}
+
+export async function opsOverview(): Promise<OpsOverview> {
+  const c = await db();
+  const since = now() - 30 * 86400;
+  const [p, all, recent, people] = await Promise.all([
+    c.execute(`SELECT COUNT(*) n FROM profiles`),
+    c.execute(`SELECT COUNT(*) n, COALESCE(SUM(gross),0) g FROM donations`),
+    c.execute({
+      sql: `SELECT COUNT(*) n, COALESCE(SUM(gross),0) g FROM donations WHERE COALESCE(block_time, created_at) >= ?`,
+      args: [since],
+    }),
+    c.execute(`SELECT COUNT(DISTINCT payer) d, COUNT(DISTINCT streamer) r FROM donations`),
+  ]);
+  return {
+    profiles: Number(p.rows[0].n),
+    donations: Number(all.rows[0].n),
+    grossTotal: Number(all.rows[0].g),
+    gross30d: Number(recent.rows[0].g),
+    donations30d: Number(recent.rows[0].n),
+    donors: Number(people.rows[0].d),
+    recipients: Number(people.rows[0].r),
+    cursor: await getCursor(),
+  };
+}
+
+/** Creators by money actually received, joined to a page when one is registered. */
+export async function topRecipients(limit = 25): Promise<
+  { address: string; handle: string | null; name: string | null; gross: number; count: number; last: number | null }[]
+> {
+  const c = await db();
+  const r = await c.execute({
+    sql: `SELECT d.streamer address, p.handle, p.name,
+                 SUM(d.gross) gross, COUNT(*) count, MAX(COALESCE(d.block_time, d.created_at)) last
+          FROM donations d
+          LEFT JOIN profiles p ON p.address = d.streamer
+          GROUP BY d.streamer
+          ORDER BY gross DESC
+          LIMIT ?`,
+    args: [limit],
+  });
+  return r.rows.map((x) => ({
+    address: String(x.address),
+    handle: x.handle === null ? null : String(x.handle),
+    name: x.name === null ? null : String(x.name),
+    gross: Number(x.gross),
+    count: Number(x.count),
+    last: x.last === null ? null : Number(x.last),
+  }));
+}
+
+/** Donors by money actually given — the book's own view, mirrored. */
+export async function topDonors(limit = 25): Promise<
+  { payer: string; gross: number; count: number; recipients: number; last: number | null }[]
+> {
+  const c = await db();
+  const r = await c.execute({
+    sql: `SELECT payer, SUM(gross) gross, COUNT(*) count,
+                 COUNT(DISTINCT streamer) recipients, MAX(COALESCE(block_time, created_at)) last
+          FROM donations
+          GROUP BY payer
+          ORDER BY gross DESC
+          LIMIT ?`,
+    args: [limit],
+  });
+  return r.rows.map((x) => ({
+    payer: String(x.payer),
+    gross: Number(x.gross),
+    count: Number(x.count),
+    recipients: Number(x.recipients),
+    last: x.last === null ? null : Number(x.last),
+  }));
+}
+
+/** Daily totals for the last `days` days — the only series the panel draws. */
+export async function dailyGross(days = 30): Promise<{ date: string; gross: number; count: number }[]> {
+  const c = await db();
+  const since = now() - days * 86400;
+  const r = await c.execute({
+    sql: `SELECT date(COALESCE(block_time, created_at), 'unixepoch') day,
+                 SUM(gross) gross, COUNT(*) count
+          FROM donations
+          WHERE COALESCE(block_time, created_at) >= ?
+          GROUP BY day
+          ORDER BY day`,
+    args: [since],
+  });
+  return r.rows.map((x) => ({ date: String(x.day), gross: Number(x.gross), count: Number(x.count) }));
 }
 
 // ---- game texts (the words canisters refuse to hold) ----

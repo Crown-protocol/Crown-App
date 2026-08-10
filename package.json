@@ -9,11 +9,13 @@
     "lint": "next lint",
     "bot": "node --env-file=bot/.env bot/bot.mjs",
     "verify:chain": "node scripts/verify-chain.mjs",
+    "verify:games": "node scripts/verify-games.mjs",
     "verify:db": "node scripts/verify-db.mjs"
   },
   "dependencies": {
     "@dfinity/agent": "^3.4.3",
     "@dfinity/candid": "^3.4.3",
+    "@dfinity/identity": "^3.4.3",
     "@dfinity/principal": "^3.4.3",
     "@libsql/client": "^0.17.4",
     "@reown/appkit": "^1.8.23",

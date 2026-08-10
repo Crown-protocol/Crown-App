@@ -5,6 +5,8 @@ import { NumberInput } from "@/components/NumberInput";
 import { HelpTip } from "@/components/HelpTip";
 import { RulesSummary, hoursText } from "@/components/RulesSummary";
 import { usd } from "@/lib/money";
+import { PLATFORM_FLOOR, knobFloorNote } from "@/lib/data/floors";
+import { FloorBump, useFloorClamp } from "@/components/games/MinNote";
 import { RulesScopeNote } from "@/components/games/RulesScopeNote";
 
 export const DEFAULT_TASK_CONFIG: TaskGameConfig = {
@@ -30,6 +32,9 @@ export const DEADLINE_OPTIONS = [
 // at once. Same live-save pattern as SettingsPanel/PageBuilder: no separate "Save" step.
 export function TaskGameSettings({ profile, onSave }: { profile: Profile; onSave: (p: Profile) => void }) {
   const cfg = profile.taskConfig ?? DEFAULT_TASK_CONFIG;
+  // The knob clamps to the network's floor; the explanation appears only if that
+  // clamp actually did something.
+  const { clamp: clampMin, bumpNote: minBump } = useFloorClamp(PLATFORM_FLOOR.task, knobFloorNote(PLATFORM_FLOOR.task, "task"));
 
   function patch(next: Partial<TaskGameConfig>) {
     onSave({ ...profile, taskConfig: { ...cfg, ...next } });
@@ -48,7 +53,16 @@ export function TaskGameSettings({ profile, onSave }: { profile: Profile; onSave
           </label>
           <div className="affix has-pre">
             <span className="affix-pre">$</span>
-            <NumberInput id="task-min" min={1} value={cfg.minAmount} onCommit={(n) => patch({ minAmount: n })} />
+            <NumberInput
+              id="task-min"
+              min={PLATFORM_FLOOR.task}
+              value={cfg.minAmount}
+              onCommit={(n) => patch({ minAmount: clampMin(n) })}
+            />
+            {/* The network refuses anything below this, and it refuses it AFTER the
+                money has moved — so the knob stops here rather than letting a page
+                advertise a minimum that cannot be honoured. */}
+            <FloorBump note={minBump} />
           </div>
         </div>
 

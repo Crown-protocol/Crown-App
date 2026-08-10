@@ -11,17 +11,14 @@ import {
   getCurrentSession,
   type GameSession,
 } from "@/lib/data/gameSessions";
-import { readLots, readAuctionMeta, initAuction, setAuctionChain, lotSum, auctionTotals, PLATFORM_MIN_BID } from "@/lib/data/auction";
 import { readRound, readRoundMeta, initRound } from "@/lib/data/roulette";
 import { readStatus, raisedTotal, writeStatus } from "@/lib/data/fundraiser";
 import { readTasks, withTaskPageDefaults } from "@/lib/data/tasks";
 import { withRouletteDefaults } from "@/lib/data/roulette";
-import { withAuctionDefaults } from "@/lib/data/auction";
 import { withFundraiserDefaults } from "@/lib/data/fundraiser";
 import { useGameChain } from "@/lib/chain/useGameChain";
-import { fundingCreateCollection, auctionCreate } from "@/lib/chain/gameFlows";
+import { fundingCreateCollection } from "@/lib/chain/gameFlows";
 import {
-  auctionRules,
   fundraiserRules,
   rouletteRules,
   taskRules,
@@ -29,15 +26,16 @@ import {
   type FundraiserSessionRules,
 } from "@/lib/data/gameConfig";
 import { DEADLINE_OPTIONS } from "@/components/TaskGameSettings";
-import { BIDDING_OPTIONS, PERFORM_OPTIONS } from "@/components/AuctionGameSettings";
 import { FUNDING_OPTIONS, DELIVERY_OPTIONS } from "@/components/FundraiserGameSettings";
 import { ROUND_OPTIONS, PLAY_OPTIONS } from "@/components/RouletteGameSettings";
 import { topicNoun } from "@/lib/data/roulette-topics";
 import { NumberInput } from "@/components/NumberInput";
 import { hoursText, daysText, minutesText } from "@/components/RulesSummary";
-import type { AuctionConfig, Profile, RouletteConfig, TaskGameConfig } from "@/lib/data/types";
+import type { Profile, RouletteConfig, TaskGameConfig } from "@/lib/data/types";
 import type { GameId } from "@/lib/data/games";
 import { usd } from "@/lib/money";
+import { PLATFORM_FLOOR, knobFloorNote } from "@/lib/data/floors";
+import { FloorBump, useFloorClamp } from "@/components/games/MinNote";
 import { useConfirm } from "@/components/useConfirm";
 import { dangerCopy } from "@/lib/data/dangerous";
 import s from "./GameSessions.module.css";
@@ -45,17 +43,6 @@ import s from "./GameSessions.module.css";
 // One line that tells the streamer what's inside a session without opening it.
 function summarize(session: GameSession): string {
   switch (session.gameId) {
-    case "auction": {
-      const lots = readLots(session.scope);
-      const t = auctionTotals(lots);
-      const m = readAuctionMeta(session.scope);
-      if (m?.state === "settled") return `paid out · ${usd(t.top ? lotSum(t.top) : 0)}`;
-      if (m?.state === "refunded") return "refunded";
-      if (m?.state === "cancelled") return "cancelled";
-      if (m?.state === "performing") return "delivering the winning lot";
-      if (m?.state === "voting") return "voting";
-      return t.accepted ? `${usd(t.top ? lotSum(t.top) : 0)} leading · ${t.accepted} lot${t.accepted > 1 ? "s" : ""}${t.pending ? ` · ${t.pending} to review` : ""}` : t.pending ? `${t.pending} lot${t.pending > 1 ? "s" : ""} to review` : "no lots yet";
-    }
     case "roulette": {
       const round = readRound(session.scope);
       const winner = readRoundMeta(session.scope)?.winner;
@@ -87,7 +74,7 @@ function when(ts: number): string {
 //
 // Starting one is where its RULES are set. They open on the maker's standing defaults (Settings →
 // the game's rules), and whatever they're changed to is pinned to this run alone — so a Friday
-// auction can open at $50 while the weekday one stays at $5, and editing the defaults later can
+// session can open at $50 while the weekday one stays at $5, and editing the defaults later can
 // never move the goalposts under money already in escrow. See lib/data/gameConfig.ts.
 export function GameSessions({
   profile,
@@ -108,8 +95,18 @@ export function GameSessions({
   const tiers = profile.tiers ?? [];
   const confirm = useConfirm(); // ending a session kills its public page — no way back
   const [chainErr, setChainErr] = useState("");
+  // Each knob clamps to the network's floor and says so only when it had to.
+  const { clamp: clampTaskMin, bumpNote: taskMinBump } = useFloorClamp(PLATFORM_FLOOR.task, knobFloorNote(PLATFORM_FLOOR.task, "task"));
+  const { clamp: clampRoulMin, bumpNote: roulMinBump } = useFloorClamp(
+    PLATFORM_FLOOR.donationWithWords,
+    knobFloorNote(PLATFORM_FLOOR.donationWithWords, "suggestion")
+  );
+  const { clamp: clampFundMin, bumpNote: fundMinBump } = useFloorClamp(
+    PLATFORM_FLOOR.fundraiser,
+    knobFloorNote(PLATFORM_FLOOR.fundraiser, "contribution")
+  );
   // The chain gate for the two canister-backed creates (roulette has no canister by design).
-  const chain = useGameChain(gameId === "fundraiser" ? "fundraiser" : gameId === "auction" ? "auction" : "task");
+  const chain = useGameChain(gameId === "fundraiser" ? "fundraiser" : "task");
   const [sessions, setSessions] = useState<GameSession[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -122,7 +119,6 @@ export function GameSessions({
   // Whether the (long) rules form is showing while other sessions are already live.
   const [starterExpanded, setStarterExpanded] = useState(false);
   const [fund, setFund] = useState<FundraiserSessionRules>(() => fundraiserRules(profile, null));
-  const [auc, setAuc] = useState<AuctionConfig>(() => auctionRules(profile, null));
   // roulette only: who suggests — everyone by donating (classic), or rank X+ for free.
   const [rankMode, setRankMode] = useState(false);
 
@@ -130,7 +126,6 @@ export function GameSessions({
     setTask(taskRules(profile, null));
     setRoul(rouletteRules(profile, null));
     setFund(fundraiserRules(profile, null));
-    setAuc(auctionRules(profile, null));
     setRankMode(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile]);
@@ -140,7 +135,7 @@ export function GameSessions({
   // that does nothing, and the reader has to work that out by pressing it.
   //
   // Compared per game, because that's what this form is showing: fiddling with roulette settings
-  // shouldn't light up the reset button on the auction tab. JSON compare is enough — these are
+  // shouldn't light up the reset button on another tab. JSON compare is enough — these are
   // small flat config objects built by the same function on both sides, so key order matches.
   const dirty = (() => {
     const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -151,8 +146,6 @@ export function GameSessions({
         return !same(roul, rouletteRules(profile, null)) || rankMode;
       case "fundraiser":
         return !same(fund, fundraiserRules(profile, null));
-      case "auction":
-        return !same(auc, auctionRules(profile, null));
       default:
         return false;
     }
@@ -193,7 +186,6 @@ export function GameSessions({
   }, [refresh]);
 
   const noun = topicNoun(roul.topic);
-  const bidFloor = Math.max(PLATFORM_MIN_BID, Math.round(auc.minBid) || PLATFORM_MIN_BID);
 
   // Missing pieces, in the order a maker reads the form. Empty = ready to start.
   const missing: string[] = [];
@@ -212,11 +204,6 @@ export function GameSessions({
     if (!(fund.minContribution > 0)) missing.push("set the minimum chip-in");
     if (!(fund.fundingDays > 0)) missing.push("set how long the collection runs");
   }
-  if (gameId === "auction") {
-    if (!(auc.minBid > 0)) missing.push("set the minimum bid");
-    if (!(auc.biddingHours > 0)) missing.push("set the bidding window");
-    if (!(auc.performHours > 0)) missing.push("set the time to deliver");
-  }
   const ready = missing.length === 0;
 
   async function start() {
@@ -229,8 +216,7 @@ export function GameSessions({
     // The numbers handed over are THIS session's, not the profile's: the canister is where they
     // become binding, so the two must be the same numbers.
     let chainCollection: string | undefined;
-    let chainAuction: string | undefined;
-    if (chain.live && (gameId === "fundraiser" || gameId === "auction")) {
+    if (chain.live && gameId === "fundraiser") {
       if (!chain.wallet) {
         // Says what to do, not what's under the hood — "the canister" means nothing to the person
         // holding the wallet, and the reason they're being asked is that real money is involved.
@@ -245,18 +231,6 @@ export function GameSessions({
         }
         chainCollection = res.collectionHex;
       }
-      if (gameId === "auction") {
-        const res = await auctionCreate(chain.wallet, {
-          durationHours: auc.biddingHours,
-          performHours: auc.performHours,
-          minEntryDollars: bidFloor,
-        });
-        if (!res.ok) {
-          setChainErr(res.error);
-          return;
-        }
-        chainAuction = res.auctionHex;
-      }
     }
 
     const session = createSession(handle, gameId, name);
@@ -266,22 +240,14 @@ export function GameSessions({
     const blankTexts = { headline: "", description: "" };
     if (gameId === "task") onSave({ ...profile, taskPage: { ...withTaskPageDefaults(profile), ...blankTexts } });
     if (gameId === "roulette") onSave({ ...profile, roulette: { ...withRouletteDefaults(profile), ...blankTexts } });
-    if (gameId === "auction") onSave({ ...profile, auction: { ...withAuctionDefaults(profile), ...blankTexts } });
     // Fundraiser calls its headline "pledge".
     if (gameId === "fundraiser") onSave({ ...profile, fundraiser: { ...withFundraiserDefaults(profile), pledge: "", description: "" } });
 
     // Pin the rules to this run before anything can be played under them.
     if (gameId === "task") writeSessionRules(session.scope, "task", task);
     if (gameId === "fundraiser") writeSessionRules(session.scope, "fundraiser", fund);
-    if (gameId === "auction") writeSessionRules(session.scope, "auction", { ...auc, minBid: bidFloor });
     if (gameId === "roulette") writeSessionRules(session.scope, "roulette", roul);
 
-    // The auction's opening price is fixed the moment it's born — the streamer's number,
-    // clamped to the platform floor the admin set.
-    if (gameId === "auction") {
-      initAuction(session.scope, bidFloor);
-      if (chainAuction) setAuctionChain(session.scope, chainAuction);
-    }
     if (gameId === "fundraiser" && chainCollection) writeStatus(session.scope, { state: "collecting", chainCollection });
     // The round's mode and format are fixed the same way — pinned for the whole run.
     if (gameId === "roulette") {
@@ -345,8 +311,17 @@ export function GameSessions({
                   <label htmlFor="sess-task-min">Minimum task amount</label>
                   <div className="affix has-pre">
                     <span className="affix-pre">$</span>
-                    <NumberInput id="sess-task-min" min={1} value={task.minAmount} onCommit={(n) => setTask({ ...task, minAmount: n })} />
+                    {/* Clamped, not merely hinted: a creator promising "$1 tasks" would be
+                        promising something the canister refuses once the money is already
+                        in escrow, and the person who pays for that is the viewer. */}
+                    <NumberInput
+                      id="sess-task-min"
+                      min={PLATFORM_FLOOR.task}
+                      value={task.minAmount}
+                      onCommit={(n) => setTask({ ...task, minAmount: clampTaskMin(n) })}
+                    />
                   </div>
+                  <FloorBump note={taskMinBump} />
                 </div>
                 <div className="field">
                   <label htmlFor="sess-task-max">Max active tasks</label>
@@ -395,8 +370,14 @@ export function GameSessions({
                   <label htmlFor="sess-roul-min">Minimum to suggest</label>
                   <div className="affix has-pre">
                     <span className="affix-pre">$</span>
-                    <NumberInput id="sess-roul-min" min={1} value={roul.minDonation} onCommit={(n) => setRoul({ ...roul, minDonation: n })} />
+                    <NumberInput
+                      id="sess-roul-min"
+                      min={PLATFORM_FLOOR.donationWithWords}
+                      value={roul.minDonation}
+                      onCommit={(n) => setRoul({ ...roul, minDonation: clampRoulMin(n) })}
+                    />
                   </div>
+                  <FloorBump note={roulMinBump} />
                 </div>
                 <div className="field">
                   <label htmlFor="sess-roul-topic">What viewers suggest</label>
@@ -515,8 +496,14 @@ export function GameSessions({
                   <label htmlFor="sess-fr-min">Minimum chip-in</label>
                   <div className="affix has-pre">
                     <span className="affix-pre">$</span>
-                    <NumberInput id="sess-fr-min" min={1} value={fund.minContribution} onCommit={(n) => setFund({ ...fund, minContribution: n })} />
+                    <NumberInput
+                      id="sess-fr-min"
+                      min={PLATFORM_FLOOR.fundraiser}
+                      value={fund.minContribution}
+                      onCommit={(n) => setFund({ ...fund, minContribution: clampFundMin(n) })}
+                    />
                   </div>
+                  <FloorBump note={fundMinBump} />
                 </div>
                 {fund.allowBelowGoal && (
                   <div className="field">
@@ -575,60 +562,6 @@ export function GameSessions({
           </>
         )}
 
-        {gameId === "auction" && (
-          <>
-            <div className={s.group}>
-              <div className={s.grid}>
-                <div className="field">
-                  <label htmlFor="sess-au-min">Opening price</label>
-                  <div className="affix has-pre">
-                    <span className="affix-pre">$</span>
-                    <NumberInput id="sess-au-min" min={PLATFORM_MIN_BID} value={auc.minBid} onCommit={(n) => setAuc({ ...auc, minBid: n })} />
-                  </div>
-                </div>
-                <div className="field">
-                  <label htmlFor="sess-au-inc">Minimum outbid step</label>
-                  <div className="affix has-pre">
-                    <span className="affix-pre">$</span>
-                    <NumberInput id="sess-au-inc" min={1} value={auc.minIncrement ?? 1} onCommit={(n) => setAuc({ ...auc, minIncrement: n })} />
-                  </div>
-                </div>
-              </div>
-              <p className={s.hint}>Platform minimum: {usd(PLATFORM_MIN_BID)} — set by the admin, no auction opens below it.</p>
-            </div>
-
-            <div className={s.group}>
-              <div className={s.grid}>
-                <div className="field">
-                  <label htmlFor="sess-au-dur">Bidding window</label>
-                  <select id="sess-au-dur" value={auc.biddingHours} onChange={(e) => setAuc({ ...auc, biddingHours: +e.target.value })}>
-                    {BIDDING_OPTIONS.map((o) => (
-                      <option key={o.hours} value={o.hours}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <label htmlFor="sess-au-perf">Time to deliver</label>
-                  <select id="sess-au-perf" value={auc.performHours} onChange={(e) => setAuc({ ...auc, performHours: +e.target.value })}>
-                    {PERFORM_OPTIONS.map((o) => (
-                      <option key={o.hours} value={o.hours}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <p className={s.practice}>
-              Bids open at {usd(bidFloor)} and each outbid must beat the leader by at least {usd(auc.minIncrement ?? 1)}, running for{" "}
-              {hoursText(auc.biddingHours)}. When it closes, everyone who didn&apos;t win is refunded, and you have{" "}
-              {hoursText(auc.performHours)} to deliver — the winner&apos;s money reaches you only after that&apos;s confirmed.
-            </p>
-          </>
-        )}
 
         <div className={s.foot}>
           <button className="btn" type="button" disabled={!ready} onClick={() => void start()}>

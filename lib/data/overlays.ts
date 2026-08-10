@@ -10,7 +10,6 @@ export type OverlayKind =
   | "roulette"
   | "task"
   | "fundraiser"
-  | "auction"
   | "ticker"
   | "qr"
   | "session"
@@ -18,7 +17,7 @@ export type OverlayKind =
   | "train";
 
 // Which mini-game a widget belongs to, if it's game-specific (used to group them in the cabinet).
-export type OverlayGame = "roulette" | "task" | "fundraiser" | "auction";
+export type OverlayGame = "roulette" | "task" | "fundraiser";
 
 export interface OverlayDef {
   kind: OverlayKind;
@@ -37,7 +36,6 @@ export const OVERLAYS: OverlayDef[] = [
   { kind: "roulette", label: "Roulette", desc: "The live wheel — the pot and what's winning right now.", game: "roulette" },
   { kind: "task", label: "Task", desc: "The active paid task and how long is left to do it.", game: "task" },
   { kind: "fundraiser", label: "Fundraiser", desc: "A cheer that fills toward the goal as viewers chip in.", game: "fundraiser" },
-  { kind: "auction", label: "Auction", desc: "The live lot board — what's leading and by how much.", game: "auction" },
   // general — batch 2, donation-driven (components/overlays/Extras.tsx)
   { kind: "ticker", label: "Donation ticker", desc: "A thin broadcast-style strip of recent donations along the screen edge, with the session total pinned right." },
   { kind: "qr", label: "Donate QR", desc: "An always-on corner QR code pointing at the streamer's donate page, pulsing on live donations." },

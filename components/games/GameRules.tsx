@@ -1,7 +1,8 @@
 "use client";
 
-import type { Profile, TaskGameConfig, RouletteConfig, FundraiserConfig, AuctionConfig } from "@/lib/data/types";
-import { usd } from "@/lib/money";
+import type { Profile, TaskGameConfig, RouletteConfig, FundraiserConfig } from "@/lib/data/types";
+import { usd, usdPrecise } from "@/lib/money";
+import { fundraiserFloor, rouletteFloor, taskFloor } from "@/lib/data/floors";
 import styles from "./GameRules.module.css";
 
 // The "Rules" tab every public game page carries.
@@ -34,7 +35,9 @@ function days(n: number): string {
 
 export function taskLines(cfg: TaskGameConfig, name: string): Line[] {
   return [
-    { term: "Minimum", desc: `${usd(cfg.minAmount)} per task. Anything below that isn't accepted.` },
+    // The effective floor, not the creator's knob: below it the canister refuses
+    // the task, and the rules page is where someone reads the terms BEFORE paying.
+    { term: "Minimum", desc: `${usdPrecise(taskFloor(cfg.minAmount).amount)} per task. Anything below that isn't accepted.` },
     {
       term: "Your money is held, not sent",
       desc: `It sits in escrow — ${name} can't touch it until the task is done. Nothing is paid out on the promise alone.`,
@@ -52,6 +55,7 @@ export function rouletteLines(cfg: RouletteConfig, name: string, noun: string): 
   const elimination = cfg.format === "elimination";
   const out: Line[] = [
     { term: "How to enter", desc: `Back a ${noun} with a donation. What you give becomes that ${noun}'s share of the wheel.` },
+    { term: "Minimum", desc: `${usdPrecise(rouletteFloor(cfg.minDonation).amount)} to put a ${noun} on the wheel.` },
     {
       term: elimination ? "How it's decided" : "The odds",
       desc: elimination
@@ -68,7 +72,7 @@ export function rouletteLines(cfg: RouletteConfig, name: string, noun: string): 
 
 export function fundraiserLines(cfg: FundraiserConfig, name: string): Line[] {
   return [
-    { term: "Minimum", desc: `${usd(cfg.minContribution)} per contribution.` },
+    { term: "Minimum", desc: `${usdPrecise(fundraiserFloor(cfg.minContribution).amount)} per contribution.` },
     { term: "Your money is held, not sent", desc: `Every contribution sits in escrow until the goal is settled — it isn't ${name}'s to spend before then.` },
     { term: "Open for", desc: days(cfg.fundingDays) },
     {
@@ -85,21 +89,6 @@ export function fundraiserLines(cfg: FundraiserConfig, name: string): Line[] {
   ];
 }
 
-export function auctionLines(cfg: AuctionConfig, name: string): Line[] {
-  return [
-    { term: "Opening bid", desc: `${usd(cfg.minBid)} or more.` },
-    cfg.minIncrement
-      ? { term: "Outbidding", desc: `Beat the leader by at least ${usd(cfg.minIncrement)}.` }
-      : { term: "Outbidding", desc: `Any amount above the current top bid takes the lead.` },
-    { term: "Bidding runs for", desc: hours(cfg.biddingHours) },
-    {
-      term: "Only the winner pays",
-      desc: `Every bid is held in escrow while the auction runs. When it ends, the losing bids are refunded in full — you're never charged for a bid you didn't win.`,
-    },
-    { term: "Time to deliver", desc: `${hours(cfg.performHours)} after bidding closes.` },
-    { term: "If it isn't delivered", desc: `The winner claims their money back once the window closes.` },
-  ];
-}
 
 export function GameRules({ lines, mine }: { lines: Line[]; mine?: Profile | null }) {
   return (

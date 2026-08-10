@@ -39,10 +39,11 @@ Mode is a property of the **data type**, not the app. `DataProvider` serves each
 
 | Data | Source | Mode |
 |---|---|---|
-| donation, escrow | contracts, via a transaction from the user's wallet | `chain` |
-| reputation | cheer-index canister, query | `icp` |
-| donation feed | `Settled` events via RPC | `chain` |
-| profiles, handle→address, tiers, campaigns, donation messages and names | nowhere to store them yet | `mock` → `api` |
+| donation, escrow | programs, via a transaction from the user's wallet | `chain` |
+| reputation | `crown-indexer` — free query, answered with a witness | `icp` |
+| donation feed | `Settled` events via RPC (our mirror indexer) | `chain` |
+| scope state (a task's, a collection's) | the game canister — free query | `icp` |
+| profiles, handle→address, tiers, campaigns, donation messages and names | our database | `api` |
 
 Migration rule: `mock` switches to `api` **per data type**; the provider's interface doesn't move. Components don't know where the data came from.
 
@@ -52,9 +53,19 @@ Migration rule: `mock` switches to `api` **per data type**; the provider's inter
 
 Must:
 
-1. Call the splitter and the factory **only via a user transaction**. The donor is `msg.sender`; a wrapper contract would receive the reputation itself (`factory-spec.md` §3).
+1. Call the splitter and the factory **only via a user transaction**. The donor is the signer, and
+   that signature is the attribution: route it through a relayer and the `Settled` event credits the
+   relayer, permanently.
 2. Show the exact amount before confirmation. USDC and only USDC.
-3. Present the two-step flow (`approve` + `donate`) externally as one action: `donateWithPermit` where the wallet supports it; a progress indicator where it doesn't.
+3. Present the plumbing as one action. On Solana there is no approve/allowance step — the transfer's
+   authority is the donor's own signature — but a fresh wallet may still need its token account
+   created, so those instructions ride in the same transaction and are never named in the UI.
+4. Refuse below the game's floor **before** the money moves. A registration under `MIN_GROSS` is
+   refused by the canister after the escrow is already funded, and the remedy for the donor is then
+   the deadline's refund.
+5. Buy the paid steps a game needs — the birth ingest and the index root — and buy them on the
+   server, where the relay key lives. What the platform must NOT buy is a plain donation's ingest:
+   the donor holds that reputation and folds it from their own budget.
 
 Forbidden — not "for now," but by design:
 
@@ -79,10 +90,15 @@ name, message             no crypto jargon            donation in the feed
    ├─ no wallet     → "Connect wallet"    (button changes, same screen)
    ├─ wrong network → "Switch network"    (one button, wallet handles it)
    ├─ low on USDC   → "Short $3"          (button disabled, reason in words)
-   └─ no allowance  → internal approve step, viewer sees progress, not the term
+   └─ no token acct → created in the same transaction, viewer sees progress, not the term
 ```
 
 Errors — in plain language, no codes or jargon: `approve`, `allowance`, `gas`, `pending`, "transaction" — words that don't appear in the UI. Canceling in the wallet isn't an error: quietly return to "filling out."
+
+**A task takes longer than a donation, and the screen has to say so honestly.** After the escrow
+transaction the flow still waits on finality and a paid ingest before the game will accept the
+registration — tens of seconds, sometimes more. That wait is progress, not a hang; what it must never
+become is a screen that claims the task is live before the canister has said so.
 
 **Escrow donation (a task)** — the same form plus a lifecycle. Exactly four terminal statuses, matching the contract one-to-one, no fifth:
 
@@ -103,7 +119,11 @@ A campaign is a streamer's payment link. It doesn't exist for the contracts: mon
 - Screen: avatar + name (small, for trust) → title → type-specific center → form. No site navigation.
 - Lifecycle: active → completed. A completed page isn't a 404: it shows the outcome, the form is disabled.
 
-**Class A games** (`project-map.md` §7) live here: a game = a campaign type + front-end rules + an overlay. Zero contracts. Class B games add the escrow form from §4 and a resolver — a keyed service that signs the outcome; the front end only knows its URL.
+**Class A games** live here: a game = a campaign type + front-end rules + an overlay. Zero programs.
+Class B games add the escrow form from §4 and a resolver — but the resolver is not a service with a
+URL: it is a threshold key **derived from the scope id** by the game canister, and the front end
+learns it from a free `get_resolver` query before the escrow is born. That ordering is why a scope id
+can never be the escrow address (the address depends on the resolver, the resolver on the id).
 
 ## 6. Cabinet
 

@@ -7,6 +7,8 @@ import { RulesSummary, daysText } from "@/components/RulesSummary";
 import { WarnIcon } from "@/components/WarnIcon";
 import { withFundraiserDefaults } from "@/lib/data/fundraiser";
 import { usd } from "@/lib/money";
+import { PLATFORM_FLOOR, knobFloorNote } from "@/lib/data/floors";
+import { FloorBump, useFloorClamp } from "@/components/games/MinNote";
 import { RulesScopeNote } from "@/components/games/RulesScopeNote";
 
 export const DEFAULT_FUNDRAISER_CONFIG: FundraiserConfig = {
@@ -38,6 +40,9 @@ export const DELIVERY_OPTIONS = [
 // TaskGameSettings/SettingsPanel: no separate "Save" step.
 export function FundraiserGameSettings({ profile, onSave }: { profile: Profile; onSave: (p: Profile) => void }) {
   const cfg = profile.fundraiserConfig ?? DEFAULT_FUNDRAISER_CONFIG;
+  // The knob clamps to the network's floor; the explanation appears only if that
+  // clamp actually did something.
+  const { clamp: clampMin, bumpNote: minBump } = useFloorClamp(PLATFORM_FLOOR.fundraiser, knobFloorNote(PLATFORM_FLOOR.fundraiser, "contribution"));
 
   function patch(next: Partial<FundraiserConfig>) {
     onSave({ ...profile, fundraiserConfig: { ...cfg, ...next } });
@@ -61,7 +66,16 @@ export function FundraiserGameSettings({ profile, onSave }: { profile: Profile; 
           </label>
           <div className="affix has-pre">
             <span className="affix-pre">$</span>
-            <NumberInput id="fr-min" min={1} value={cfg.minContribution} onCommit={(n) => patch({ minContribution: n })} />
+            <NumberInput
+              id="fr-min"
+              min={PLATFORM_FLOOR.fundraiser}
+              value={cfg.minContribution}
+              onCommit={(n) => patch({ minContribution: clampMin(n) })}
+            />
+            {/* The network refuses anything below this, and it refuses it AFTER the
+                money has moved — so the knob stops here rather than letting a page
+                advertise a minimum that cannot be honoured. */}
+            <FloorBump note={minBump} />
           </div>
         </div>
 

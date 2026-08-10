@@ -1,0 +1,8 @@
+// Minimal candid for the e2e mock of the SOL RPC canister: a test sets the reply
+// bytes, and `getTransaction` returns them verbatim. Deliberately type-agnostic —
+// see crown-games/e2e-fixtures/mock-sol-rpc/src/lib.rs for why the argument is
+// not typed here.
+service : {
+  set_reply : (blob) -> ();
+  getTransaction : (reserved, reserved, reserved) -> (reserved);
+}

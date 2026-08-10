@@ -4,6 +4,7 @@ import { PublicKey } from "@solana/web3.js";
 import { saveIntent } from "@/lib/server/store";
 import { allow } from "@/lib/server/ratelimit";
 import { AUTH_WINDOW_SECONDS } from "@/lib/chain/authMessage";
+import { paidOurFee } from "@/lib/server/submitter";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -83,6 +84,20 @@ export async function POST(req: NextRequest) {
     ok = false;
   }
   if (!ok) return NextResponse.json({ error: "bad proof" }, { status: 401 });
+
+  // The words are the paid part of the product. A donation that went straight
+  // through the splitter for 0% is a real donation and arrives in full — it just
+  // carries nothing of ours: no name, no message, no alert, no book entry we
+  // bought. Enforced here rather than only in the form, because the form is not
+  // the thing an attacker uses.
+  //
+  // Read from the chain, so it is the transaction that decides and not the caller.
+  if (!(await paidOurFee(signature))) {
+    return NextResponse.json(
+      { error: "this donation didn't include the service fee, so it can't carry a name or message" },
+      { status: 402 }
+    );
+  }
 
   await saveIntent({
     signature,

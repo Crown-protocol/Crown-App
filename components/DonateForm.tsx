@@ -6,6 +6,10 @@ import { useWallet } from "@/lib/chain/useWallet";
 import { readDonorName, writeDonorName } from "@/lib/data/donorName";
 import { useConfirm } from "@/components/useConfirm";
 import { dangerCopy } from "@/lib/data/dangerous";
+import { DS_FEE_BPS } from "@/lib/chain/config";
+import { usd as money, usdPrecise } from "@/lib/money";
+import { donationFloor } from "@/lib/data/floors";
+import { MinNote } from "@/components/games/MinNote";
 import { usd } from "@/lib/money";
 
 type Status = "idle" | "sending" | "done" | "error";
@@ -43,7 +47,7 @@ export function DonateForm({
   presets?: number[];
   slug?: string; // campaign page passes its slug so only that campaign's total is bumped
 }) {
-  const { mode, donate } = useCheer();
+  const { donate } = useCheer();
   const wallet = useWallet();
   const confirm = useConfirm(); // a donation leaves the wallet for good — never on one click
   const PRESETS = presets.length ? presets : DEFAULT_PRESETS;
@@ -74,7 +78,7 @@ export function DonateForm({
   // follows a success (the button stays visible and would otherwise send a duplicate donation).
   // "error" is intentionally excluded — the button reverts to "Cheer" so the donor can retry.
   const locked = status === "sending" || status === "done";
-  const chainNeedsConnect = mode === "chain" && !wallet.connected;
+  const chainNeedsConnect = !wallet.connected;
 
   // Reset timers are stored so they can't fire setState after unmount or stack up across submits.
   const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -108,9 +112,23 @@ export function DonateForm({
     }
   }
 
+  // What the donor typed decides the shape of the transaction: words cost the
+  // service fee, silence costs nothing. Both send the same amount from the wallet.
+  const withWords = !!(name.trim() || message.trim());
+  const serviceFee = Math.floor((amount * DS_FEE_BPS) / 10_000 * 100) / 100;
+  // The floor moves with what they typed, so the note under the field moves too.
+  const floor = donationFloor(withWords);
+
   async function onSubmit() {
     if (locked) return;
     setError("");
+
+    // The floor only applies to the paid shape — a bare donation has no floor of
+    // ours at all, so refusing it would be us inventing a rule.
+    if (amount < floor.amount) {
+      setError(`A donation with a name or a message starts at ${usdPrecise(floor.amount)}. Clear them to send any amount.`);
+      return;
+    }
 
     if (chainNeedsConnect) {
       if (wallet.connecting) return; // a connect popup is already open — don't stack a second one
@@ -210,6 +228,8 @@ export function DonateForm({
         <textarea id="don-msg" rows={2} placeholder="optional" value={message} disabled={busy} onChange={(e) => setMessage(e.target.value)} />
       </div>
 
+      <MinNote floor={floor} amount={amount} />
+
       <button type="button" className="btn" disabled={locked || wallet.connecting} onClick={onSubmit}>
         {label}
       </button>
@@ -220,8 +240,22 @@ export function DonateForm({
         </div>
       ) : (
         <div className="footnote">
-          Dollars (USDC) · arrive at {streamerName} directly
-          {mode === "chain" && wallet.connected ? ` · ${short(wallet.address)}` : ""}
+          {/* Two honest sentences, and which one shows depends on what they typed.
+              Leaving a name or a message is what turns the service fee on — so the
+              form says so before the wallet does, in money rather than in percent. */}
+          {withWords ? (
+            <>
+              {money(amount)} · {streamerName} gets {money(amount - serviceFee)}, {money(serviceFee)} covers showing your
+              words on their stream
+              {wallet.connected ? ` · ${short(wallet.address)}` : ""}
+            </>
+          ) : (
+            <>
+              {money(amount)} · all of it reaches {streamerName}. Add a name or a message and {money(serviceFee)} of it
+              goes to showing them
+              {wallet.connected ? ` · ${short(wallet.address)}` : ""}
+            </>
+          )}
         </div>
       )}
       {confirm.dialog}

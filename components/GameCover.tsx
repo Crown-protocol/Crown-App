@@ -164,55 +164,6 @@ export function GameCover({ id }: { id: GameId }) {
     );
   }
 
-  if (id === "auction") {
-    // Lot bars climbing left→right, the leader carrying the accent, a gavel mid-strike above it.
-    const bars = [
-      { x: 44, h: 66 },
-      { x: 96, h: 100 },
-      { x: 148, h: 148 },
-      { x: 200, h: 200 },
-    ];
-    const base = 272;
-    const W = 40;
-    return (
-      <svg {...common}>
-        <Defs id="au" />
-        <Field id="au" />
-        {/* halo behind the leader */}
-        <circle cx={bars[3].x + W / 2} cy={base - bars[3].h + 40} r="60" fill="#8B7CF6" opacity="0.2" filter="url(#halo-au)" />
-        {/* baseline */}
-        <line x1="30" y1={base + 1} x2="270" y2={base + 1} stroke="rgba(235,233,244,.16)" strokeWidth="2" />
-        <g filter="url(#sh-au)">
-          {bars.map((b, i) => {
-            const lead = i === bars.length - 1;
-            return (
-              <g key={i}>
-                <rect x={b.x} y={base - b.h} width={W} height={b.h} rx="9" fill={lead ? "url(#ramp-au)" : NEUTRAL} />
-                {lead && <rect x={b.x} y={base - b.h} width="17" height={b.h} rx="9" fill="url(#sheen-au)" />}
-              </g>
-            );
-          })}
-        </g>
-        {/* gavel, mid-strike above the leading lot */}
-        <g transform={`translate(${bars[3].x + W / 2 - 6} ${base - bars[3].h - 30}) rotate(38)`} filter="url(#sh-au)">
-          {/* head */}
-          <rect x="-30" y="-13" width="60" height="26" rx="8" fill="#EFEDF7" />
-          <rect x="-30" y="-13" width="60" height="11" rx="8" fill="#FFFFFF" opacity="0.5" />
-          {/* bands */}
-          <rect x="-19" y="-13" width="4" height="26" fill="#C7C2D8" opacity="0.8" />
-          <rect x="15" y="-13" width="4" height="26" fill="#C7C2D8" opacity="0.8" />
-          {/* handle */}
-          <rect x="-5" y="12" width="10" height="52" rx="5" fill="#DDD9EA" />
-        </g>
-        {/* strike sparks on the leader's top */}
-        <g stroke="#C3B6FF" strokeWidth="3" strokeLinecap="round" opacity="0.9">
-          <path d={`M${bars[3].x - 4} ${base - bars[3].h - 6} l-9 -8`} />
-          <path d={`M${bars[3].x + W + 4} ${base - bars[3].h - 6} l9 -8`} />
-          <path d={`M${bars[3].x + W / 2} ${base - bars[3].h - 12} l0 -11`} />
-        </g>
-      </svg>
-    );
-  }
 
   // task — a target with a landed dart: the dare a viewer sets, and the money riding on the hit.
   const RINGS = [

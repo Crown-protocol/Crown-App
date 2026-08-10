@@ -1,5 +1,5 @@
 // Game sessions — the layer that lets one streamer run several instances of the same mini-game
-// at once (two auctions in parallel, a fresh roulette round while yesterday's is settling, …).
+// at once (two task queues in parallel, a fresh roulette round while yesterday's is settling, …).
 // Data + store, no React, localStorage like the rest of the mock backend.
 //
 // The trick: every per-game store already keys its localStorage by an opaque string ("handle").
@@ -8,11 +8,10 @@
 // every later session gets a namespaced scope and starts EMPTY (see the fresh markers below).
 //
 // A session's live/finished state is COMPUTED from the game's own state, not stored — so it can
-// never drift: an auction that reached its verdict IS a finished session, no syncing required.
+// never drift: a collection that reached its verdict IS a finished session, no syncing required.
 
 import type { GameId } from "./games";
 import { markFresh } from "./freshScope";
-import { readAuctionMeta } from "./auction";
 import { readRoundMeta } from "./roulette";
 import { readStatus } from "./fundraiser";
 import { sendOp, pullScope } from "./gameSync";
@@ -20,7 +19,7 @@ import { sendOp, pullScope } from "./gameSync";
 export interface GameSession {
   id: string;
   gameId: GameId;
-  name: string; // the streamer's label — "Friday auction", defaults to "Auction #2"
+  name: string; // the streamer's label — "Friday tasks", defaults to "Tasks #2"
   scope: string; // the storage key the game's stores are keyed by
   createdAt: number;
   endedAt?: number; // manual "End session" — terminal game states finish a session on their own
@@ -72,7 +71,7 @@ export async function pullSessions(handle: string, gameId: GameId): Promise<void
   await pullScope(sessionsScope(handle, gameId));
 }
 
-const GAME_NOUN: Record<GameId, string> = { task: "Tasks", roulette: "Round", fundraiser: "Fundraiser", auction: "Auction" };
+const GAME_NOUN: Record<GameId, string> = { task: "Tasks", roulette: "Round", fundraiser: "Fundraiser" };
 
 // Create a session. The first one ever adopts the legacy scope (bare handle) so pre-session data
 // and the demo seeds keep showing; every later one is namespaced and starts empty.
@@ -94,7 +93,6 @@ export function createSession(handle: string, gameId: GameId, name?: string): Ga
     // browser (which has no marker) also sees a session that starts empty, not the demo seeds.
     if (gameId === "task") sendOp(scope, "cheer-tasks", { type: "replace", value: [] });
     if (gameId === "roulette") sendOp(scope, "cheer-roulette-round", { type: "replace", value: [] });
-    if (gameId === "auction") sendOp(scope, "cheer-auction-lots", { type: "replace", value: [] });
     if (gameId === "fundraiser") sendOp(scope, "cheer-fundraiser-collected", { type: "replace", value: 0 });
   }
   writeSessions(handle, gameId, [session, ...list]);
@@ -113,14 +111,10 @@ export function endSession(handle: string, gameId: GameId, id: string): GameSess
 // ---- computed state ----
 
 // A session is finished when the streamer ended it, or the game under it reached a terminal
-// state on its own — the "auction over → session off" rule, for free, with no sync to forget.
+// state on its own — the "verdict in → session off" rule, for free, with no sync to forget.
 export function sessionState(s: GameSession): SessionState {
   if (s.endedAt) return "finished";
   switch (s.gameId) {
-    case "auction": {
-      const m = readAuctionMeta(s.scope);
-      return m && (m.state === "settled" || m.state === "refunded" || m.state === "cancelled") ? "finished" : "live";
-    }
     case "roulette": {
       // a spun wheel ends the session; "New round" inside the same session clears the winner
       // and brings it back live — the state is derived, so it just follows

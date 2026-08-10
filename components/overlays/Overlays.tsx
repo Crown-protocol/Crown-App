@@ -7,13 +7,13 @@ import { RouletteWheel } from "@/components/RouletteWheel";
 import { FundraiserFill } from "@/components/FundraiserFill";
 import { useCountUp, useChangeNonce, useFlip } from "./fx";
 import { useDonationStream } from "@/lib/data/useDonationStream";
+import { usd } from "@/lib/money";
 import { DEMO_GOAL, DEMO_GOAL_START, DEMO_FUNDRAISER_GOAL, OVERLAY_TIERS } from "@/lib/data/overlays";
 import { readRound, readRoundMeta } from "@/lib/data/roulette";
 import { MOCK_ROUND, pickWeighted, type RouletteSuggestion } from "@/lib/data/roulette-mock";
 import { readTasks, type GameTask } from "@/lib/data/tasks";
 import { raisedTotal, withFundraiserDefaults } from "@/lib/data/fundraiser";
 import { usePublicProfile } from "@/lib/data/usePublicProfile";
-import { readLots, readAuctionMeta, leaderboard, lotSum, type AuctionLot } from "@/lib/data/auction";
 import { firstActiveScope } from "@/lib/data/gameSessions";
 import type { DonationEvent } from "@/lib/data/donationStream";
 import styles from "./Overlays.module.css";
@@ -302,7 +302,7 @@ export function GoalOverlay({
         <div className={styles.goalTrackWrap}>
           {hit && (
             <span key={hit.n} className={`${styles.goalChip} num`} style={{ left: `${Math.min(96, Math.max(4, pct))}%` }}>
-              +${hit.amount}
+              +{usd(hit.amount)}
             </span>
           )}
           <div className={styles.goalTrack}>
@@ -315,7 +315,7 @@ export function GoalOverlay({
         </div>
         {credit && (
           <div className={styles.goalCredit}>
-            {credit.from} <b className="num">+${credit.amount}</b>
+            {credit.from} <b className="num">+{usd(credit.amount)}</b>
           </div>
         )}
       </div>
@@ -667,11 +667,11 @@ export function TaskOverlay({ handle, demo }: Common) {
           <div className={styles.gameHead}>
             <GameIcon id="task" width={16} height={16} />
             Task
-            <span className={`${styles.gamePot} num`}>${done.t.amount}</span>
+            <span className={`${styles.gamePot} num`}>{usd(done.t.amount)}</span>
           </div>
           <div className={styles.gameText}>{done.t.text}</div>
           <div className={styles.taskDoneLine}>
-            Done · <b className="num">+${done.t.amount}</b>
+            Done · <b className="num">+{usd(done.t.amount)}</b>
           </div>
         </div>
       </div>
@@ -704,7 +704,7 @@ export function TaskOverlay({ handle, demo }: Common) {
               {String(mm).padStart(2, "0")}:{String(ss).padStart(2, "0")}
             </span>
           )}
-          <span className={`${styles.gamePot} num`}>${task.amount}</span>
+          <span className={`${styles.gamePot} num`}>{usd(task.amount)}</span>
         </div>
         <div className={styles.gameText}>{task.text}</div>
         {active && (
@@ -726,179 +726,6 @@ export function TaskOverlay({ handle, demo }: Common) {
   );
 }
 
-// ---- Auction: the live lot board with overtake pricing, or the SOLD ceremony at the bell. ----
-type AuctionPhase = "board" | "closing" | "sold";
-const AUC_COLLAPSE_MS = 320;
-
-export function AuctionOverlay({ handle, demo }: Common) {
-  const [board, setBoard] = useState<AuctionLot[]>([]);
-  const [winner, setWinner] = useState<AuctionLot | null>(null);
-  const [phase, setPhase] = useState<AuctionPhase>("board");
-  const soldFor = useRef<string | null>(null); // ref-guard: one ceremony per verdict
-  const phaseTimer = useRef(0);
-  const boardRef = useRef(board);
-  boardRef.current = board;
-  const listRef = useRef<HTMLDivElement>(null);
-
-  // Real path: poll the lot book; run the sold ceremony the first time a winner appears.
-  useEffect(() => {
-    if (demo) return;
-    let first = true;
-    const load = () => {
-      const scope = firstActiveScope(handle, "auction");
-      const lots = readLots(scope);
-      const meta = readAuctionMeta(scope);
-      const lb = leaderboard(lots).slice(0, 3);
-      setBoard((prev) => (JSON.stringify(prev) === JSON.stringify(lb) ? prev : lb));
-      const w = meta?.winnerId ? lots.find((l) => l.id === meta.winnerId) ?? null : null;
-      if (w && soldFor.current !== w.id) {
-        soldFor.current = w.id;
-        setWinner(w);
-        if (first) {
-          setPhase("sold"); // opened after the bell — show the verdict, don't replay the collapse
-        } else {
-          setPhase("closing");
-          phaseTimer.current = window.setTimeout(() => setPhase("sold"), AUC_COLLAPSE_MS);
-        }
-      } else if (!w && soldFor.current) {
-        soldFor.current = null;
-        setWinner(null);
-        setPhase("board");
-      }
-      first = false;
-    };
-    load();
-    const t = setInterval(load, 1500);
-    return () => {
-      clearInterval(t);
-      clearTimeout(phaseTimer.current);
-    };
-  }, [handle, demo]);
-
-  // Demo: a two-lot bid war in state — the trailing lot raises every ~4s (the lead keeps
-  // flipping), the bell at ~50s, SOLD holds 6s, then the board resets.
-  useEffect(() => {
-    if (!demo) return;
-    const timers: number[] = [];
-    const seed = (): AuctionLot[] => [
-      {
-        id: "d1",
-        from: "Whale",
-        text: "Finish the map on the hardest difficulty — no saves.",
-        state: "accepted",
-        when: "just now",
-        entries: [{ name: "Whale", amount: 60, when: "just now" }],
-      },
-      {
-        id: "d2",
-        from: "anna_k",
-        text: "Full playthrough with your cam upside down.",
-        state: "accepted",
-        when: "just now",
-        entries: [{ name: "anna_k", amount: 55, when: "just now" }],
-      },
-    ];
-    const cycle = () => {
-      timers.splice(0); // every previous timer has fired
-      soldFor.current = null;
-      setWinner(null);
-      setPhase("board");
-      setBoard(seed());
-      const raise = window.setInterval(() => {
-        setBoard((b) => {
-          if (b.length < 2) return b;
-          const sorted = [...b].sort((x, y) => lotSum(y) - lotSum(x));
-          const trailing = sorted[sorted.length - 1];
-          const bump = 5 + Math.floor(Math.random() * 16);
-          // One entry per lot whose amount grows — no unbounded entries array in an hours-long loop.
-          return b.map((l) =>
-            l.id === trailing.id ? { ...l, entries: [{ ...l.entries[0], amount: lotSum(l) + bump }] } : l,
-          );
-        });
-      }, 4000);
-      timers.push(raise);
-      timers.push(
-        window.setTimeout(() => {
-          window.clearInterval(raise);
-          const w = [...boardRef.current].sort((x, y) => lotSum(y) - lotSum(x))[0] ?? null;
-          if (w) {
-            soldFor.current = w.id;
-            setWinner(w);
-            setPhase("closing");
-            timers.push(window.setTimeout(() => setPhase("sold"), AUC_COLLAPSE_MS));
-          }
-          timers.push(window.setTimeout(cycle, 6000 + AUC_COLLAPSE_MS));
-        }, 50000),
-      );
-    };
-    cycle();
-    return () =>
-      timers.forEach((t) => {
-        window.clearTimeout(t);
-        window.clearInterval(t);
-      });
-  }, [demo]);
-
-  const rows = useMemo(() => [...board].sort((a, b) => lotSum(b) - lotSum(a)), [board]);
-  const top = rows[0] ? lotSum(rows[0]) : 0;
-  const leaderId = rows[0]?.id ?? null;
-  const headSum = useCountUp(winner ? lotSum(winner) : top, 500);
-  useFlip(listRef, rows.map((l) => `${l.id}:${lotSum(l)}`).join("|"));
-
-  return (
-    <div className={`${styles.stage} ${styles.stageLeft}`}>
-      <div className={`${styles.game} ${styles.gameAuction} ${phase === "sold" ? styles.aucSoldCard : ""}`}>
-        <div className={styles.gameHead}>
-          <GameIcon id="auction" width={16} height={16} />
-          Auction
-          <span className={`${styles.gamePot} num`}>
-            ${Math.round(headSum)} {winner ? "sold" : "leads"}
-          </span>
-        </div>
-        {phase === "sold" && winner ? (
-          <div>
-            <div className={styles.gameText}>“{winner.text}”</div>
-            <div className={styles.aucStamp}>
-              SOLD <b className="num">${lotSum(winner)}</b> · {winner.from}
-              <span className={styles.aucUnderline} />
-            </div>
-          </div>
-        ) : rows.length === 0 ? (
-          <div className={styles.gameSub}>no lots on the board yet</div>
-        ) : (
-          <div ref={listRef} className={phase === "closing" ? styles.aucClosing : undefined}>
-            {rows.map((l) => (
-              <AucRow key={l.id} lot={l} top={top} leader={l.id === leaderId} />
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function AucRow({ lot, top, leader }: { lot: AuctionLot; top: number; leader: boolean }) {
-  const sum = lotSum(lot);
-  const shown = useCountUp(sum, 500);
-  const leadN = useChangeNonce(leader); // increments on takeover — replays the tick + flash
-  const pct = top > 0 ? Math.round((sum / top) * 100) : 0;
-  return (
-    <div className={styles.gameRow} data-flip-key={lot.id}>
-      {leader && leadN > 0 && <span key={leadN} className={styles.rowFlash} />}
-      {leader && <span key={`t${leadN}`} className={styles.leadTick} />}
-      <span className={styles.gameName}>{lot.text}</span>
-      <span className={styles.gameBar}>
-        <span style={{ width: `${pct}%` }} />
-      </span>
-      <span className={`${styles.gamePct} num`}>${Math.round(shown)}</span>
-      {!leader && (
-        <span className={styles.aucGap}>
-          +<b className="num">${Math.max(1, top - sum)}</b> to lead
-        </span>
-      )}
-    </div>
-  );
-}
 
 // ---- Fundraiser: the campaign figure fills toward the goal as viewers chip in. Polls. ----
 export function FundraiserOverlay({ handle, demo, goal: goalProp, img }: Common & { goal?: number; img?: string }) {
@@ -921,7 +748,9 @@ export function FundraiserOverlay({ handle, demo, goal: goalProp, img }: Common 
       const next = raisedTotal(firstActiveScope(handle, "fundraiser"));
       const prev = prevRaised.current;
       prevRaised.current = next;
-      if (prev !== null && next > prev) setChip({ amount: Math.round(next - prev), n: ++chipN.current });
+      // The delta is money, so it is not rounded: a 50-cent chip-in used to show
+      // as "+$1" on stream, or vanish entirely when it rounded to zero.
+      if (prev !== null && next > prev) setChip({ amount: next - prev, n: ++chipN.current });
       setRaised(next);
     };
     load();
@@ -965,7 +794,7 @@ export function FundraiserOverlay({ handle, demo, goal: goalProp, img }: Common 
       <div className={styles.fund}>
         {chip && (
           <span key={chip.n} className={styles.fundChip}>
-            <b className="num">+${chip.amount}</b>
+            <b className="num">+{usd(chip.amount)}</b>
             {chip.name && <span className={styles.fundChipName}> {chip.name}</span>}
           </span>
         )}

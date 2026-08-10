@@ -1,3 +1,5 @@
+import { PLATFORM_FLOOR } from "@/lib/data/floors";
+import { usdPrecise } from "@/lib/money";
 // Mini-games catalog — data, and only data (no React/logic), so it can be imported anywhere:
 // the /games page, the homepage teaser, later — cabinet settings. Adding a game = adding a row here;
 // the UI iterates this list instead of hardcoding each game.
@@ -5,7 +7,7 @@
 // Games are a layer on top of donations (front.md §5–6): money and reputation travel the same path,
 // the game just sets the moment. None are built yet — all are in "building" status (never surfaced as a label).
 
-export type GameId = "task" | "roulette" | "fundraiser" | "auction";
+export type GameId = "task" | "roulette" | "fundraiser";
 
 // building — still under construction: shows only as a dim dot in the cabinet, never as a label.
 // available — can be enabled.
@@ -83,7 +85,7 @@ export const GAMES: readonly GameModule[] = [
       },
     ],
     knobs: [
-      { label: "Minimum amount", value: "$10", hint: "The least a viewer can pay to set you a task." },
+      { label: "Minimum amount", value: "$10", hint: `Yours to set — the network's own floor is ${usdPrecise(PLATFORM_FLOOR.task)}, and you can only go up from there.` },
       { label: "Longest deadline", value: "24h", hint: "The most time a viewer may give you — from 6 hours up to 1 week." },
       { label: "Accept first", value: "On", hint: "You confirm the task before the clock starts (off = paying starts it)." },
       { label: "Max active tasks", value: "5", hint: "New tasks pause once this many are in progress (1–50)." },
@@ -121,7 +123,7 @@ export const GAMES: readonly GameModule[] = [
       { label: "Topic", value: "Games", hint: "Games, films & series, music, food, challenges, talk topics, creative work — or your own." },
       { label: "Allowed categories", value: "All", hint: "Restrict suggestions to certain categories, or leave it open to all of them." },
       { label: "Who can suggest", value: "Everyone", hint: "Everyone, or a minimum tier — and you can leave your top tier out." },
-      { label: "Minimum to suggest", value: "$5", hint: "The least a viewer donates to put a pick on the wheel." },
+      { label: "Minimum to suggest", value: "$5", hint: `Yours to set — the network's own floor is ${usdPrecise(PLATFORM_FLOOR.donationWithWords)}, and you can only go up from there.` },
       { label: "Round length", value: "30 min", hint: "How long suggestions stay open before the spin — from 5 minutes to 2 hours." },
       { label: "Play time", value: "1 hour", hint: "How long you commit to whatever wins — from 30 minutes to 5 hours." },
       { label: "Spin format", value: "Single", hint: "One spin picks the winner, or an elimination round that knocks picks out one by one." },
@@ -156,7 +158,7 @@ export const GAMES: readonly GameModule[] = [
       },
     ],
     knobs: [
-      { label: "Minimum chip-in", value: "$1", hint: "The least a single contribution can be." },
+      { label: "Minimum chip-in", value: "$1", hint: `Yours to set — the network's own floor is ${usdPrecise(PLATFORM_FLOOR.fundraiser)}, and you can only go up from there.` },
       { label: "Collection runs for", value: "14 days", hint: "How long viewers can chip in before it closes — from 1 day to 30 days." },
       { label: "Time to deliver", value: "30 days", hint: "Your window to deliver after you accept — from 1 week to 90 days." },
       { label: "Accept below goal", value: "On, from 50%", hint: "Allow closing on a partial goal, but no lower than the share you set." },
@@ -168,41 +170,6 @@ export const GAMES: readonly GameModule[] = [
       "Deliver within the delivery window, and your reputation holders confirm whether you did.",
       "Confirmed: the pot is yours and every backer earns reputation for exactly what they put in.",
       "Not delivered, or not confirmed: everyone is refunded to the cent — even if the goal was met.",
-    ],
-  },
-  {
-    id: "auction",
-    title: "Auction",
-    tagline: "Viewers bid tasks with money. The richest lot you accept wins your time — every other bid is refunded.",
-    status: "building",
-    hasPage: true,
-    steps: [
-      {
-        lead: "A viewer places a lot.",
-        sub: "Money in escrow plus a condition only you can read. Accept the lots you'll do — they go public into the bidding; turn one down and it's refunded.",
-      },
-      {
-        lead: "Lots climb the board.",
-        sub: "Anyone can top up an accepted lot — beat the leader by at least your outbid step, and it moves up. The richest lot leads.",
-      },
-      {
-        lead: "The bell rings. Top lot wins.",
-        sub: "The richest accepted lot wins; every other lot is refunded on the spot. Deliver the condition in your window → the money's yours; miss it → refunded.",
-      },
-    ],
-    knobs: [
-      { label: "Minimum bid", value: "$5", hint: "The least a single bid can put into a lot." },
-      { label: "Minimum outbid step", value: "$1", hint: "The least a viewer must beat the current leader by." },
-      { label: "Bidding window", value: "24h", hint: "How long viewers can place and top up lots — from 6 hours to 1 week." },
-      { label: "Time to deliver", value: "48h", hint: "Your window to do the winning condition after the bell — from 24 hours up." },
-    ],
-    playRules: [
-      "A viewer places a lot: at least the minimum bid in escrow, plus a condition only you can read.",
-      "You accept the lots you'll do — accepted texts go public into the bidding; decline and the money goes back.",
-      "Anyone can top up an accepted lot, beating the current leader by at least your outbid step.",
-      "Bidding runs for your window. When it closes, the richest accepted lot wins and every other lot is refunded on the spot.",
-      "Deliver the winning condition within your delivery window, and your reputation holders confirm it.",
-      "Confirmed: the money is yours and every backer of the lot earns reputation for their share. Missed: everyone is refunded.",
     ],
   },
 ];

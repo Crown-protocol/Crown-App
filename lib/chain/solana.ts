@@ -2,9 +2,10 @@ import { Connection, PublicKey } from "@solana/web3.js";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { RPC_URL, SPLITTER, USDC_MINT } from "./config";
 
-// One shared devnet connection. "confirmed" is enough for UX; the cheer-index
-// book only ingests finalized txs anyway (its own 60s timer), so reputation
-// lags the donation by ~30–90s regardless of what we pick here.
+// One shared devnet connection. "confirmed" is enough for UX; the book only
+// folds **finalized** transactions (the index's outcall asks for finality), so
+// reputation lags the donation by however long finality takes — and the ingest
+// our submitter buys can only be paid for after that.
 let conn: Connection | null = null;
 export function connection(): Connection {
   if (!conn) conn = new Connection(RPC_URL, "confirmed");
@@ -20,6 +21,27 @@ export function eventAuthority(): PublicKey {
 // PDAs (their ATAs are off-curve by definition).
 export function usdcAta(owner: PublicKey, allowOwnerOffCurve = false): PublicKey {
   return getAssociatedTokenAddressSync(USDC_MINT, owner, allowOwnerOffCurve);
+}
+
+// An escrow's vault — the factory `init`s it as the escrow PDA's own ATA, so it
+// is derivable by anyone and is never an argument the client gets to choose.
+export function vaultAta(escrow: PublicKey): PublicKey {
+  return usdcAta(escrow, true);
+}
+
+// ---- byte plumbing shared by the salt, the ids and the wire format ----
+
+export async function sha256(data: Uint8Array): Promise<Buffer> {
+  return Buffer.from(await crypto.subtle.digest("SHA-256", data as BufferSource));
+}
+
+export const hex = (b: Uint8Array): string =>
+  Array.from(b).map((x) => x.toString(16).padStart(2, "0")).join("");
+
+export function fromHex(s: string): Buffer {
+  const clean = s.trim().toLowerCase();
+  if (clean.length % 2 !== 0 || /[^0-9a-f]/.test(clean)) throw new Error("Not hex.");
+  return Buffer.from(clean, "hex");
 }
 
 // u64 little-endian, the only integer encoding the programs use for amounts.

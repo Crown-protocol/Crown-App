@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "canisters": {
+    "sol-rpc": {
+      "type": "custom",
+      "wasm": "../../crown-games/e2e-fixtures/mock-sol-rpc/target/wasm32-unknown-unknown/release/mock_sol_rpc.wasm",
+      "candid": "sol-rpc.did"
+    },
+    "crown-indexer": {
+      "type": "custom",
+      "wasm": "../../crown-indexer/target/wasm32-unknown-unknown/release/crown_indexer.wasm",
+      "candid": "../../crown-indexer/crown-indexer.did"
+    },
+    "crown-relay": {
+      "type": "custom",
+      "wasm": "../../crown-relay/target/wasm32-unknown-unknown/release/crown_relay.wasm",
+      "candid": "../../crown-relay/crown-relay.did"
+    },
+    "conditional-tasks": {
+      "type": "custom",
+      "wasm": "../../crown-games/conditional-tasks/target/wasm32-unknown-unknown/release/conditional_tasks.wasm",
+      "candid": "../../crown-games/conditional-tasks/conditional-tasks.did"
+    },
+    "conditional-funding": {
+      "type": "custom",
+      "wasm": "../../crown-games/conditional-funding/target/wasm32-unknown-unknown/release/conditional_funding.wasm",
+      "candid": "../../crown-games/conditional-funding/conditional-funding.did"
+    }
+  },
+  "defaults": {
+    "build": {
+      "packtool": ""
+    }
+  },
+  "networks": {
+    "local": {
+      "bind": "127.0.0.1:4943",
+      "type": "ephemeral"
+    }
+  }
+}

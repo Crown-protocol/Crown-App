@@ -8,7 +8,6 @@ import { db, now } from "./db";
 // module owns the CONFLICT rules. Writes arrive as small OPS, not blind blobs:
 //   append  — add a list item if its id isn't there yet (viewer adds a task/lot)
 //   suggest — roulette accumulator: bump a title's pool/backers, or add the title
-//   entry   — auction top-up: append a LotEntry to one lot
 //   add     — numeric accumulator (fundraiser collected)
 //   mergeById — union a list by item id, caller's version winning (session registry)
 //   replace — authoritative overwrite (metas, the streamer's own state changes)
@@ -25,9 +24,8 @@ export const SYNCED_KEYS = [
   "cheer-tasks",
   "cheer-roulette-round",
   "cheer-roulette-meta",
-  "cheer-auction-lots",
-  "cheer-auction-meta",
   "cheer-fundraiser-collected",
+  "cheer-fundraiser-contributions",
   "cheer-fundraiser-status",
   // The session REGISTRY (scope = "<handle>:<gameId>", value = GameSession[]). Without it a
   // second+ session only exists in the streamer's browser: a viewer's ?s=<id> link can't name

@@ -2,17 +2,17 @@
 
 import { useEffect } from "react";
 import { useParams, useSearchParams, notFound } from "next/navigation";
-import { AlertsOverlay, RankOverlay, GoalOverlay, TopOverlay, RouletteOverlay, TaskOverlay, FundraiserOverlay, AuctionOverlay } from "@/components/overlays/Overlays";
+import { AlertsOverlay, RankOverlay, GoalOverlay, TopOverlay, RouletteOverlay, TaskOverlay, FundraiserOverlay } from "@/components/overlays/Overlays";
 import { TickerOverlay, QrOverlay, SessionOverlay, RecordOverlay, TrainOverlay } from "@/components/overlays/Extras";
 import { isOverlayKind } from "@/lib/data/overlays";
 import { firstActiveScope, pullSessions } from "@/lib/data/gameSessions";
 import { pullScope } from "@/lib/data/gameSync";
 import type { GameId } from "@/lib/data/games";
 
-// The four game widgets read the game stores — OBS's Browser Source is its OWN browser with an
+// The game widgets read the game stores — OBS's Browser Source is its OWN browser with an
 // empty localStorage, so without pulling the shared game state (/api/gamestate) they'd show the
 // demo seeds instead of the real queue/round/book the viewers are filling.
-const GAME_WIDGETS: Record<string, GameId> = { roulette: "roulette", task: "task", fundraiser: "fundraiser", auction: "auction" };
+const GAME_WIDGETS: Record<string, GameId> = { roulette: "roulette", task: "task", fundraiser: "fundraiser" };
 
 // /overlay/<handle>/<widget> — a bare page for OBS Browser Source. Transparent background (see
 // app/overlay/layout.tsx). ?demo=1 fabricates donations so it's lively without a real donor.
@@ -64,7 +64,6 @@ export default function OverlayPage() {
   if (widget === "roulette") return <RouletteOverlay handle={handle} demo={demo} />;
   if (widget === "task") return <TaskOverlay handle={handle} demo={demo} />;
   if (widget === "fundraiser") return <FundraiserOverlay handle={handle} demo={demo} goal={num("goal")} img={search.get("img") || undefined} />;
-  if (widget === "auction") return <AuctionOverlay handle={handle} demo={demo} />;
   if (widget === "ticker") return <TickerOverlay handle={handle} demo={demo} />;
   if (widget === "qr") return <QrOverlay handle={handle} demo={demo} />;
   if (widget === "session") return <SessionOverlay handle={handle} demo={demo} start={num("start")} />;

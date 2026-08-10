@@ -3,13 +3,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useSolanaWallet } from "@/lib/chain/wallet";
 import { buildAuthMessage } from "@/lib/chain/authMessage";
-import { isDemoAddress } from "./session";
 import type { Profile } from "./types";
 
 // How publishing to the Cheer DB went. "unsigned" = the wallet didn't sign (declined / not connected)
 // so the server refused; "taken" = handle reserved or owned by someone else; "network" = unreachable.
-// `signed` says whether the wallet actually produced a signature for this save. A demo-address page
-// publishes fine WITHOUT one, so callers must not treat plain success as proof of wallet ownership.
+// `signed` says whether the wallet actually produced a signature for this save.
 export type SaveResult = { ok: true; signed: boolean } | { ok: false; reason: "unsigned" | "taken" | "network" };
 
 const KEY = "cheer-profile";
@@ -26,7 +24,6 @@ const PUBLISH_DELAY_MS = 2500;
 const PAGE_KEY_PREFIXES = [
   "cheer-tasks",
   "cheer-roulette",
-  "cheer-auction",
   "cheer-fundraiser",
   "cheer-donations",
   "cheer-game-sessions",
@@ -221,7 +218,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
             signed = true;
           }
         }
-        if (!signed && !isDemoAddress(p.address)) return { ok: false, reason: "unsigned" };
+        if (!signed) return { ok: false, reason: "unsigned" };
         try {
           const res = await fetch("/api/profiles", { method: "POST", headers, body, credentials: "same-origin" });
           if (res.ok) return { ok: true, signed };

@@ -6,7 +6,6 @@ import { Keypair } from "@solana/web3.js";
 import nacl from "tweetnacl";
 
 const BASE = (process.env.CHEER_BASE ?? process.env.CROWN_BASE) || "http://localhost:3000";
-const DEMO_ADDRESS = "CrownDemo1111111111111111111111111111111111";
 
 // The synthetic-donation hook is locked behind CROWN_TEST_SECRET (dev-only + secret header).
 // Read the same value the dev server loaded from .env.local so `node scripts/verify-db.mjs`
@@ -20,7 +19,7 @@ const TEST_SECRET =
       return "";
     }
   })();
-const TEST_HDR = TEST_SECRET ? { "x-crown-test-secret": TEST_SECRET } : {};
+const TEST_HDR = TEST_SECRET ? { "x-cheer-test-secret": TEST_SECRET } : {};
 
 let failed = 0;
 let skipped = 0;
@@ -77,7 +76,9 @@ const mkProfile = (over = {}) => ({
 });
 
 // ── 1. Ownership rules on profiles
-check("demo page: unsigned create allowed", (await post("/api/profiles", mkProfile({ handle: H + "demo", address: DEMO_ADDRESS }))).body?.ok === true);
+// Pages nobody owns are gone: an unsigned create is refused whatever address it
+// carries, so this is now the same rule as the line below rather than its exception.
+check("address-less page: unsigned create REJECTED (400)", (await post("/api/profiles", mkProfile({ handle: H + "demo", address: "" }))).status === 400);
 check("real page: unsigned create REJECTED (401)", (await post("/api/profiles", mkProfile())).status === 401);
 check("real page: signed create ok", (await post("/api/profiles", mkProfile(), signHeaders(OWNER, "profile", H, mkProfile()))).body?.ok === true);
 check("owned page: unsigned update REJECTED (403)", (await post("/api/profiles", mkProfile({ bio: "hack" }))).status === 403);
@@ -96,7 +97,11 @@ check("texts: readable", (await j(`/api/texts?handle=${H}&game=task`)).body?.tex
 
 // ── 3. Donation pipeline: intent → synthetic Settled → feed + reputation
 const SIG = "VERIFYDB" + run;
-check("intent saved", (await post("/api/donations/intent", intentBody(DONOR_KP, SIG, { handle: H, name: "Max", message: "gg" }))).body?.ok === true);
+// Words are the paid half of the product: the server reads the transaction and
+// refuses a caption for a donation that never sent us the fee. A synthetic
+// signature has paid nothing, so 402 IS the pass here — and the check is worth
+// keeping precisely because it is what stops the fee being optional in practice.
+check("intent: refused when the donation paid no fee (402)", (await post("/api/donations/intent", intentBody(DONOR_KP, SIG, { handle: H, name: "Max", message: "gg" }))).status === 402);
 // The caption is the donor's to write: without a proof from the paying wallet, anyone who saw the
 // public tx signature could attach their own name and message to someone else's donation.
 check("intent: refused without proof", (await post("/api/donations/intent", { signature: SIG + "X", handle: H, name: "Impostor" })).status === 401);
@@ -121,20 +126,45 @@ if (ins.status === 403) {
   check("synthetic Settled inserted via real path", ins.body?.inserted === true, ins.body);
   check("duplicate signature is a no-op", (await post("/api/indexer", { test: { signature: SIG, slot: 1, payer: DONOR, streamer: STREAMER_ADDR, gross: 25_000_000 } }, TEST_HDR)).body?.inserted === false);
   const row = (await j(`/api/feed?handle=${H}`)).body?.donations?.find((d) => d.signature === SIG);
-  check("feed row decorated by intent (Max/gg/$25)", row?.donorName === "Max" && row?.message === "gg" && row?.gross === 25_000_000, row);
+  // The donation lands in full — and lands WORDLESS, because the caption above was
+  // refused for paying no fee. This pair is the whole product rule in one row:
+  // the money is never ours to withhold, the words are never free.
+  check(
+    "feed row carries the donation, and no words we weren't paid for",
+    row?.gross === 25_000_000 && row?.donorName === null && row?.message === null,
+    row
+  );
   check("reputation folded", (await j(`/api/reputation?payer=${DONOR}&streamer=${STREAMER_ADDR}`)).body?.total >= 25_000_000);
+
+  // Cents must survive the whole way. Real donations are not whole dollars — the
+  // first live one was $0.98 — and every screen that divided with `Math.floor`
+  // showed it as $0. The pipeline is checked in minor units precisely so a
+  // formatter can never be the thing that decides how much someone was paid.
+  const CENTS_SIG = "VERIFYCENTS" + run;
+  const centsIns = await post("/api/indexer", { test: { signature: CENTS_SIG, slot: 2, payer: DONOR, streamer: STREAMER_ADDR, gross: 980_000 } }, TEST_HDR);
+  // Ask for the row by signature rather than trusting it to be inside a page of
+  // the feed: this stack now has real donations in it, and a default page size is
+  // not a promise about where a specific row lands.
+  const centsFeed = await j(`/api/feed?handle=${H}&limit=200`);
+  const centsRow = centsFeed.body?.donations?.find((d) => d.signature === CENTS_SIG);
+  check("a sub-dollar donation keeps its cents end to end", centsRow?.gross === 980_000, JSON.stringify({ inserted: centsIns.body, found: centsRow }).slice(0, 200));
 }
 
 // ── 4. Delete: unsigned refused on owned, owner allowed
 check("owned page: unsigned DELETE REJECTED", (await j(`/api/profiles/${H}`, { method: "DELETE" })).status === 403);
 check("owned page: owner DELETE ok", (await j(`/api/profiles/${H}`, { method: "DELETE", headers: signHeaders(OWNER, "delete", H, null) })).body?.ok === true);
-await fetch(`${BASE}/api/profiles/${H}demo`, { method: "DELETE" }); // demo page — unsigned cleanup works by design
 
 // ── 5. Health + rate limit
 check("/api/health ok", (await j("/api/health")).body?.ok === true);
 let limited = false;
-for (let i = 0; i < 25; i++) {
-  const r = await post("/api/donations/intent", intentBody(DONOR_KP, "RL" + run + i, { handle: H }));
+// Spammed against `texts`, and the choice matters twice over. Not `profiles`:
+// every check above depends on that bucket, and draining it made the NEXT run of
+// this script fail on its own leftovers. Not `intent` either, any more: it now
+// reads the transaction from the chain before answering, so 45 requests take long
+// enough for the bucket to refill mid-loop and the limiter never trips — the test
+// would be measuring RPC latency, not the limiter.
+for (let i = 0; i < 40; i++) {
+  const r = await post("/api/texts", { id: `rl${run}-${i}`, game: "task", handle: H, body: "x" });
   if (r.status === 429) { limited = true; break; }
 }
 check("rate limit kicks in on write spam (429)", limited);

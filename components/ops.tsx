@@ -3,7 +3,11 @@
 import { useRef, useState, type ReactNode } from "react";
 
 export function money(n: number) {
-  return `$${Math.round(n).toLocaleString("en-US")}`;
+  // Cents survive here too: the operations panel is the one screen where a
+  // rounded total quietly disagrees with the ledger it is summing.
+  return Number.isInteger(n)
+    ? `$${n.toLocaleString("en-US")}`
+    : `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 export function shortMoney(n: number) {
   return n >= 1000 ? `$${Math.round(n / 1000)}k` : `$${n}`;

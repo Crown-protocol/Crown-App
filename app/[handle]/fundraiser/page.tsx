@@ -16,9 +16,12 @@ import { SocialIcon, SOCIAL_LABEL, CopyIcon } from "@/components/icons";
 import { normalizeSocialLink } from "@/lib/data/social-links";
 import { usd } from "@/lib/money";
 import { fundraiserRules } from "@/lib/data/gameConfig";
-import { withFundraiserDefaults, readCollected, addCollected, readStatus, type FundraiserStatus } from "@/lib/data/fundraiser";
+import { withFundraiserDefaults, readCollected, addCollected, addContribution, readStatus, type FundraiserStatus } from "@/lib/data/fundraiser";
 import { useGameChain } from "@/lib/chain/useGameChain";
 import { fundingChipIn } from "@/lib/chain/gameFlows";
+import { FundraiserVotePanel } from "@/components/games/VotePanel";
+import { MinNote } from "@/components/games/MinNote";
+import { fundraiserFloor } from "@/lib/data/floors";
 import { resolvePublicSession, pullSessions } from "@/lib/data/gameSessions";
 import { useGameSyncState } from "@/lib/data/gameSync";
 import { backgroundStyle, backgroundInk } from "@/lib/data/pagebuilder";
@@ -160,7 +163,10 @@ export default function FundraiserPage({ params }: { params: { handle: string } 
   // with a $5 minimum and $2 left to go, clamping to $2 would fail this check and leave a dead
   // button with nothing on screen explaining why. Once the remainder is smaller than the minimum,
   // the remainder IS the valid amount — anything more would overshoot the goal.
-  const enoughToSend = finalAmount >= Math.min(cfg.minContribution, remaining);
+  const floor = fundraiserFloor(cfg.minContribution);
+  // Still clamped by what the collection has left to raise: a run needing $3 must
+  // stay fundable even when the floor is higher than what remains.
+  const enoughToSend = finalAmount >= Math.min(floor.amount, remaining);
   const canSend = send === "idle" && !closed && synced && finalAmount > 0 && enoughToSend;
   const rep = getReputation(handle);
 
@@ -176,11 +182,13 @@ export default function FundraiserPage({ params }: { params: { handle: string } 
         setSend("idle");
         return;
       }
+      // No deadline is passed: an escrow has to outlive the collection's own
+      // window, and that window anchors on the FIRST contribution's birth slot —
+      // a figure only the canister knows. The flow reads it there.
       const res = await fundingChipIn(chain.wallet, {
         collectionHex: frStatus.chainCollection,
         recipient: mine!.address,
         dollars: finalAmount,
-        deadlineDays: cfg.fundingDays + cfg.deliveryDays + 14, // escrow must outlive delivery + the vote
       });
       if (!res.ok) {
         setChainErr(res.error);
@@ -188,6 +196,12 @@ export default function FundraiserPage({ params }: { params: { handle: string } 
         return;
       }
       setCollected(addCollected(scope!, finalAmount));
+      // Record the escrow itself, not just the amount: settling this collection
+      // later means claiming each contribution, and a claim needs the address and
+      // the donor — neither of which a running total remembers.
+      if (res.escrow && chain.wallet) {
+        addContribution(scope!, { escrow: res.escrow, donor: chain.wallet.address, amount: finalAmount, deadline: res.deadline });
+      }
       setSend("done");
       setTimeout(() => setSend("idle"), 2200);
       return;
@@ -264,12 +278,13 @@ export default function FundraiserPage({ params }: { params: { handle: string } 
               <input
                 className={styles.customAmount}
                 type="number"
-                min={cfg.minContribution}
+                min={floor.amount}
                 placeholder="Custom"
                 value={custom}
                 onChange={(e) => setCustom(e.target.value)}
               />
             </div>
+            <MinNote floor={floor} amount={finalAmount} />
             {/* Say why the number changed. Silently charging less than the button was clicked for is
                 the kind of surprise that reads as a bug even when it's the right thing to do. */}
             {clamped && !closed && (
@@ -278,6 +293,9 @@ export default function FundraiserPage({ params }: { params: { handle: string } 
               </div>
             )}
             <ReputationDelta rep={rep} gain={finalAmount} tiers={mine.tiers} />
+            {/* Shows only while the canister says the collection is being judged —
+                which is also the only window in which a vote would be accepted. */}
+            <FundraiserVotePanel collection={frStatus.chainCollection} recipient={mine.address} />
             {/* Real escrow needs BOTH the canister live AND an on-chain collection to chip into —
                 the same condition chipIn() gates the real path on. Anything else is the preview. */}
             {(() => {
@@ -300,8 +318,8 @@ export default function FundraiserPage({ params }: { params: { handle: string } 
                       : !synced
                         ? "Checking this collection's terms…"
                         : realEscrow
-                          ? `From ${usd(cfg.minContribution)}. Your money sits in escrow, not in anyone's pocket.`
-                          : `From ${usd(cfg.minContribution)}. Preview — the on-chain escrow isn't live here yet.`}
+                          ? "Your money sits in escrow, not in anyone's pocket."
+                          : "Preview — the on-chain escrow isn't live here yet."}
                   </div>
                 </>
               );

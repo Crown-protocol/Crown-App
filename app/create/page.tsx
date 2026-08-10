@@ -4,9 +4,7 @@ import { useEffect, useState } from "react";
 import { safeId } from "@/lib/id";
 import { useRouter } from "next/navigation";
 import { useProfile } from "@/lib/data/ProfileProvider";
-import { DEMO_ADDRESS, isDemoAddress, startDemoSession } from "@/lib/data/session";
 import { markProved } from "@/lib/data/proveOwnership";
-import { MOCK_STREAMERS } from "@/lib/data/mock";
 import { isValidAddress } from "@/lib/chain/config";
 import { useWallet } from "@/lib/chain/useWallet";
 import { useCheer } from "@/lib/data/DataProvider";
@@ -27,7 +25,6 @@ const short = (a: string) => (a.length > 16 ? `${a.slice(0, 8)}…${a.slice(-6)}
 export default function CreatePage() {
   const router = useRouter();
   const { save } = useProfile();
-  const { mode } = useCheer();
   const wallet = useWallet();
 
   const [step, setStep] = useState(1);
@@ -75,7 +72,7 @@ export default function CreatePage() {
   const cleanHandle = handle.trim().replace(/^@/, "").toLowerCase();
   // Built-in demo handles (/@nova) live in code, not the DB — the server refuses them (409), so
   // catch it here with a normal field error instead of a silently dead link.
-  const reserved = !!MOCK_STREAMERS[cleanHandle];
+  const reserved = false; // no handles are held back any more — the demo creator is gone
   const canNext1 = name.trim().length > 0 && cleanHandle.length > 0 && !reserved;
   // A filled-in social link must be a real profile URL on its platform (anti-phishing) before moving on.
   const canNext2 = socials.every((s) => !s.url.trim() || isSocialValid(s.kind, s.url));
@@ -85,23 +82,18 @@ export default function CreatePage() {
 
   function resolvedAddress(): string {
     if (walletMode === "manual") return manualAddr.trim() || "";
-    if (mode === "chain") return wallet.address || "";
-    return DEMO_ADDRESS;
+    return wallet.address || "";
   }
 
   const addr = resolvedAddress();
   // A real, well-formed destination is required before finishing (a bad/empty address would make the
-  // streamer's own /@handle 404 and route donations nowhere). Demo mode uses the fixed demo address.
+  // streamer's own /@handle 404 and route donations nowhere).
   // A REAL payout address also needs the wallet's signature: the server refuses an unsigned page
   // with a real address (anti-squatting), so finishing without a connected wallet would "save"
   // locally and silently never publish — the public link would be dead in every other browser.
-  const manualNeedsWallet = walletMode === "manual" && manualValid && !isDemoAddress(manualAddr.trim()) && !wallet.connected;
+  const manualNeedsWallet = walletMode === "manual" && manualValid && !wallet.connected;
   const canFinish =
-    walletMode === "manual"
-      ? manualValid && !manualNeedsWallet
-      : mode === "chain"
-        ? isValidAddress(wallet.address ?? "")
-        : true;
+    walletMode === "manual" ? manualValid && !manualNeedsWallet : isValidAddress(wallet.address ?? "");
 
   // Every step change goes through here so `dir` and `step` always agree.
   function go(to: number) {
@@ -143,7 +135,6 @@ export default function CreatePage() {
     // A demo-address page has no wallet to prove ownership with, so the cabinet gate (which signs a
     // wallet in OR accepts a demo session) would otherwise bounce us back to /create. Mark the demo
     // session here so /space recognises the just-created page and lands in the cabinet.
-    if (isDemoAddress(addr)) startDemoSession();
     router.push("/space");
   }
 
@@ -290,14 +281,14 @@ export default function CreatePage() {
                 <button type="button" className={`${styles.opt}${walletMode === "connected" ? " " + styles.optOn : ""}`} onClick={() => setWalletMode("connected")}>
                   <span className={styles.mark} aria-hidden />
                   <span className={styles.optBody}>
-                    <span className={styles.optTitle}>{mode === "chain" ? "Connected wallet" : "Demo wallet"}</span>
+                    <span className={styles.optTitle}>Connected wallet</span>
                     <span className={`${styles.optAddr} num`}>
-                      {mode === "chain" ? (wallet.connected ? short(wallet.address ?? "") : "Not connected") : short(DEMO_ADDRESS)}
+                      {wallet.connected ? short(wallet.address ?? "") : "Not connected"}
                     </span>
                   </span>
                 </button>
 
-                {mode === "chain" && walletMode === "connected" && !wallet.connected && (
+                {walletMode === "connected" && !wallet.connected && (
                   <button className="btn" type="button" style={{ alignSelf: "flex-start" }} onClick={() => setWalletModalOpen(true)}>
                     {wallet.connecting ? "Opening wallet…" : "Connect wallet"}
                   </button>

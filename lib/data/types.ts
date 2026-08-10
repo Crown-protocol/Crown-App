@@ -184,26 +184,7 @@ export interface FundraiserConfig {
   minAcceptPct: number; // % of the goal required to accept when allowBelowGoal is on
 }
 
-// The Auction page itself — what viewers see when they open the bidding: the streamer's pitch
-// plus the page furniture (same builder pattern as the other game pages). Lots and bids are live
-// data (lib/data/auction.ts), not part of the draft.
-export interface AuctionDraft {
-  headline: string; // the pitch — what you're auctioning your time for
-  description: string; // longer text under it (what you will/won't do)
-  descriptionEnabled: boolean;
-  presets: number[]; // bid amount chips, at least 1
-  widgets: PageWidget[]; // bid form + socials — toggle/reorder, same shape as the main page
-  design: PageDesign; // the auction page's own backdrop
-}
 
-// Rules for the Auction game — the streamer's knobs from the spec (duration, perform window,
-// min bid). Not on-chain in mock mode; on chain they are fixed per auction at creation.
-export interface AuctionConfig {
-  minBid: number; // $ — a single bid below this doesn't register
-  minIncrement?: number; // $ — the smallest amount you must beat the leader by (outbid step floor)
-  biddingHours: number; // how long the bidding stays open
-  performHours: number; // window to deliver the winning condition after the final
-}
 
 // Streamer profile (localStorage — the "mock backend"). widgets/design/avatar* are optional so
 // profiles saved before the page builder shipped still load — see lib/data/pagebuilder.ts defaults.
@@ -227,6 +208,4 @@ export interface Profile {
   roulette?: RouletteDraft; // the Roulette page — see RouletteDraft
   fundraiser?: FundraiserDraft; // the active Fundraiser page — see FundraiserDraft
   fundraiserConfig?: FundraiserConfig; // rules for the Fundraiser game — see FundraiserConfig
-  auction?: AuctionDraft; // the Auction page — see AuctionDraft
-  auctionConfig?: AuctionConfig; // rules for the Auction game — see AuctionConfig
 }

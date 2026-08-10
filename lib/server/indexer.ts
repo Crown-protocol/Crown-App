@@ -20,11 +20,12 @@ import { readStore, writeStore, queueNotify } from "./telegram-store";
 // ──────────────────────────────────────────────────────────────────
 
 const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC || "https://api.devnet.solana.com";
-const SPLITTER = new PublicKey(process.env.NEXT_PUBLIC_SPLITTER || "DDSeyx684iU9agHbXExwS3NstLvQeLKZcJWcJFSh1VDA");
+const SPLITTER = new PublicKey(process.env.NEXT_PUBLIC_SPLITTER || "DKs2C9dRJSnZsERdD58cUVXMracvVTDS19PWvUz98GrN");
+// The factory whose escrows we re-attribute to their donor — the same
+// recognition root crown-indexer pins (`config/testnet.toml`), and the only
+// escrow form this app ships.
 const FACTORIES = [
-  process.env.NEXT_PUBLIC_FACTORY_TWO_OUTCOME || "83f7ziVs5VeQ8xiDka8zczbfJT4WcxsXQ18cqWwmV5ur",
-  process.env.NEXT_PUBLIC_FACTORY_PAYOUT_TABLE || "EzvxRLxLvPW6TdmVCQ2JBWiv37tCD6kSngNvS2z2D3ka",
-  process.env.NEXT_PUBLIC_FACTORY_STREAM || "57MpCQ3TfAE66qDAnfkP9AX7LRqwd4CNX8uN6DaVwm3V",
+  process.env.NEXT_PUBLIC_FACTORY_TWO_OUTCOME || "BGVQrwSwkFQspL69DjGBFgKSgL6rutPqgcgEskmi8A4y",
 ];
 
 const EVENT_TAG = Buffer.from("e445a52e51cb9a1d", "hex");
@@ -221,8 +222,11 @@ export async function notifyTelegram(addr: string, gross: number): Promise<void>
     const hit = profiles.find((p) => p.address === addr);
     if (!hit) return;
     const s = await readStore();
-    const usd = Math.floor(gross / 1e6);
-    const queued = await queueNotify(s, hit.handle.toLowerCase(), "donation", `A donation arrived — $${usd}`, "It's already in your wallet.");
+    // Same format as the site: cents when there are cents, never a bare "0.98000001"
+    // and never a rounded "1" for money that wasn't a dollar.
+    const amount = gross / 1e6;
+    const shown = Number.isInteger(amount) ? amount.toLocaleString("en-US") : amount.toFixed(2);
+    const queued = await queueNotify(s, hit.handle.toLowerCase(), "donation", `A donation arrived — $${shown}`, "It's already in your wallet.");
     if (queued) await writeStore(s);
   } catch {}
 }

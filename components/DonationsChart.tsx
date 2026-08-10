@@ -4,14 +4,13 @@ import { useMemo, useState } from "react";
 import { Chart } from "@/components/Chart";
 import { GameIcon, NavIcon } from "@/components/icons";
 import { money } from "@/components/ops";
-import { DONATION_SOURCES, splitByGame, type DashboardPeriod, type DonationSource } from "@/lib/data/mock";
+import { DONATION_SOURCES, type DashboardPeriod, type DonationSource } from "@/lib/data/dashboard";
 
 const SOURCE_LABEL: Record<DonationSource, string> = {
   direct: "Regular",
   task: "Task",
   roulette: "Roulette",
   fundraiser: "Fundraiser",
-  auction: "Auction",
 };
 
 // "Donations by day", filterable by source right on the chart (like the admin panel's growth
@@ -19,7 +18,7 @@ const SOURCE_LABEL: Record<DonationSource, string> = {
 // period chosen at the top of Home. Replaces the old static "Donations by game" bar list.
 export function DonationsChart({ d, periodLabel }: { d: DashboardPeriod; periodLabel: string }) {
   const [selected, setSelected] = useState<Set<DonationSource>>(new Set(DONATION_SOURCES));
-  const split = useMemo(() => splitByGame(d), [d]);
+  const split = d.series;
   const allOn = selected.size === DONATION_SOURCES.length;
 
   // The charted series is the per-day sum of whatever sources are selected.

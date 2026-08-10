@@ -1,0 +1,28 @@
+/* Only ever on screen when the amount is short, so it arrives rather than sits
+   there — a short fade and a few pixels of travel, no layout jump before it. */
+.note {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  animation: minNoteIn var(--dur-2, 180ms) ease-out both;
+}
+
+@keyframes minNoteIn {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Someone who turned motion off still needs to see it — they just don't need it
+   to move. */
+@media (prefers-reduced-motion: reduce) {
+  .note {
+    animation: none;
+  }
+}

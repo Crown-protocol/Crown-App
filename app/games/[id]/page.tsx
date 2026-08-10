@@ -2,13 +2,12 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { TopNav } from "@/components/TopNav";
 import { GameIcon } from "@/components/icons";
-import { GameDemo } from "@/components/games/GameDemo";
 import { getGame } from "@/lib/data/games";
 import styles from "./page.module.css";
 
 // One template for every mini-game: hero → how it works (3 plain steps) → what you set (the real
 // knobs + their defaults) → CTA, with the game's own interactive demo in a sticky rail alongside.
-// Everything a game contributes is data in games.ts (steps/knobs); the demo is per-game (GameDemo).
+// Everything a game contributes is data in games.ts (steps/knobs).
 export default function GameDetailPage({ params }: { params: { id: string } }) {
   const game = getGame(params.id);
 
@@ -93,9 +92,6 @@ export default function GameDetailPage({ params }: { params: { id: string } }) {
             </div>
           </div>
 
-          <aside className={styles.rail}>
-            <GameDemo id={game.id} />
-          </aside>
         </div>
       </div>
     </main>

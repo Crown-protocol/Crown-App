@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     template: "%s · Cheer",
   },
   description:
-    "Cheer turns donations into on-chain support: money lands straight in the creator's wallet, and every dollar builds the viewer's reputation with them. Set a paid task, spin a game roulette, raise a goal, or auction your time — refunds are automatic when a promise isn't kept.",
+    "Cheer turns donations into on-chain support: money lands straight in the creator's wallet, and every dollar builds the viewer's reputation with them. Set a paid task, spin a game roulette, or raise a goal — refunds are automatic when a promise isn't kept.",
   keywords: [
     "creator donations",
     "streamer donations",
@@ -27,7 +27,6 @@ export const metadata: Metadata = {
     "creator monetization",
     "task for donation",
     "fundraiser",
-    "auction",
     "game roulette",
     "viewer reputation",
     "Cheer",

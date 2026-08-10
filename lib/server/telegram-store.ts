@@ -253,7 +253,6 @@ export async function queueAdmin(
 // whole promise is that it never says a number that didn't happen.
 const DEMO_SAMPLES: { kind: NotifKind; title: string; body: string }[] = [
   { kind: "big_donation", title: "SAMPLE — toffi donated $50", body: "“Beat the boss with no armor on”. Not real: this is what a donation looks like." },
-  { kind: "auction_lot_offered", title: "SAMPLE — new auction lot, $60", body: "Private until you accept: “Finish the map on the hardest difficulty.” Not a real lot." },
   { kind: "roulette_closing", title: "SAMPLE — roulette round closing", body: "$1,600 in the pot, 3 picks suggested. Not a real round." },
   { kind: "payout", title: "SAMPLE — $50 payout", body: "This is how a payout arrives. No money moved." },
 ];

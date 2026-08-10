@@ -43,22 +43,6 @@ export const BOT_SCENARIOS: BotScenario[] = [
     sample: { title: "Deadline passed — $50", body: "\"Beat the boss with no armor\" is past its window. Finish it or refund the viewer." },
   },
   {
-    kind: "auction_lot_offered",
-    label: "Someone bid on your auction",
-    when: "A viewer places a lot on your auction page.",
-    source: "game-notify · cheer-auction-lots/append",
-    wired: true,
-    sample: { title: "New lot — $60", body: "anna bid on: Finish the map on the hardest difficulty." },
-  },
-  {
-    kind: "auction_closing",
-    label: "Auction closed — deliver the winning lot",
-    when: "Bidding ends and the auction moves to delivery.",
-    source: "game-notify · cheer-auction-meta → performing",
-    wired: true,
-    sample: { title: "Auction closed", body: "The winning lot is yours to deliver — open your space for the details." },
-  },
-  {
     kind: "fundraiser_goal_hit",
     label: "Fundraiser accepted — delivery started",
     when: "You accept the collected amount and the delivery window opens.",
@@ -95,8 +79,8 @@ export const BOT_SCENARIOS: BotScenario[] = [
   {
     kind: "payout",
     label: "Money landed in your wallet",
-    when: "An auction settles, or a fundraiser is marked delivered.",
-    source: "game-notify · auction/fundraiser settle",
+    when: "A fundraiser is marked delivered.",
+    source: "game-notify · fundraiser settle",
     wired: true,
     sample: { title: "Auction settled", body: "The money is on its way to your wallet." },
   },
@@ -123,14 +107,6 @@ export const BOT_SCENARIOS: BotScenario[] = [
     source: "game-notify · cheer-roulette-meta → winner",
     wired: true,
     sample: { title: "The wheel picked \"Elden Ring\"", body: "Round closed — that's what you're on the hook for." },
-  },
-  {
-    kind: "auction_settled",
-    label: "Auction settled",
-    when: "The auction's escrow pays out.",
-    source: "not emitted yet (payout covers it today)",
-    wired: false,
-    sample: { title: "Auction settled — $600", body: "The winning lot has been paid out." },
   },
 
   // ── Good news ─────────────────────────────────────────────────────────────

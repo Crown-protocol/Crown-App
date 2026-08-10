@@ -45,7 +45,6 @@ export const dangerCopy = {
     busyLabel: "Sending…",
   }),
 
-  /** Opening or outbidding on the auction with your own lot. */
   bid: (dollars: number) => ({
     body: `Bid ${money(dollars)}. It sits in escrow and comes back automatically if your lot doesn't win.`,
     confirmLabel: `Bid ${money(dollars)}`,
@@ -100,13 +99,6 @@ export const dangerCopy = {
     body: `Close the bidding. The top lot at ${money(dollars)} wins, everyone else is refunded — bidding can't be reopened.`,
     confirmLabel: "Close bidding",
     busyLabel: "Closing…",
-  }),
-
-  /** Cancelling the whole auction: every lot is refunded and the run is over. */
-  cancelAuction: (dollars: number) => ({
-    body: `Cancel the auction. All ${money(dollars)} in lots goes back to the bidders and the run ends — this can't be undone.`,
-    confirmLabel: "Cancel auction",
-    busyLabel: "Cancelling…",
   }),
 
   /** Accepting a collection below (or at) the goal: it moves to delivering and stops taking money. */

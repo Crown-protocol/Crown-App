@@ -4,12 +4,10 @@ import { useEffect, useState } from "react";
 import { useSolanaWallet } from "@/lib/chain/wallet";
 import { useProfile } from "./ProfileProvider";
 import { hasProof } from "./proveOwnership";
-import { readDemoSession, DEMO_SESSION_EVENT } from "./session";
 
 // Are you actually SIGNED IN right now? A profile must exist on this device, AND one of:
 //   1. an editing SESSION on the server (the httpOnly cookie from your sign-in signature), OR
-//   2. you've PROVEN ownership of the currently connected wallet on this device (hasProof), OR
-//   3. you're in a demo session.
+//   2. you've PROVEN ownership of the currently connected wallet on this device (hasProof).
 //
 // (1) is what makes a reload survivable. Without it this asked "is the wallet connected RIGHT NOW",
 // and after F5 the page starts with no wallet attached — the extension reconnects a moment later, if
@@ -23,23 +21,15 @@ import { readDemoSession, DEMO_SESSION_EVENT } from "./session";
 export function useSignedIn(): boolean {
   const { address, connected } = useSolanaWallet();
   const { profile, hasSession } = useProfile();
-  const [demo, setDemo] = useState(false);
   // hasProof reads localStorage, which changes without a React re-render — bump on the same events
   // that flip login state (proof written on register/login, cleared on log out) so this re-evaluates.
   const [proofTick, setProofTick] = useState(0);
 
   useEffect(() => {
-    const sync = () => {
-      setDemo(readDemoSession());
-      setProofTick((t) => t + 1);
-    };
+    const sync = () => setProofTick((t) => t + 1);
     sync();
-    window.addEventListener(DEMO_SESSION_EVENT, sync);
     window.addEventListener("storage", sync);
-    return () => {
-      window.removeEventListener(DEMO_SESSION_EVENT, sync);
-      window.removeEventListener("storage", sync);
-    };
+    return () => window.removeEventListener("storage", sync);
   }, []);
 
   if (!profile) return false;
@@ -51,5 +41,5 @@ export function useSignedIn(): boolean {
   // Without a wallet attached, ask about the profile this device holds — not "any proof at all", which
   // on a shared browser showed a signed-in header for someone else's cached account.
   const proven = address ? connected && hasProof(address) : !!profile.address && hasProof(profile.address);
-  return hasSession || proven || demo;
+  return hasSession || proven;
 }

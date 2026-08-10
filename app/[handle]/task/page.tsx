@@ -23,6 +23,9 @@ import { dangerCopy } from "@/lib/data/dangerous";
 import { taskStartOnChain } from "@/lib/chain/gameFlows";
 import { GameTabs } from "@/components/games/GameTabs";
 import { GameRules, taskLines } from "@/components/games/GameRules";
+import { TaskVotePanel } from "@/components/games/VotePanel";
+import { MinNote } from "@/components/games/MinNote";
+import { taskFloor } from "@/lib/data/floors";
 import styles from "./page.module.css";
 
 type SendState = "idle" | "sending" | "done";
@@ -139,14 +142,18 @@ export default function TaskPage({ params }: { params: { handle: string } }) {
   // `synced`: until the server has answered, the minimum and the deadline shown may be the maker's
   // current defaults rather than the ones this run was opened with — and those defaults are editable
   // mid-run. No money moves under terms we can't vouch for.
-  const canSend = send === "idle" && !full && synced && text.trim().length > 0 && finalAmount >= cfg.minAmount;
+  // The floor a viewer is actually measured against: the game's own, or this
+  // creator's if they asked for more. Showing only the creator's let a $1 task
+  // look fine until the canister refused it — after the money was in escrow.
+  const floor = taskFloor(cfg.minAmount);
+  const canSend = send === "idle" && !full && synced && text.trim().length > 0 && finalAmount >= floor.amount;
 
   // $1 donated = 1 reputation (front.md I §4) — so this task's amount is exactly the gain.
   const rep = getReputation(handle);
   const durationHours = durationH ?? Math.min(24, cfg.deadlineHours);
 
-  function finishSubmit(escrow?: string) {
-    setQueue(addTask(scope!, { from: name, amount: finalAmount, text, requireApproval: cfg.requireApproval, durationHours, ...(escrow ? { escrow } : {}) }));
+  function finishSubmit(born?: { task: string; escrow: string; donor: string; deadline: number }) {
+    setQueue(addTask(scope!, { from: name, amount: finalAmount, text, requireApproval: cfg.requireApproval, durationHours, ...(born ?? {}) }));
     setText("");
     setCustom("");
     setSend("done");
@@ -170,7 +177,9 @@ export default function TaskPage({ params }: { params: { handle: string } }) {
         setSend("idle");
         return;
       }
-      finishSubmit(res.escrow);
+      // Both ids are kept: the scope id is what the canister answers to, the
+      // escrow address is where the money sits (and what a refund needs).
+      finishSubmit({ task: res.task, escrow: res.escrow, donor: chain.wallet.address, deadline: res.deadline });
       return;
     }
     // Mock path — the demo simulation, exactly as before.
@@ -240,6 +249,11 @@ export default function TaskPage({ params }: { params: { handle: string } }) {
                 </div>
               ))
             )}
+            {/* One panel per task the canister says is being judged. Nothing renders
+                for the rest, so the list stays a list until there is something to decide. */}
+            {queue.map((t) => (
+              <TaskVotePanel key={`v-${t.id}`} task={t.task} recipient={mine.address} />
+            ))}
           </div>
         )}
 
@@ -292,13 +306,14 @@ export default function TaskPage({ params }: { params: { handle: string } }) {
               <input
                 className={styles.customAmount}
                 type="number"
-                min={cfg.minAmount}
+                min={floor.amount}
                 placeholder="Custom"
                 value={custom}
                 disabled={full}
                 onChange={(e) => setCustom(e.target.value)}
               />
             </div>
+            <MinNote floor={floor} amount={finalAmount} />
 
             {/* What this task does to your standing with them: $1 = 1 point, so the amount above
                 is the gain. Shared with the other mini-games via ReputationDelta. */}
@@ -333,7 +348,7 @@ export default function TaskPage({ params }: { params: { handle: string } }) {
                     : cfg.requireApproval
                       ? "Sent — it's waiting for them to accept. Declined or missed, and you're refunded."
                       : "Sent — the clock is already running."
-                  : `From ${usd(cfg.minAmount)} · you pick the deadline, up to ${cfg.deadlineHours}h.`}
+                  : `You pick the deadline, up to ${cfg.deadlineHours}h. Refunded automatically if it isn\u2019t done.`}
             </div>
           </div>
         )}

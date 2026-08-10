@@ -1,14 +1,41 @@
-// Real dashboard numbers, computed from the maker's own donations — the honest replacement for the
-// hard-coded MOCK_DASHBOARD sample. The cabinet's Home tab used to show "$1,284 received, 96 donations"
-// to a brand-new page with zero real money; that's a lie about money, so by default the tiles and the
-// chart are built from the actual feed here. MOCK_DASHBOARD still exists, but it's opt-in now: the
-// admin panel's "Demo dashboard numbers" switch turns it on for screenshots/demos, and when it's on
-// the cabinet paints those numbers red with a "demo" tooltip so nobody mistakes them for real.
+// The cabinet's numbers, computed from the maker's own donations. There is no
+// sample dataset behind this any more: the Home tab used to be able to show
+// "$1,284 received" to a page that had earned nothing, and a lie about money is
+// the one thing a dashboard must never be capable of.
+//
+// The shapes live here too, next to the only thing that builds them.
 
 import type { Donation } from "./types";
-import { isDemoAddress } from "./session";
+import type { GameId } from "./games";
 import { usd } from "@/lib/money";
-import { DONATION_SOURCES, type DashboardPeriod, type DashboardPeriodKey, type ByGameRow, type DonationSource } from "./mock";
+
+export type DashboardPeriodKey = "7" | "30" | "all";
+
+// "direct" is a donation with no game behind it; the rest are the mini-games.
+export type DonationSource = GameId | "direct";
+export const DONATION_SOURCES: DonationSource[] = ["direct", "task", "roulette", "fundraiser"];
+
+export interface ByGameRow {
+  id: DonationSource;
+  amount: number;
+}
+
+export interface DashboardPeriod {
+  received: number;
+  donations: number;
+  newViewers: number;
+  peakLabel: string;
+  days: number[]; // chart points for the period (days, or for "all", months)
+  labels: string[]; // one label per point in `days`
+  peakValue: number;
+  axis: string[]; // 3 axis labels
+  byGame: ByGameRow[];
+  // Per-source daily series — counted from the donations themselves. It used to
+  // be SYNTHESIZED from the totals by a sine-weighted split, so the "by game"
+  // curves on the cabinet chart were a plausible-looking shape rather than what
+  // each game earned.
+  series: Record<DonationSource, number[]>;
+}
 
 const DAY_MS = 86_400_000;
 const MONTH = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -32,13 +59,11 @@ function source(d: Donation): DonationSource {
 // Money this maker actually received. The feed is one global stream, so filter to donations sent to
 // THIS payout address.
 //
-// Rows with no `streamer` are the demo seed (MOCK_FEED, the DataProvider's initial state) plus
-// locally-recorded mock donations. They used to count as "mine" unconditionally, which meant a brand
-// new page opened its dashboard on someone else's $219 — the one number a maker must be able to
-// trust. Now they only count for a page that has no real payout address yet (the demo cabinet, where
-// they ARE the point); a real address sees its own money and nothing else.
+// A page with no payout address has earned nothing by definition — it cannot have
+// been paid. Every row now carries the recipient it was mirrored from, so "mine"
+// is an exact match and never a fallback.
 function mine(donations: Donation[], address: string | undefined): Donation[] {
-  if (!address || isDemoAddress(address)) return donations.filter((d) => !d.streamer);
+  if (!address) return [];
   return donations.filter((d) => d.streamer === address);
 }
 
@@ -143,5 +168,17 @@ export function buildDashboard(all: Donation[], period: DashboardPeriodKey, addr
   for (const d of inRange) byMap.set(source(d), (byMap.get(source(d)) ?? 0) + d.amount);
   const byGame: ByGameRow[] = DONATION_SOURCES.map((id) => ({ id, amount: byMap.get(id) ?? 0 })).filter((r) => r.amount > 0);
 
-  return { received, donations, newViewers, peakLabel, days, labels, peakValue, axis, byGame };
+  // The same buckets, split by where the money came from — measured, not modelled.
+  const series = Object.fromEntries(
+    DONATION_SOURCES.map((k) => [
+      k,
+      bs.map((b) =>
+        inRange
+          .filter((d) => source(d) === k && whenMs(d) >= b.start && whenMs(d) < b.end)
+          .reduce((s, d) => s + d.amount, 0)
+      ),
+    ])
+  ) as Record<DonationSource, number[]>;
+
+  return { received, donations, newViewers, peakLabel, days, labels, peakValue, axis, byGame, series };
 }

@@ -3,7 +3,6 @@
 import { Logo } from "@/components/Logo";
 import { WalletConnect } from "@/components/WalletConnect";
 import { CheerBadge } from "@/components/CheerBadge";
-import { isDemoAddress } from "@/lib/data/session";
 import styles from "./SpaceGate.module.css";
 
 const short = (a: string) => (a.length > 14 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a);
@@ -19,14 +18,10 @@ const short = (a: string) => (a.length > 14 ? `${a.slice(0, 6)}…${a.slice(-4)}
 export function SpaceGate({
   pageAddress,
   connectedAddress,
-  allowDemo,
-  onDemoEnter,
   onRetry,
 }: {
   pageAddress: string;
   connectedAddress?: string;
-  allowDemo: boolean;
-  onDemoEnter: () => void;
   // Re-opens the ownership signature request. The right wallet is connected but the popup was
   // dismissed (or returned no session) — without this the person is stranded on "Confirm the
   // signature" with nothing to click. Optional: the cold-open gate has no signature to retry.
@@ -43,7 +38,6 @@ export function SpaceGate({
   const sameWallet = Boolean(connectedAddress) && Boolean(pageAddress) && connectedAddress === pageAddress;
   const wrongWallet = Boolean(connectedAddress) && !sameWallet;
   const awaitingSignature = sameWallet;
-  const demoPage = isDemoAddress(pageAddress);
 
   return (
     <main className="page">
@@ -83,13 +77,7 @@ export function SpaceGate({
               <h1 className={styles.title}>Connect your wallet</h1>
               <p className={styles.lead}>
                 Your wallet is your login — Cheer has no passwords. You&apos;re the owner of this page if you hold the
-                wallet it pays out to
-                {!demoPage && (
-                  <>
-                    : <span className={`${styles.addr} num`}>{short(pageAddress)}</span>
-                  </>
-                )}
-                .
+                wallet it pays out to: <span className={`${styles.addr} num`}>{short(pageAddress)}</span>.
               </p>
             </>
           )}
@@ -97,19 +85,6 @@ export function SpaceGate({
           <div className={styles.action}>
             <WalletConnect />
           </div>
-
-          {allowDemo && (
-            <div className={styles.demo}>
-              <span className={styles.demoNote}>
-                {demoPage
-                  ? "This page was created in demo mode — its payout address is a placeholder, so no wallet can own it yet."
-                  : "The app is running on mock data — nothing here is real money yet."}
-              </span>
-              <button type="button" className={styles.demoBtn} onClick={onDemoEnter}>
-                Continue in demo mode
-              </button>
-            </div>
-          )}
         </div>
       </div>
     </main>

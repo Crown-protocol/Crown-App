@@ -47,7 +47,7 @@ export function useChangeNonce(v: unknown): number {
   return n;
 }
 
-// FLIP for reorderable lists (top donors, auction board). Children must carry data-flip-key.
+// FLIP for reorderable lists (top donors, leaderboards). Children must carry data-flip-key.
 // On every `dep` change: rows that moved slide from their old offsetTop to the new one; brand-new
 // rows enter with a small slide+fade. Uses the Web Animations API so no CSS classes are needed.
 export function useFlip(containerRef: RefObject<HTMLElement | null>, dep: unknown): void {

@@ -23,3 +23,11 @@ npm-debug.log*
 # local debug scratch
 np.js
 .cdp-g.js
+
+# local ICP stand (crown-app/localnet): the replica's own state and the relay key
+# it generates. The key is a real signing key — it is what the relay pays for —
+# and the .dfx directory is one machine's canister ids, useless anywhere else.
+/localnet/.dfx
+/localnet/.relay-identity.json
+/localnet/node_modules
+/localnet/canister_ids.json

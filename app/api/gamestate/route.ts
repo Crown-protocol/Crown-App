@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
   // the wallet-less game layer works. But `replace` is a wholesale state SWAP: it's how a run moves to
   // accepted / closed / settled / refunded / delivered, and it's what fires "payout — money on its
   // way" to the owner's Telegram (game-notify.ts). Those are the OWNER's decisions. Left open, anyone
-  // could flip another page's auction to "settled" and spoof that payout card. So `replace` requires
+  // could flip another page's collection to "settled" and spoof that payout card. So `replace` requires
   // the owner's editing session (same cookie that gates profile writes) whose pubkey owns the page
   // behind this scope. Owned page + no/other session → 403. Demo pages (owner '') stay open, matching
   // the unsigned demo-money model everywhere else.

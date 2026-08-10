@@ -60,7 +60,7 @@ export default function DocsPage() {
                 Cheer gives a content maker one page where viewers can support them. Every donation is in dollars and
                 lands <b>straight in the creator&apos;s own wallet</b> — Cheer never touches the money. On top of plain
                 donations sit four mini-games that turn a donation into a moment: a paid task, a game roulette, a
-                goal to chip in toward, an auction for your time.
+                goal to chip in toward.
               </p>
               <p>
                 Two things travel with every dollar: it reaches the creator, and it builds the giver&apos;s{" "}
@@ -159,7 +159,7 @@ export default function DocsPage() {
               <h2>Escrow &amp; refunds</h2>
               <p>
                 Every game that puts a promise on the line runs through <b>escrow</b>. When a viewer pays into a task, a
-                fundraiser, or an auction, the money locks in a contract — not in the creator&apos;s pocket, not in
+                or a fundraiser, the money locks in a contract — not in the creator&apos;s pocket, not in
                 Cheer&apos;s. It only moves when the outcome is settled.
               </p>
               <ul>
@@ -237,11 +237,11 @@ export default function DocsPage() {
               <h3>Do I need crypto to donate?</h3>
               <p>You donate in USDC — a dollar-pegged stablecoin — from a Solana wallet. A dollar in is a dollar the creator receives.</p>
               <h3>Can I get my money back?</h3>
-              <p>If a creator doesn&apos;t deliver a task, fundraiser, or auction you backed, the escrow refunds you automatically. A plain donation and a roulette suggestion are final — they&apos;re gifts.</p>
+              <p>If a creator doesn&apos;t deliver a task or fundraiser you backed, the escrow refunds you automatically. A plain donation and a roulette suggestion are final — they&apos;re gifts.</p>
               <h3>Is my reputation the same everywhere?</h3>
               <p>No — it&apos;s separate for each creator. It reflects what you&apos;ve given to that one person.</p>
               <h3>Who confirms a delivery?</h3>
-              <p>For the fundraiser and auction, a creator&apos;s own reputation holders confirm whether they delivered — no confirmation, or a miss, means everyone is refunded.</p>
+              <p>For a fundraiser, a creator&apos;s own reputation holders confirm whether they delivered — no confirmation, or a miss, means everyone is refunded.</p>
             </section>
 
             <section id="contact">

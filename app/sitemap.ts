@@ -20,7 +20,7 @@ const STATIC: { path: string; priority: number; freq: MetadataRoute.Sitemap[numb
   { path: "/privacy", priority: 0.3, freq: "yearly" },
 ];
 
-const GAMES = ["task", "roulette", "fundraiser", "auction"] as const;
+const GAMES = ["task", "roulette", "fundraiser"] as const;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();

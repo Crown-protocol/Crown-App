@@ -1,30 +1,15 @@
 "use client";
 
-import { useCheer } from "@/lib/data/DataProvider";
 import { useSolanaWallet, type WalletName } from "./wallet";
 
-// One wallet handle for both modes.
-// mock — "connected" without a real wallet; chain — a real Phantom/Solflare wallet.
+// The wallet, as the donation surfaces need it. There is one kind now: a real
+// Phantom/Solflare wallet. The "connected without a wallet" branch that used to
+// live here belonged to the mock mode — money always moves for real, so a
+// pretend connection has nothing left to pretend about.
 export function useWallet() {
-  const { mode } = useCheer();
   const w = useSolanaWallet();
 
-  if (mode === "mock") {
-    return {
-      mode,
-      connected: true,
-      address: undefined as string | undefined,
-      connect: (_name?: WalletName) => {},
-      disconnect: () => {},
-      connecting: false,
-      hasWallet: true,
-      detected: [] as WalletName[],
-      sendTransaction: w.sendTransaction,
-    };
-  }
-
   return {
-    mode,
     connected: w.connected,
     address: w.address ?? undefined,
     // Default to Phantom, else whatever is installed — the picker in

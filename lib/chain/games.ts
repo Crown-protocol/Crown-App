@@ -1,25 +1,40 @@
 import { Actor, HttpAgent, type ActorSubclass } from "@dfinity/agent";
 import { IDL } from "@dfinity/candid";
+import { Principal } from "@dfinity/principal";
+import { PublicKey } from "@solana/web3.js";
+import bs58 from "bs58";
 import {
+  APPROVAL_THRESHOLD,
   CHAIN_ID,
-  IC_HOST,
-  TASKS_PRINCIPAL,
+  FEE_BPS,
+  FEE_WALLET,
   FUNDING_PRINCIPAL,
-  AUCTION_PRINCIPAL,
-  SUBSCRIPTION_PRINCIPAL,
+  IC_HOST,
+  QUORUM_WEIGHT,
+  TASKS_PRINCIPAL,
+  VOTING_PERIOD,
+  isFundingConfigured,
+  isTasksConfigured,
 } from "./config";
+import { i64le, sha256, u16le, u64le } from "./solana";
+import { message } from "./wire";
 
 // ──────────────────────────────────────────────────────────────────
-// The four game canisters (Conditional-Tasks, Conditional-Funding, Auction,
-// Subscription) — hand-written Candid actors pinned to each repo's frozen
-// .did, plus the participant messages wallets sign (UTF-8 text, the exact
-// byte formats the canisters' auth.rs unit-tests pin).
+// The two MVP game canisters — conditional-tasks and conditional-funding —
+// exactly as their frozen .did files describe them.
 //
-// None of the canisters have public principals yet (S4 deferred): every
-// actor() below returns null until NEXT_PUBLIC_IC_HOST + the game's
-// principal are set, and the game UIs keep running on their mock stores.
-// The moment the env lands, this layer is the only doorway the UIs need.
+// Every update takes ONE `text` argument (the signed request of `wire.ts`) and
+// answers with a flat typed variant. There are no record arguments and no
+// Ok/Err results: the games' whole boundary is that one string, because the
+// authorization is the wallet's signature over it and never the IC caller.
+//
+// Two of the methods here are NOT callable from a browser and are listed only
+// so the server's relay client shares one description of the canisters:
+// `push_root` and `request_signature` are paid pulls, fronted by crown-relay
+// (an ingress caller cannot attach cycles). See lib/server/submitter.ts.
 // ──────────────────────────────────────────────────────────────────
+
+const enc = new TextEncoder();
 
 async function agent(): Promise<HttpAgent | null> {
   if (!IC_HOST) return null;
@@ -35,204 +50,330 @@ async function makeActor<T>(principal: string, idl: IDL.InterfaceFactory): Promi
   return Actor.createActor<T>(idl, { agent: ag, canisterId: principal });
 }
 
-// ---- participant messages ----------------------------------------------
-// One field per line, fixed order, closed vocabulary — the canisters verify
-// the wallet's Ed25519 signature over EXACTLY these bytes (game-spec §4/§5/§6).
-// Wallets show them as readable text (the Phantom constraint).
+// ---- scope ids ----------------------------------------------------------
 //
-// Every canonical message ENDS with a newline: the canisters' auth.rs builders
-// push '\n' after every line including the last, and their pinned unit-test
-// vectors end in `\n"` — a message without the trailing newline fails
-// signature verification byte-for-byte.
+// A scope id is a free identifier, never an address: the escrow address depends
+// on the resolver, the resolver derives from the scope id, so an id built from
+// the address would close a cycle. Both preimages below are byte-exact against
+// the canisters' `protocol.rs` (their unit tests pin the same bytes), including
+// the single-byte length prefix on the principal — without it, a canister id and
+// the field after it could be re-split into a different pair with the same hash.
 
-const nl = (lines: string[]) => lines.join("\n") + "\n";
+/**
+ * `task_id` = sha256("crown:conditional-tasks" ‖ u8(len) ‖ canister ‖ donor ‖
+ * recipient ‖ gross u64LE ‖ deadline i64LE ‖ fee_bps u16LE ‖ fee_wallet ‖
+ * nonce u64LE ‖ duration u64LE ‖ voting_period u64LE)
+ *
+ * It commits the escrow's whole salt except the resolver, plus the timings — so
+ * one task is one escrow, and a second escrow with a different amount or
+ * deadline is a different scope with a different verdict.
+ */
+export async function deriveTaskId(args: {
+  canister: string;
+  donor: PublicKey;
+  recipient: PublicKey;
+  gross: bigint;
+  deadline: bigint;
+  nonce: bigint;
+  duration: bigint;
+  feeBps?: number;
+  feeWallet?: PublicKey;
+  votingPeriod?: number;
+}): Promise<Buffer> {
+  const cid = Principal.fromText(args.canister).toUint8Array();
+  return sha256(
+    Buffer.concat([
+      Buffer.from("crown:conditional-tasks", "utf8"),
+      Buffer.from([cid.length]),
+      Buffer.from(cid),
+      args.donor.toBuffer(),
+      args.recipient.toBuffer(),
+      u64le(args.gross),
+      i64le(args.deadline),
+      u16le(args.feeBps ?? FEE_BPS),
+      (args.feeWallet ?? FEE_WALLET).toBuffer(),
+      u64le(args.nonce),
+      u64le(args.duration),
+      u64le(BigInt(args.votingPeriod ?? VOTING_PERIOD)),
+    ])
+  );
+}
+
+/**
+ * `collection_id` = sha256("crown:conditional-funding" ‖ u8(len) ‖ canister ‖
+ * recipient ‖ recipient_nonce u64LE ‖ duration u64LE ‖ voting_period u64LE ‖
+ * approval_threshold u16LE ‖ quorum_weight u128LE)
+ *
+ * Unlike a task it does not commit `gross`/`deadline` — a collection has many
+ * escrows — but it does commit the whole rules snapshot, so a collection cannot
+ * be re-created under softer verdict parameters.
+ */
+export async function deriveCollectionId(args: {
+  canister: string;
+  recipient: PublicKey;
+  recipientNonce: bigint;
+  duration: bigint;
+  votingPeriod?: number;
+  approvalThreshold?: number;
+  quorumWeight?: bigint;
+}): Promise<Buffer> {
+  const cid = Principal.fromText(args.canister).toUint8Array();
+  const quorum = Buffer.alloc(16);
+  let q = args.quorumWeight ?? QUORUM_WEIGHT;
+  for (let i = 0; i < 16; i++) {
+    quorum[i] = Number(q & 0xffn);
+    q >>= 8n;
+  }
+  return sha256(
+    Buffer.concat([
+      Buffer.from("crown:conditional-funding", "utf8"),
+      Buffer.from([cid.length]),
+      Buffer.from(cid),
+      args.recipient.toBuffer(),
+      u64le(args.recipientNonce),
+      u64le(args.duration),
+      u64le(BigInt(args.votingPeriod ?? VOTING_PERIOD)),
+      u16le(args.approvalThreshold ?? APPROVAL_THRESHOLD),
+      quorum,
+    ])
+  );
+}
+
+// ---- signed messages ----------------------------------------------------
+//
+// The domain line is the first line and it is verified: a signature over any
+// other text authorizes nothing. Field order is the canisters' frozen order —
+// they rebuild this exact string to check the signature.
+//
+// Note the two id encodings differ, and that is the canisters' choice, not a
+// slip: a task rides as base58, a collection as hex.
+
+export const TASKS_DOMAIN = "crown:conditional-tasks:v1";
+export const FUNDING_DOMAIN = "crown:conditional-funding:v1";
+
+const taskHead = (action: string, taskB58: string): Array<[string, string]> => [
+  ["action", action],
+  ["chain", CHAIN_ID],
+  ["canister", TASKS_PRINCIPAL],
+  ["task", taskB58],
+];
 
 export const taskMessage = {
-  register: (canister: string, task: string, textHex: string, duration: number) =>
-    nl([`cheer:conditional-tasks:v1`, `action: register`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `task: ${task}`, `text: ${textHex}`, `duration: ${duration}`]),
-  action: (action: "accept" | "decline" | "ready", canister: string, task: string) =>
-    nl([`cheer:conditional-tasks:v1`, `action: ${action}`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `task: ${task}`]),
-  vote: (canister: string, task: string, choice: "done" | "not_done") =>
-    nl([`cheer:conditional-tasks:v1`, `action: vote`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `task: ${task}`, `choice: ${choice}`]),
+  register: (taskB58: string, textHashHex: string, duration: bigint) =>
+    message(TASKS_DOMAIN, [...taskHead("register", taskB58), ["text", textHashHex], ["duration", String(duration)]]),
+  action: (action: "accept" | "decline" | "ready", taskB58: string) =>
+    message(TASKS_DOMAIN, taskHead(action, taskB58)),
+  vote: (taskB58: string, choice: "done" | "not_done") =>
+    message(TASKS_DOMAIN, [...taskHead("vote", taskB58), ["choice", choice]]),
 };
+
+const fundingHead = (action: string, collectionHex: string): Array<[string, string]> => [
+  ["action", action],
+  ["chain", CHAIN_ID],
+  ["canister", FUNDING_PRINCIPAL],
+  ["collection", collectionHex],
+];
 
 export const fundingMessage = {
-  // The canonical builder pushes `collection:` UNCONDITIONALLY — create included: the id is
-  // derived (deriveCollectionId) before the canister call, so the recipient signs over it too.
-  create: (canister: string, collectionHex: string, goal: number, duration: number) =>
-    nl([`cheer:conditional-funding:v1`, `action: create`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `collection: ${collectionHex}`, `goal: ${goal}`, `duration: ${duration}`]),
-  action: (action: "ready" | "recipient_cancel", canister: string, collectionHex: string) =>
-    nl([`cheer:conditional-funding:v1`, `action: ${action}`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `collection: ${collectionHex}`]),
-  vote: (canister: string, collectionHex: string, choice: "done" | "not_done") =>
-    nl([`cheer:conditional-funding:v1`, `action: vote`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `collection: ${collectionHex}`, `choice: ${choice}`]),
+  create: (collectionHex: string, goal: bigint, duration: bigint) =>
+    message(FUNDING_DOMAIN, [
+      ...fundingHead("create", collectionHex),
+      ["goal", String(goal)],
+      ["duration", String(duration)],
+    ]),
+  action: (action: "ready" | "cancel", collectionHex: string) =>
+    message(FUNDING_DOMAIN, fundingHead(action, collectionHex)),
+  vote: (collectionHex: string, choice: "done" | "not_done") =>
+    message(FUNDING_DOMAIN, [...fundingHead("vote", collectionHex), ["choice", choice]]),
 };
 
-export const auctionMessage = {
-  create: (canister: string, nonce: number, duration: number, performWindow: number, minEntry: number) =>
-    nl([`cheer:auction:v1`, `action: create`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `recipient_nonce: ${nonce}`, `duration: ${duration}`, `perform_window: ${performWindow}`, `min_entry: ${minEntry}`]),
-  lot: (action: "accept" | "return-lot", canister: string, auctionHex: string, lotHex: string) =>
-    nl([`cheer:auction:v1`, `action: ${action}`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `auction: ${auctionHex}`, `lot: ${lotHex}`]),
-  entry: (canister: string, auctionHex: string, escrowB58: string) =>
-    nl([`cheer:auction:v1`, `action: return-entry`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `auction: ${auctionHex}`, `escrow: ${escrowB58}`]),
-  auction: (action: "cancel" | "ready", canister: string, auctionHex: string) =>
-    nl([`cheer:auction:v1`, `action: ${action}`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `auction: ${auctionHex}`]),
-  vote: (canister: string, auctionHex: string, choice: "done" | "not_done") =>
-    nl([`cheer:auction:v1`, `action: vote`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `auction: ${auctionHex}`, `choice: ${choice}`]),
-};
+// ---- candid ------------------------------------------------------------
 
-export const subscriptionMessage = {
-  cancel: (canister: string, escrowB58: string) =>
-    nl([`cheer:subscription:v1`, `action: cancel`, `chain: ${CHAIN_ID}`, `canister: ${canister}`, `escrow: ${escrowB58}`]),
-};
+const SignatureView = IDL.Record({ signature: IDL.Vec(IDL.Nat8), outcome: IDL.Nat8 });
+const TaskStateView = IDL.Variant({
+  DecidedSettle: IDL.Null,
+  DecidedCancel: IDL.Null,
+  Voting: IDL.Null,
+  Accepted: IDL.Null,
+  Created: IDL.Null,
+});
+const CollectionStateView = IDL.Variant({
+  DecidedSettle: IDL.Null,
+  DecidedRefund: IDL.Null,
+  Voting: IDL.Null,
+  Funding: IDL.Null,
+});
+const CollectionView = IDL.Record({
+  duration: IDL.Nat64,
+  voting_period: IDL.Nat64,
+  recipient: IDL.Text,
+  created_at: IDL.Nat64,
+  state: CollectionStateView,
+});
 
-// ---- Conditional-Tasks --------------------------------------------------
+// The flat refusal set both games share, plus each one's own state/success arms.
+// Listing every arm matters: Candid decodes a variant by hash, and an arm this
+// client omits arrives as a decode error rather than as the refusal it is.
+const REFUSALS = [
+  "Underpaid",
+  "DurationOutOfRange",
+  "RootPushed",
+  "VoteCapReached",
+  "InvalidTransition",
+  "NotFound",
+  "NotBootstrapped",
+  "KeyBootstrapped",
+  "AlreadyExists",
+  "BadBirthProof",
+  "TimeOverflow",
+  "Malformed",
+  "FieldMismatch",
+  "NotDecided",
+  "Materialized",
+  "SignInFlight",
+  "GrossBelowFloor",
+  "SignFailed",
+  "DuplicateVoter",
+  "WrongTarget",
+  "DeadlineTooTight",
+  "StepOverflow",
+  "WeightBelowThreshold",
+  "NotRecipient",
+] as const;
 
-const Outcome = IDL.Variant({ settle: IDL.Null, cancel: IDL.Null });
-const Choice = IDL.Variant({ done: IDL.Null, not_done: IDL.Null });
-const Vote = IDL.Record({ voter: IDL.Vec(IDL.Nat8), choice: Choice, weight: IDL.Nat });
+function variantOf(extra: Record<string, IDL.Type>): IDL.VariantClass {
+  const arms: Record<string, IDL.Type> = {};
+  for (const r of REFUSALS) arms[r] = IDL.Null;
+  return IDL.Variant({ ...arms, ...extra });
+}
+
+export const TaskResult = variantOf({
+  Advanced: TaskStateView,
+  Signed: SignatureView,
+  TaskIdMismatch: IDL.Null,
+});
+export const CollectionResult = variantOf({
+  Advanced: CollectionStateView,
+  Signed: SignatureView,
+  CollectionIdMismatch: IDL.Null,
+  CreatedAtOverflow: IDL.Null,
+});
+
+/** One arm of a game's answer: `{ Malformed: null }`, `{ Advanced: {...} }`, … */
+export type GameResult = Record<string, unknown>;
+
+export const resultTag = (r: GameResult): string => Object.keys(r)[0] ?? "Malformed";
+
+/**
+ * Did the call do what it was asked to? Everything else is a refusal.
+ *
+ * `Materialized` belongs here: it is how a lazy creation reports success — the
+ * scope did not exist, the proof was good, and now it does.
+ */
+export function isAdvanced(r: GameResult): boolean {
+  const tag = resultTag(r);
+  return (
+    tag === "Advanced" ||
+    tag === "Materialized" ||
+    tag === "Signed" ||
+    tag === "RootPushed" ||
+    tag === "KeyBootstrapped"
+  );
+}
 
 export interface TasksCanister {
-  register_task: (arg: {
-    chain: string; donor: Uint8Array; recipient: Uint8Array; gross: bigint; deadline: bigint;
-    resolver: Uint8Array; nonce: bigint; duration: bigint; text_hash: Uint8Array; signature: Uint8Array;
-  }) => Promise<{ Ok: Uint8Array } | { Err: string }>;
-  accept: (arg: TaskAction) => Promise<{ Ok: null } | { Err: string }>;
-  decline: (arg: TaskAction) => Promise<{ Ok: null } | { Err: string }>;
-  ready: (arg: TaskAction) => Promise<{ Ok: null } | { Err: string }>;
-  vote: (arg: { chain: string; task_id: Uint8Array; voter: Uint8Array; choice: { done: null } | { not_done: null }; signature: Uint8Array }) => Promise<{ Ok: null } | { Err: string }>;
-  get_task: (chain: string, taskId: Uint8Array) => Promise<[] | [{ data: Uint8Array; certificate: [] | [Uint8Array]; witness: Uint8Array }]>;
-  list_tasks: (chain: string, recipient: Uint8Array) => Promise<Uint8Array[]>;
-  get_resolver: (chain: string) => Promise<[] | [Uint8Array]>;
-  get_verdict: (chain: string, taskId: Uint8Array) => Promise<[] | [{ outcome: { settle: null } | { cancel: null }; signature: [] | [Uint8Array] }]>;
+  register_task: (text: string) => Promise<GameResult>;
+  accept: (text: string) => Promise<GameResult>;
+  decline: (text: string) => Promise<GameResult>;
+  ready: (text: string) => Promise<GameResult>;
+  vote: (text: string) => Promise<GameResult>;
+  bootstrap: () => Promise<GameResult>;
+  push_root: (cert: Uint8Array) => Promise<GameResult>;
+  request_signature: (chain: string, task: string) => Promise<GameResult>;
+  get_task: (task: string) => Promise<[] | [GameResult]>;
+  get_verdict: (task: string) => Promise<[] | [GameResult]>;
+  get_signature: (task: string) => Promise<[] | [{ signature: Uint8Array; outcome: number }]>;
+  get_resolver: (task: string) => Promise<[] | [string]>;
+  get_sign_price: () => Promise<bigint>;
+  get_logic_version: () => Promise<number>;
 }
-interface TaskAction { chain: string; task_id: Uint8Array; signature: Uint8Array }
 
-const tasksIdl: IDL.InterfaceFactory = ({ IDL: I }) => {
-  const ActionArg = I.Record({ chain: I.Text, task_id: I.Vec(I.Nat8), signature: I.Vec(I.Nat8) });
-  const ActionResult = I.Variant({ Ok: I.Null, Err: I.Text });
-  return I.Service({
-    register_task: I.Func([I.Record({
-      chain: I.Text, donor: I.Vec(I.Nat8), recipient: I.Vec(I.Nat8), gross: I.Nat64, deadline: I.Nat64,
-      resolver: I.Vec(I.Nat8), nonce: I.Nat64, duration: I.Nat64, text_hash: I.Vec(I.Nat8), signature: I.Vec(I.Nat8),
-    })], [I.Variant({ Ok: I.Vec(I.Nat8), Err: I.Text })], []),
-    accept: I.Func([ActionArg], [ActionResult], []),
-    decline: I.Func([ActionArg], [ActionResult], []),
-    ready: I.Func([ActionArg], [ActionResult], []),
-    vote: I.Func([I.Record({ chain: I.Text, task_id: I.Vec(I.Nat8), voter: I.Vec(I.Nat8), choice: Choice, signature: I.Vec(I.Nat8) })], [ActionResult], []),
-    get_task: I.Func([I.Text, I.Vec(I.Nat8)], [I.Opt(I.Record({ data: I.Vec(I.Nat8), certificate: I.Opt(I.Vec(I.Nat8)), witness: I.Vec(I.Nat8) }))], ["query"]),
-    list_tasks: I.Func([I.Text, I.Vec(I.Nat8)], [I.Vec(I.Vec(I.Nat8))], ["query"]),
-    get_resolver: I.Func([I.Text], [I.Opt(I.Vec(I.Nat8))], ["query"]),
-    get_verdict: I.Func([I.Text, I.Vec(I.Nat8)], [I.Opt(I.Record({ outcome: Outcome, signature: I.Opt(I.Vec(I.Nat8)) }))], ["query"]),
+const tasksIdl: IDL.InterfaceFactory = () =>
+  IDL.Service({
+    register_task: IDL.Func([IDL.Text], [TaskResult], []),
+    accept: IDL.Func([IDL.Text], [TaskResult], []),
+    decline: IDL.Func([IDL.Text], [TaskResult], []),
+    ready: IDL.Func([IDL.Text], [TaskResult], []),
+    vote: IDL.Func([IDL.Text], [TaskResult], []),
+    bootstrap: IDL.Func([], [TaskResult], []),
+    push_root: IDL.Func([IDL.Vec(IDL.Nat8)], [TaskResult], []),
+    request_signature: IDL.Func([IDL.Text, IDL.Text], [TaskResult], []),
+    get_task: IDL.Func([IDL.Text], [IDL.Opt(TaskStateView)], ["query"]),
+    get_verdict: IDL.Func([IDL.Text], [IDL.Opt(TaskStateView)], ["query"]),
+    get_signature: IDL.Func([IDL.Text], [IDL.Opt(SignatureView)], ["query"]),
+    get_resolver: IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], ["query"]),
+    get_sign_price: IDL.Func([], [IDL.Nat], ["query"]),
+    get_logic_version: IDL.Func([], [IDL.Nat32], ["query"]),
   });
-};
-
-export const tasksCanister = () => makeActor<TasksCanister>(TASKS_PRINCIPAL, tasksIdl);
-
-// ---- Conditional-Funding -------------------------------------------------
 
 export interface FundingCanister {
-  create_collection: (arg: { chain: string; recipient: Uint8Array; recipient_nonce: bigint; goal: bigint; duration: bigint; signature: Uint8Array }) => Promise<{ Ok: Uint8Array } | { Err: string }>;
-  ready: (arg: { chain: string; collection_id: Uint8Array; signature: Uint8Array }) => Promise<{ Ok: null } | { Err: string }>;
-  recipient_cancel: (arg: { chain: string; collection_id: Uint8Array; signature: Uint8Array }) => Promise<{ Ok: null } | { Err: string }>;
-  vote: (arg: { chain: string; collection_id: Uint8Array; voter: Uint8Array; choice: { done: null } | { not_done: null }; signature: Uint8Array }) => Promise<{ Ok: null } | { Err: string }>;
-  request_signature: (arg: { chain: string; collection_id: Uint8Array; donor: Uint8Array; gross: bigint; deadline: bigint; nonce: bigint }) => Promise<{ Ok: { escrow: Uint8Array; outcome: { settle: null } | { refund: null }; signature: Uint8Array } } | { Err: string }>;
-  get_collection: (chain: string, id: Uint8Array) => Promise<[] | [{ data: Uint8Array; certificate: [] | [Uint8Array]; witness: Uint8Array }]>;
-  get_resolver: (chain: string, id: Uint8Array) => Promise<[] | [Uint8Array]>;
+  create_collection: (text: string) => Promise<GameResult>;
+  ready: (text: string) => Promise<GameResult>;
+  recipient_cancel: (text: string) => Promise<GameResult>;
+  vote: (text: string) => Promise<GameResult>;
+  bootstrap: () => Promise<GameResult>;
+  push_root: (cert: Uint8Array) => Promise<GameResult>;
+  request_signature: (chain: string, collection: string) => Promise<GameResult>;
+  get_collection: (collection: string) => Promise<
+    [] | [{ duration: bigint; voting_period: bigint; recipient: string; created_at: bigint; state: GameResult }]
+  >;
+  get_signature: (collection: string) => Promise<[] | [{ signature: Uint8Array; outcome: number }]>;
+  get_resolver: (collection: string) => Promise<[] | [string]>;
+  get_sign_price: () => Promise<bigint>;
+  get_logic_version: () => Promise<number>;
 }
 
-const fundingIdl: IDL.InterfaceFactory = ({ IDL: I }) => {
-  const FOutcome = I.Variant({ settle: I.Null, refund: I.Null });
-  const ActionResult = I.Variant({ Ok: I.Null, Err: I.Text });
-  return I.Service({
-    create_collection: I.Func([I.Record({ chain: I.Text, recipient: I.Vec(I.Nat8), recipient_nonce: I.Nat64, goal: I.Nat64, duration: I.Nat64, signature: I.Vec(I.Nat8) })], [I.Variant({ Ok: I.Vec(I.Nat8), Err: I.Text })], []),
-    ready: I.Func([I.Record({ chain: I.Text, collection_id: I.Vec(I.Nat8), signature: I.Vec(I.Nat8) })], [ActionResult], []),
-    recipient_cancel: I.Func([I.Record({ chain: I.Text, collection_id: I.Vec(I.Nat8), signature: I.Vec(I.Nat8) })], [ActionResult], []),
-    vote: I.Func([I.Record({ chain: I.Text, collection_id: I.Vec(I.Nat8), voter: I.Vec(I.Nat8), choice: Choice, signature: I.Vec(I.Nat8) })], [ActionResult], []),
-    request_signature: I.Func([I.Record({ chain: I.Text, collection_id: I.Vec(I.Nat8), donor: I.Vec(I.Nat8), gross: I.Nat64, deadline: I.Nat64, nonce: I.Nat64 })], [I.Variant({ Ok: I.Record({ escrow: I.Vec(I.Nat8), outcome: FOutcome, signature: I.Vec(I.Nat8) }), Err: I.Text })], []),
-    get_collection: I.Func([I.Text, I.Vec(I.Nat8)], [I.Opt(I.Record({ data: I.Vec(I.Nat8), certificate: I.Opt(I.Vec(I.Nat8)), witness: I.Vec(I.Nat8) }))], ["query"]),
-    get_resolver: I.Func([I.Text, I.Vec(I.Nat8)], [I.Opt(I.Vec(I.Nat8))], ["query"]),
+const fundingIdl: IDL.InterfaceFactory = () =>
+  IDL.Service({
+    create_collection: IDL.Func([IDL.Text], [CollectionResult], []),
+    ready: IDL.Func([IDL.Text], [CollectionResult], []),
+    recipient_cancel: IDL.Func([IDL.Text], [CollectionResult], []),
+    vote: IDL.Func([IDL.Text], [CollectionResult], []),
+    bootstrap: IDL.Func([], [CollectionResult], []),
+    push_root: IDL.Func([IDL.Vec(IDL.Nat8)], [CollectionResult], []),
+    request_signature: IDL.Func([IDL.Text, IDL.Text], [CollectionResult], []),
+    get_collection: IDL.Func([IDL.Text], [IDL.Opt(CollectionView)], ["query"]),
+    get_signature: IDL.Func([IDL.Text], [IDL.Opt(SignatureView)], ["query"]),
+    get_resolver: IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], ["query"]),
+    get_sign_price: IDL.Func([], [IDL.Nat], ["query"]),
+    get_logic_version: IDL.Func([], [IDL.Nat32], ["query"]),
   });
-};
 
+export const tasksCanister = () => makeActor<TasksCanister>(TASKS_PRINCIPAL, tasksIdl);
 export const fundingCanister = () => makeActor<FundingCanister>(FUNDING_PRINCIPAL, fundingIdl);
 
-// ---- Auction --------------------------------------------------------------
-
-export interface AuctionCanister {
-  create_auction: (arg: { chain: string; recipient: Uint8Array; recipient_nonce: bigint; duration: bigint; perform_window: bigint; min_entry: bigint; signature: Uint8Array }) => Promise<{ Ok: Uint8Array } | { Err: string }>;
-  get_resolver: (arg: { auction_id: Uint8Array; text_hash: Uint8Array }) => Promise<{ Ok: Uint8Array } | { Err: string }>;
-  register_entry: (arg: { chain: string; auction_id: Uint8Array; text_hash: Uint8Array; donor: Uint8Array; gross: bigint; deadline: bigint; nonce: bigint }) => Promise<{ Ok: null } | { Err: string }>;
-  accept_lot: (arg: LotAction) => Promise<{ Ok: null } | { Err: string }>;
-  return_lot: (arg: LotAction) => Promise<{ Ok: null } | { Err: string }>;
-  ready: (arg: AuctionAction) => Promise<{ Ok: null } | { Err: string }>;
-  cancel_auction: (arg: AuctionAction) => Promise<{ Ok: null } | { Err: string }>;
-  vote: (arg: { chain: string; auction_id: Uint8Array; voter: Uint8Array; choice: { done: null } | { not_done: null }; signature: Uint8Array }) => Promise<{ Ok: null } | { Err: string }>;
-  request_signature: (arg: { chain: string; auction_id: Uint8Array; text_hash: Uint8Array; donor: Uint8Array; gross: bigint; deadline: bigint; nonce: bigint }) => Promise<{ Ok: { escrow: Uint8Array; outcome: { settle: null } | { cancel: null }; signature: Uint8Array } } | { Err: string }>;
-  get_auction: (chain: string, id: Uint8Array) => Promise<[] | [{ data: Uint8Array; certificate: [] | [Uint8Array]; witness: Uint8Array }]>;
-  list_lots: (chain: string, auctionId: Uint8Array) => Promise<unknown[]>;
-  list_entries: (chain: string, auctionId: Uint8Array, lotId: Uint8Array) => Promise<unknown[]>;
-}
-interface LotAction { chain: string; auction_id: Uint8Array; lot_id: Uint8Array; signature: Uint8Array }
-interface AuctionAction { chain: string; auction_id: Uint8Array; signature: Uint8Array }
-
-const auctionIdl: IDL.InterfaceFactory = ({ IDL: I }) => {
-  const AOutcome = I.Variant({ settle: I.Null, cancel: I.Null });
-  const ActionResult = I.Variant({ Ok: I.Null, Err: I.Text });
-  const ActorV = I.Variant({ recipient: I.Null, operator: I.Null });
-  const ReturnStamp = I.Record({ at: I.Nat64, by: ActorV });
-  const Lot = I.Record({ lot_id: I.Vec(I.Nat8), text_hash: I.Vec(I.Nat8), resolver: I.Vec(I.Nat8), accepted_at: I.Opt(I.Nat64), returned: I.Opt(ReturnStamp), sum: I.Nat, entries: I.Nat64 });
-  const Entry = I.Record({ escrow: I.Vec(I.Nat8), lot_id: I.Vec(I.Nat8), donor: I.Vec(I.Nat8), gross: I.Nat64, deadline: I.Nat64, nonce: I.Nat64, seq: I.Nat64, returned: I.Opt(ReturnStamp) });
-  const LotActionArg = I.Record({ chain: I.Text, auction_id: I.Vec(I.Nat8), lot_id: I.Vec(I.Nat8), signature: I.Vec(I.Nat8) });
-  const AuctionActionArg = I.Record({ chain: I.Text, auction_id: I.Vec(I.Nat8), signature: I.Vec(I.Nat8) });
-  return I.Service({
-    create_auction: I.Func([I.Record({ chain: I.Text, recipient: I.Vec(I.Nat8), recipient_nonce: I.Nat64, duration: I.Nat64, perform_window: I.Nat64, min_entry: I.Nat64, signature: I.Vec(I.Nat8) })], [I.Variant({ Ok: I.Vec(I.Nat8), Err: I.Text })], []),
-    get_resolver: I.Func([I.Record({ auction_id: I.Vec(I.Nat8), text_hash: I.Vec(I.Nat8) })], [I.Variant({ Ok: I.Vec(I.Nat8), Err: I.Text })], []),
-    register_entry: I.Func([I.Record({ chain: I.Text, auction_id: I.Vec(I.Nat8), text_hash: I.Vec(I.Nat8), donor: I.Vec(I.Nat8), gross: I.Nat64, deadline: I.Nat64, nonce: I.Nat64 })], [ActionResult], []),
-    accept_lot: I.Func([LotActionArg], [ActionResult], []),
-    return_lot: I.Func([LotActionArg], [ActionResult], []),
-    ready: I.Func([AuctionActionArg], [ActionResult], []),
-    cancel_auction: I.Func([AuctionActionArg], [ActionResult], []),
-    vote: I.Func([I.Record({ chain: I.Text, auction_id: I.Vec(I.Nat8), voter: I.Vec(I.Nat8), choice: Choice, signature: I.Vec(I.Nat8) })], [ActionResult], []),
-    request_signature: I.Func([I.Record({ chain: I.Text, auction_id: I.Vec(I.Nat8), text_hash: I.Vec(I.Nat8), donor: I.Vec(I.Nat8), gross: I.Nat64, deadline: I.Nat64, nonce: I.Nat64 })], [I.Variant({ Ok: I.Record({ escrow: I.Vec(I.Nat8), outcome: AOutcome, signature: I.Vec(I.Nat8) }), Err: I.Text })], []),
-    get_auction: I.Func([I.Text, I.Vec(I.Nat8)], [I.Opt(I.Record({ data: I.Vec(I.Nat8), certificate: I.Opt(I.Vec(I.Nat8)), witness: I.Vec(I.Nat8) }))], ["query"]),
-    list_lots: I.Func([I.Text, I.Vec(I.Nat8)], [I.Vec(Lot)], ["query"]),
-    list_entries: I.Func([I.Text, I.Vec(I.Nat8), I.Vec(I.Nat8)], [I.Vec(Entry)], ["query"]),
-  });
-};
-
-export const auctionCanister = () => makeActor<AuctionCanister>(AUCTION_PRINCIPAL, auctionIdl);
-
-// ---- Subscription ----------------------------------------------------------
-
-export interface SubscriptionCanister {
-  get_resolver: (chain: string, subscriptionId: Uint8Array) => Promise<{ Ok: Uint8Array } | { Err: string }>;
-  request_release: (arg: SubBirth & { index: number }) => Promise<{ Ok: { escrow: Uint8Array; index: number; signature: Uint8Array } } | { Err: string }>;
-  request_cancel: (arg: SubBirth & { signature: Uint8Array }) => Promise<{ Ok: { escrow: Uint8Array; signature: Uint8Array } } | { Err: string }>;
-}
-interface SubBirth {
-  chain: string; subscription_id: Uint8Array; donor: Uint8Array; recipients: Uint8Array[]; shares: number[];
-  chunk: bigint; n_chunks: number; t0: bigint; period: bigint; nonce: bigint;
-}
-
-const subscriptionIdl: IDL.InterfaceFactory = ({ IDL: I }) => {
-  const birth = {
-    chain: I.Text, subscription_id: I.Vec(I.Nat8), donor: I.Vec(I.Nat8), recipients: I.Vec(I.Vec(I.Nat8)), shares: I.Vec(I.Nat16),
-    chunk: I.Nat64, n_chunks: I.Nat16, t0: I.Int64, period: I.Int64, nonce: I.Nat64,
-  };
-  return I.Service({
-    get_resolver: I.Func([I.Text, I.Vec(I.Nat8)], [I.Variant({ Ok: I.Vec(I.Nat8), Err: I.Text })], []),
-    request_release: I.Func([I.Record({ ...birth, index: I.Nat16 })], [I.Variant({ Ok: I.Record({ escrow: I.Vec(I.Nat8), index: I.Nat16, signature: I.Vec(I.Nat8) }), Err: I.Text })], []),
-    request_cancel: I.Func([I.Record({ ...birth, signature: I.Vec(I.Nat8) })], [I.Variant({ Ok: I.Record({ escrow: I.Vec(I.Nat8), signature: I.Vec(I.Nat8) }), Err: I.Text })], []),
-  });
-};
-
-export const subscriptionCanister = () => makeActor<SubscriptionCanister>(SUBSCRIPTION_PRINCIPAL, subscriptionIdl);
-
-// Which games can go live right now — the UIs consult this to decide
-// chain vs mock per game, mirroring isSplitterConfigured() for donations.
+/**
+ * Which games have a reachable on-chain half.
+ *
+ * `auction` is deliberately never live: its canister exists in the perimeter and
+ * passed its own live run, but the first release is the perimeter plus
+ * conditional-tasks and conditional-funding (`07-build-plan.md §P8`). Keeping the
+ * key and answering `false` is the honest shape — the auction UI keeps working on
+ * its synced mock store, and the day it joins the release this becomes a real
+ * check rather than a new concept.
+ */
 export const gamePrincipals = {
-  task: () => TASKS_PRINCIPAL !== "",
-  fundraiser: () => FUNDING_PRINCIPAL !== "",
-  auction: () => AUCTION_PRINCIPAL !== "",
-  subscription: () => SUBSCRIPTION_PRINCIPAL !== "",
+  task: isTasksConfigured,
+  fundraiser: isFundingConfigured,
+  auction: () => false,
 };
+
+/** The scope id encodings the two canisters expect, in one place. */
+export const taskRef = (taskId: Uint8Array): string => bs58.encode(taskId);
+export const collectionRef = (collectionId: Uint8Array): string =>
+  Array.from(collectionId).map((b) => b.toString(16).padStart(2, "0")).join("");
+
+/** sha256 of the human words of a task — the canisters store hashes, never text. */
+export async function textHash(text: string): Promise<Buffer> {
+  return sha256(enc.encode(text));
+}

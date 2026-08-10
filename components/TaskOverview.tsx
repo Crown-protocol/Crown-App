@@ -7,7 +7,9 @@ import { taskRules } from "@/lib/data/gameConfig";
 import { readTasks, setTaskState, removeTask, taskTotals, type GameTask, type TaskState } from "@/lib/data/tasks";
 import { useGameSync } from "@/lib/data/gameSync";
 import { useGameChain } from "@/lib/chain/useGameChain";
-import { taskAction } from "@/lib/chain/gameFlows";
+import { taskAction, settleScope } from "@/lib/chain/gameFlows";
+import { useTaskState } from "@/lib/chain/useScopeState";
+import { RefundButton } from "@/components/games/RefundButton";
 import { useCheer } from "@/lib/data/DataProvider";
 import type { Profile } from "@/lib/data/types";
 import { usd } from "@/lib/money";
@@ -30,7 +32,7 @@ export function TaskOverview({ profile, scope }: { profile: Profile; scope?: str
   const handle = scope ?? profile.handle;
   // This run's rules — the ones the session was opened with, not whatever the profile says today.
   const cfg = taskRules(profile, handle);
-  const { feed, applyMockDonation } = useCheer();
+  const { feed } = useCheer();
   const [tasks, setTasks] = useState<GameTask[]>([]);
 
   // Shared game state: viewers' tasks from other browsers land via the nonce dep.
@@ -39,12 +41,13 @@ export function TaskOverview({ profile, scope }: { profile: Profile; scope?: str
 
   const chain = useGameChain("task");
 
-  // On-chain twin of a queue action: chain-born tasks (t.escrow set) get the canister call too —
+  // On-chain twin of a queue action: chain-born tasks (t.task set) get the canister call too —
   // pending→active = accept, pending→refunded = decline. Mock rows just move in the queue.
+  // The canister is addressed by the SCOPE id, never by the escrow address.
   function chainTwin(t: GameTask | undefined, state: TaskState) {
-    if (!t?.escrow || !chain.live || !chain.wallet) return;
+    if (!t?.task || !chain.live || !chain.wallet) return;
     const action = state === "active" ? "accept" : t.state === "pending" && state === "refunded" ? "decline" : null;
-    if (action) void taskAction(chain.wallet, t.escrow, action);
+    if (action) void taskAction(chain.wallet, t.task, action);
   }
 
   function act(id: string, state: TaskState) {
@@ -56,8 +59,10 @@ export function TaskOverview({ profile, scope }: { profile: Profile; scope?: str
   // entry with source "task" — and the row disappears from this queue.
   function complete(t: GameTask) {
     // "Done" on a chain-born task = ready: the streamer claims delivery, the vote decides.
-    if (t.escrow && chain.live && chain.wallet) void taskAction(chain.wallet, t.escrow, "ready");
-    applyMockDonation({ handle: profile.handle, amount: t.amount, name: t.from, message: t.text, source: "task" });
+    if (t.task && chain.live && chain.wallet) void taskAction(chain.wallet, t.task, "ready");
+    // Nothing is written to the feed here. A task's money reaches the creator
+    // through the escrow's own settlement, and the feed mirrors that settlement
+    // when it lands — inventing a row now would show money that has not moved.
     setTasks(removeTask(handle, t.id));
   }
 
@@ -125,10 +130,7 @@ export function TaskOverview({ profile, scope }: { profile: Profile; scope?: str
                   <span className={styles.amount}>
                     {usd(t.amount)}
                   </span>
-                  <span className={`pill ${pill.tone}`}>
-                    <span className="dot" />
-                    {pill.label}
-                  </span>
+                  <ChainState task={t} recipient={profile.address} wallet={chain.wallet} fallback={pill} />
                 </div>
               </div>
             );
@@ -136,5 +138,94 @@ export function TaskOverview({ profile, scope }: { profile: Profile; scope?: str
         </div>
       )}
     </div>
+  );
+}
+
+// What the CANISTER says about a task, next to what the queue says. They can
+// disagree — a viewer's vote closing the window, an accept made in another
+// browser — and when they do the canister is right.
+//
+// A decided scope is also the moment money can move: the verdict signature is
+// public, and `claim` is permissionless, so the button below is offered to
+// whoever has this screen open rather than reserved for the creator.
+function ChainState({
+  task,
+  recipient,
+  wallet,
+  fallback,
+}: {
+  task: GameTask;
+  recipient: string;
+  wallet: ReturnType<typeof useGameChain>["wallet"];
+  fallback: { tone: string; label: string };
+}) {
+  const { state, live } = useTaskState(task.task);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+
+  if (!live || !task.task) {
+    return (
+      <span className={`pill ${fallback.tone}`}>
+        <span className="dot" />
+        {fallback.label}
+      </span>
+    );
+  }
+
+  const decided = state === "DecidedSettle" || state === "DecidedCancel";
+  const label =
+    state === null
+      ? "Not registered"
+      : state === "Created"
+        ? "Awaiting you"
+        : state === "Accepted"
+          ? "Running"
+          : state === "Voting"
+            ? "Being judged"
+            : state === "DecidedSettle"
+              ? "Yours to claim"
+              : "Refunding";
+  const tone = state === "DecidedSettle" ? "ok" : state === "DecidedCancel" ? "wait" : state === "Created" ? "attn" : "ok";
+
+  async function settle() {
+    if (!wallet || !task.escrow || !task.donor || !task.task) return;
+    setBusy(true);
+    setNote("");
+    const res = await settleScope(wallet, {
+      game: "task",
+      scope: task.task,
+      escrow: task.escrow,
+      donor: task.donor,
+      recipient,
+    });
+    setBusy(false);
+    setNote(res.ok ? "Sent." : res.error);
+  }
+
+  return (
+    <>
+      <span className={`pill ${tone}`}>
+        <span className="dot" />
+        {label}
+      </span>
+      {decided && wallet && task.escrow && task.donor && (
+        <button type="button" className="btn-outline" disabled={busy} onClick={() => void settle()}>
+          {busy ? "Settling…" : state === "DecidedSettle" ? "Release the money" : "Return the money"}
+        </button>
+      )}
+      {/* The deadline's own guarantee, offered once it applies: past that moment
+          anyone can hand the escrow back, no verdict and no signature needed.
+          It is what a silent resolver degrades into. */}
+      {!decided && task.escrow && task.donor && task.deadline && (
+        <RefundButton
+          wallet={wallet}
+          escrow={task.escrow}
+          donor={task.donor}
+          deadline={task.deadline}
+          label="Refund it (deadline passed)"
+        />
+      )}
+      {note && <span className="footnote">{note}</span>}
+    </>
   );
 }

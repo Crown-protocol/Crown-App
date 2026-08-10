@@ -4,7 +4,6 @@
 // and lets the page and its actions actually stick.
 
 import type { PageWidget, Profile, TaskDraft } from "./types";
-import { isFreshScope } from "./freshScope";
 import { DEFAULT_DESIGN } from "./pagebuilder";
 import { sendOp } from "./gameSync";
 
@@ -52,19 +51,21 @@ export interface GameTask {
   state: TaskState;
   when: string; // human-readable "2h ago", like the donations feed
   durationHours?: number; // the DONOR's deadline pick (game-spec: duration is the donor's knob)
-  escrow?: string; // base58 escrow address when the task was born on-chain (task_id ≡ escrow)
+  // Set when the task was born on chain. The two are NOT the same string and the
+  // difference matters: `task` is the canister's scope id (base58 of the
+  // `task_id` hash) and is what every canister call names; `escrow` is the
+  // Solana account holding the money. The scope id cannot be the address —
+  // the address derives from the resolver, and the resolver from the scope id.
+  task?: string;
+  escrow?: string;
+  // The donor's wallet. Needed to settle: `claim` hands the vault's residual and
+  // the rent back to whoever funded the escrow, so the account has to be named.
+  donor?: string;
+  // Unix seconds. After this the escrow refunds to the donor with no signature
+  // from anyone — the guarantee that a silent resolver cannot strand the money.
+  deadline?: number;
 }
 
-// Seed queue — a realistic mix so the tab shows every state: awaiting approval, running,
-// and already resolved. Newest first.
-export const MOCK_TASKS: GameTask[] = [
-  { id: "t1", from: "Timur", amount: 50, text: "Beat the first boss with no armor on.", state: "pending", when: "8 min ago" },
-  { id: "t2", from: "anna_k", amount: 25, text: "Speak only in rhymes for one full game.", state: "pending", when: "20 min ago" },
-  { id: "t3", from: "Max", amount: 40, text: "Play the next round on inverted controls.", state: "active", when: "1h ago" },
-  { id: "t4", from: "Dan", amount: 15, text: "Do the intro voiceover as a pirate.", state: "active", when: "2h ago" },
-  { id: "t5", from: "lena", amount: 80, text: "Finish a clutch 1v3 to win the map.", state: "done", when: "Yesterday" },
-  { id: "t6", from: "guest_91", amount: 10, text: "Impossible speedrun in under a minute.", state: "refunded", when: "Yesterday" },
-];
 
 const KEY = "cheer-tasks";
 
@@ -76,9 +77,10 @@ export function readTasks(handle: string): GameTask[] {
       if (Array.isArray(list)) return list;
     }
   } catch {}
-  // First visit: start from the seed — unless this scope is a fresh session, which starts empty.
-  if (isFreshScope(handle)) return [];
-  return MOCK_TASKS.map((t) => ({ ...t }));
+  // Nothing stored yet means nobody has set a task here. There is no sample queue
+  // to fall back on — an invented row in a creator's cabinet is a task they would
+  // go looking for.
+  return [];
 }
 
 function writeTasks(handle: string, list: GameTask[]) {
@@ -91,7 +93,7 @@ function writeTasks(handle: string, list: GameTask[]) {
 // for the streamer to accept, or straight into the running queue with the clock already going.
 export function addTask(
   handle: string,
-  input: { from: string; amount: number; text: string; requireApproval: boolean; durationHours?: number; escrow?: string }
+  input: { from: string; amount: number; text: string; requireApproval: boolean; durationHours?: number; task?: string; escrow?: string; donor?: string; deadline?: number }
 ): GameTask[] {
   const task: GameTask = {
     id: `t-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -101,7 +103,10 @@ export function addTask(
     state: input.requireApproval ? "pending" : "active",
     when: "just now",
     durationHours: input.durationHours,
+    ...(input.task ? { task: input.task } : {}),
     ...(input.escrow ? { escrow: input.escrow } : {}),
+    ...(input.donor ? { donor: input.donor } : {}),
+    ...(input.deadline ? { deadline: input.deadline } : {}),
   };
   const next = [task, ...readTasks(handle)];
   writeTasks(handle, next);

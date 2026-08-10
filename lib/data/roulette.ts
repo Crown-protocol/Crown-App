@@ -5,7 +5,7 @@
 import type { PageWidget, Profile, RouletteDraft } from "./types";
 import { isFreshScope } from "./freshScope";
 import { DEFAULT_DESIGN } from "./pagebuilder";
-import { MOCK_ROUND, MOCK_ROULETTE_HISTORY, type GameGenre, type RouletteRound, type RouletteSuggestion } from "./roulette-mock";
+import { type GameGenre, type RouletteRound, type RouletteSuggestion } from "./roulette-mock";
 import { sendOp } from "./gameSync";
 
 export const RL_HEADLINE_MAX = 140;
@@ -42,7 +42,7 @@ export function withRouletteDefaults(profile: Profile): RouletteDraft {
 
 // ---- mock open round (localStorage, like the rest of the mock backend) ----
 // The real round will live on cheer-app/api; until then the public page starts from the
-// seeded MOCK_ROUND and viewer suggestions accumulate on top, merged by game title —
+// viewer suggestions accumulate, merged by game title —
 // backing an existing suggestion grows its pool (and odds), a new title adds a slice.
 
 const ROUND_KEY = "cheer-roulette-round";
@@ -65,8 +65,8 @@ function readLocal(handle: string): LocalSuggestion[] {
 }
 
 export function readRound(handle: string): RouletteSuggestion[] {
-  // A fresh session starts with an empty wheel — the seeded round belongs to the first scope only.
-  const merged: RouletteSuggestion[] = isFreshScope(handle) ? [] : MOCK_ROUND.map((s) => ({ ...s }));
+  // The wheel starts empty: what is on it is what viewers have actually put there.
+  const merged: RouletteSuggestion[] = [];
   for (const l of readLocal(handle)) {
     const hit = merged.find((s) => s.title.toLowerCase() === l.title.toLowerCase());
     if (hit) {
@@ -224,7 +224,7 @@ export function eliminate(handle: string, id: string, round: RouletteSuggestion[
 
 // ---- played history (mock) ----
 // Every round that actually spins gets recorded here, newest-first, so the cabinet's History
-// tab reflects real rounds instead of a frozen sample. MOCK_ROULETTE_HISTORY trails behind as
+// tab reflects real rounds. Local history is all there is —
 // seeded "older" rounds so a new streamer's table isn't empty.
 
 const HISTORY_KEY = "cheer-roulette-history";
@@ -240,7 +240,7 @@ function readLocalHistory(handle: string): RouletteRound[] {
 }
 
 export function readHistory(handle: string): RouletteRound[] {
-  return [...readLocalHistory(handle), ...MOCK_ROULETTE_HISTORY];
+  return readLocalHistory(handle);
 }
 
 export function appendHistory(handle: string, entry: RouletteRound): RouletteRound[] {

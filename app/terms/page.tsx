@@ -13,7 +13,7 @@ export default function TermsPage() {
 
       <h2>What you agree to</h2>
       <p>
-        If you set up a page, you&apos;re responsible for what you promise — a task, a fundraiser goal, an auction
+        If you set up a page, you&apos;re responsible for what you promise — a task or a fundraiser goal
         condition. Deliver it and the escrow releases to you; don&apos;t, and backers are refunded. Reputation is earned
         only on delivery. These rules are enforced by the contracts, not by us.
       </p>
