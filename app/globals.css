@@ -1476,3 +1476,17 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin
   text-decoration: none;
 }
 .blank-link:hover { color: var(--text-1); }
+
+/* A game that isn't finished for real money yet. Quiet by design: it marks the row, it doesn't
+   compete with the game's own name. */
+.game-soon {
+  margin-left: 8px;
+  padding: 2px 7px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line-strong);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}

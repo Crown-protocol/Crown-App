@@ -32,7 +32,12 @@ export function GamesList({
             </span>
             <div className={styles.caption}>
               <div className={styles.capHead}>
-                <span className={styles.title}>{game.title}</span>
+                <span className={styles.title}>
+                  {game.title}
+                  {/* Named here too: someone browsing the games shouldn't discover it's unfinished
+                      only after opening it. */}
+                  {game.comingSoon && <span className="game-soon">Soon</span>}
+                </span>
               </div>
               <p className={styles.tagline}>{game.tagline}</p>
             </div>

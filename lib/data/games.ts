@@ -47,6 +47,10 @@ export interface GameModule {
   tagline: string; // one line — what it is, for the catalog card + the detail hero
   status: GameStatus;
   hasPage?: boolean; // only games with a real detail page resolve at /games/<id>
+  // Not finished for real money yet. Surfaced as a "Soon" label everywhere the game is named, and
+  // the cabinet refuses to start a run in chain mode — but mock mode still plays it end to end, so
+  // the game can be demoed and worked on while the on-chain half is being built.
+  comingSoon?: boolean;
   coverUrl?: string; // a real screenshot, once one exists; unset falls back to the icon placeholder
   steps?: GameStep[]; // "How it works" — 3 steps, detail page
   knobs?: GameKnob[]; // "What you set" — the streamer's real controls + defaults
@@ -173,6 +177,7 @@ export const GAMES: readonly GameModule[] = [
   {
     id: "auction",
     title: "Auction",
+    comingSoon: true,
     tagline: "Viewers bid tasks with money. The richest lot you accept wins your time — every other bid is refunded.",
     status: "building",
     hasPage: true,

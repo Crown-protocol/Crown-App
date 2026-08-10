@@ -40,6 +40,8 @@ import type { GameId } from "@/lib/data/games";
 import { usd } from "@/lib/money";
 import { useConfirm } from "@/components/useConfirm";
 import { dangerCopy } from "@/lib/data/dangerous";
+import { useCheer } from "@/lib/data/DataProvider";
+import { GAMES } from "@/lib/data/games";
 import s from "./GameSessions.module.css";
 
 // One line that tells the streamer what's inside a session without opening it.
@@ -96,13 +98,22 @@ export function GameSessions({
   gameTitle,
   onOpen,
   onCreated,
+  onSessionsChanged,
+  autoOpenStarter = false,
 }: {
   profile: Profile;
   onSave: (p: Profile) => void; // clearing last run's pitch is a profile write
   gameId: GameId;
   gameTitle: string;
   onOpen: (sessionId: string) => void; // opening an existing session → its control room
+  // Open the starter dialog as soon as this mounts. Used when a game has no sessions at all: the
+  // sidebar sends you straight here to start one, so a page whose only content is a button you
+  // then have to press is a step that says nothing.
+  autoOpenStarter?: boolean;
   onCreated?: (sessionId: string) => void; // a fresh session → the Page tab, to set it up and share
+  // Ending a run changes what the sidebar should show — with none left, its sub-tabs go away. The
+  // parent counts sessions itself, so it needs to be told to look again.
+  onSessionsChanged?: () => void;
 }) {
   const handle = profile.handle;
   const tiers = profile.tiers ?? [];
@@ -110,6 +121,10 @@ export function GameSessions({
   const [chainErr, setChainErr] = useState("");
   // The chain gate for the two canister-backed creates (roulette has no canister by design).
   const chain = useGameChain(gameId === "fundraiser" ? "fundraiser" : gameId === "auction" ? "auction" : "task");
+  const { mode } = useCheer();
+  // A game still being built: playable end to end in mock mode so it can be demoed and worked on,
+  // but never started against the chain, where a run would take real money it can't yet settle.
+  const comingSoon = !!GAMES.find((g) => g.id === gameId)?.comingSoon;
   const [sessions, setSessions] = useState<GameSession[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -120,7 +135,7 @@ export function GameSessions({
   const [task, setTask] = useState<TaskGameConfig>(() => taskRules(profile, null));
   const [roul, setRoul] = useState<RouletteConfig>(() => rouletteRules(profile, null));
   // Whether the (long) rules form is showing while other sessions are already live.
-  const [starterExpanded, setStarterExpanded] = useState(false);
+  const [starterExpanded, setStarterExpanded] = useState(autoOpenStarter);
   const [fund, setFund] = useState<FundraiserSessionRules>(() => fundraiserRules(profile, null));
   const [auc, setAuc] = useState<AuctionConfig>(() => auctionRules(profile, null));
   // roulette only: who suggests — everyone by donating (classic), or rank X+ for free.
@@ -167,7 +182,8 @@ export function GameSessions({
   // Escape closes the starter and the page behind it stops scrolling — the same behaviour every
   // other dialog here has, so the one that asks for money rules doesn't feel different.
   useEffect(() => {
-    if (!starterExpanded) return;
+    // Only while it's a dialog: inline there is nothing underneath, so Escape would blank the page.
+    if (!starterExpanded || sessions.filter((x) => sessionState(x) === "live").length === 0) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setStarterExpanded(false);
     };
@@ -178,7 +194,16 @@ export function GameSessions({
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
     };
-  }, [starterExpanded]);
+  }, [starterExpanded, handle, gameId, sessions]);
+
+  // Ending the last live run empties the screen: the list disappears and all that's left is the
+  // "+ Start a new session" button. `autoOpenStarter` only seeds the initial state — this component
+  // is already mounted by then — so nothing reopened the form and the tab went blank-ish instead of
+  // going back to "start one". Watch the live count rather than the prop.
+  const liveCount = sessions.filter((x) => sessionState(x) === "live").length;
+  useEffect(() => {
+    if (liveCount === 0) setStarterExpanded(true);
+  }, [liveCount]);
 
   const refresh = useCallback(() => {
     setSessions(readSessions(handle, gameId));
@@ -198,6 +223,12 @@ export function GameSessions({
   // Missing pieces, in the order a maker reads the form. Empty = ready to start.
   const missing: string[] = [];
 
+  // Named, not optional: sessions are picked from a list (and from the builder's session select),
+  // where an auto-name like "Tasks #3" tells you nothing about which run it is. Listed first
+  // because it's the first field in the form.
+  const nameMissing = !name.trim();
+  if (nameMissing) missing.push("name this session");
+
   if (gameId === "roulette") {
     if (!roul.topic?.trim()) missing.push("say what viewers suggest");
     if (!(roul.minDonation > 0)) missing.push("set the minimum to suggest");
@@ -216,6 +247,9 @@ export function GameSessions({
     if (!(auc.minBid > 0)) missing.push("set the minimum bid");
     if (!(auc.biddingHours > 0)) missing.push("set the bidding window");
     if (!(auc.performHours > 0)) missing.push("set the time to deliver");
+  }
+  if (comingSoon && mode === "chain") {
+    missing.push(`${GAMES.find((g) => g.id === gameId)?.title ?? "this game"} isn't live yet — switch to mock to try it`);
   }
   const ready = missing.length === 0;
 
@@ -298,42 +332,50 @@ export function GameSessions({
   }
 
   const live = sessions.filter((x) => sessionState(x) === "live");
-  // The starter is a dialog now, not a panel that unfolds in place. Inline, it pushed the running
-  // sessions — the thing you came to this tab for — below a screenful of settings you only touch
-  // when starting something new. The button stays put; the form opens over the page.
   const starterOpen = starterExpanded;
+  // With nothing running, the form IS the screen — not a dialog floating over a page whose only
+  // content is the button that opened it. Dimming an empty page to draw attention to the one thing
+  // on it says nothing. With sessions already listed there is something to come back to, so the
+  // form stays a dialog and the list keeps its place underneath.
+  // Keyed on LIVE runs, not on every session ever created. A finished run isn't something to come
+  // back to — the list below only shows live ones — so a game whose only session ended still has an
+  // empty screen, and dimming it to float a dialog over nothing is the thing this replaced.
+  const starterInline = starterOpen && live.length === 0;
 
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <button type="button" className={`card ${s.starterCollapsed}`} onClick={() => setStarterExpanded(true)}>
-        <span className={s.starterPlus} aria-hidden>+</span>
-        Start a new session
-      </button>
-
-      {starterOpen && createPortal(
-        <div className={s.modalBack} role="dialog" aria-modal="true" aria-label="Start a session" onClick={() => setStarterExpanded(false)}>
-        <div className={`card ${s.starter} ${s.modalCard}`} onClick={(e) => e.stopPropagation()}>
+  const starterForm = (
+        <div className={`card ${s.starter}${starterInline ? "" : ` ${s.modalCard}`}`} onClick={(e) => e.stopPropagation()}>
         <div className={s.head}>
           <div className={s.headRow}>
-            <h2>Start a session</h2>
-            {/* Always available now: as a dialog this is the only visible way out besides Escape,
-                and it used to be hidden whenever nothing was running yet. */}
-            <button type="button" className={s.starterClose} onClick={() => setStarterExpanded(false)} aria-label="Close">
-              Cancel
-            </button>
+            <h2>Start a {gameTitle} session</h2>
+            {/* Cancel closes the dialog — but inline there is nothing behind it to go back to, so
+                pressing it would leave a blank screen with no way forward. Shown only when the form
+                is floating over a list. */}
+            {!starterInline && (
+              <button type="button" className={s.starterClose} onClick={() => setStarterExpanded(false)} aria-label="Close">
+                Cancel
+              </button>
+            )}
           </div>
-          <p>One run of {gameTitle} — its own board, its own link, and the rules you set here.</p>
+          {/* The heading already names the game; repeating it in the next line was the third
+              time the word appeared on screen. */}
+          <p>Its own board, its own link, and the rules you set here.</p>
         </div>
 
         <div className="field">
-          <label htmlFor="sess-name">Name</label>
+          <label htmlFor="sess-name">
+            Name
+            {/* Flagged only while it's empty — once written the badge has done its job. */}
+            {nameMissing && <span className={s.required}>Required</span>}
+          </label>
           <input
             id="sess-name"
             type="text"
-            placeholder={`Optional — “Friday ${gameTitle.toLowerCase()}”`}
+            placeholder={`e.g. “Friday ${gameTitle.toLowerCase()}”`}
             value={name}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && void start()}
+            aria-required
+            autoFocus
           />
         </div>
 
@@ -644,11 +686,35 @@ export function GameSessions({
           {chainErr && <div className={s.err}>{chainErr}</div>}
         </div>
         </div>
-        </div>,
-        document.body
+  );
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* The "+ Start a new session" button is for adding another run alongside the ones listed
+          below. With none listed there is nothing to add to — the form itself is the screen. */}
+      {!starterInline && (
+        <button type="button" className={`card ${s.starterCollapsed}`} onClick={() => setStarterExpanded(true)}>
+          <span className={s.starterPlus} aria-hidden>+</span>
+          Start a new session
+        </button>
       )}
 
-      {sessions.length === 0 && <div className="empty-log">No sessions yet — start the first one above.</div>}
+      {starterInline && starterForm}
+
+      {starterOpen &&
+        !starterInline &&
+        createPortal(
+          <div
+            className={s.modalBack}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Start a ${gameTitle} session`}
+            onClick={() => setStarterExpanded(false)}
+          >
+            {starterForm}
+          </div>,
+          document.body
+        )}
 
       {live.length > 0 && (
         <div className={`card ${s.list}`}>
@@ -688,6 +754,7 @@ export function GameSessions({
                     confirm(dangerCopy.endSession(session.name), () => {
                       setSessions(endSession(handle, gameId, session.id));
                       refresh();
+                      onSessionsChanged?.();
                     })
                   }
                 >

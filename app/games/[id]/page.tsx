@@ -42,7 +42,10 @@ export default function GameDetailPage({ params }: { params: { id: string } }) {
           <span className={styles.icon} aria-hidden>
             <GameIcon id={game.id} width={30} height={30} />
           </span>
-          <h1>{game.title}</h1>
+          <h1>
+            {game.title}
+            {game.comingSoon && <span className="game-soon">Soon</span>}
+          </h1>
         </div>
         <p className={styles.tagline}>{game.tagline}</p>
 

@@ -305,10 +305,11 @@ export default function SpacePage() {
   // about — the builder previews a page that doesn't exist yet and the overview counts an empty
   // set — so the only honest door is Sessions, where you start one. They appear the moment a
   // session does.
-  const tabsFor = (id: GameId) =>
-    activeSessions(profile.handle, id).length > 0
-      ? GAME_TABS[id]
-      : GAME_TABS[id].filter((t) => t.key === "sessions");
+  // With no session there are no sub-tabs at all: "Page" would preview a page that doesn't exist
+  // and "Overview" would count an empty set, while "Sessions" was a screen whose only content was
+  // one button. Clicking the game itself opens the starter instead (see toggleGame), so the empty
+  // state is one click, not three.
+  const tabsFor = (id: GameId) => (activeSessions(profile.handle, id).length > 0 ? GAME_TABS[id] : []);
 
   // The session the game tabs are looking at. Reading sessionNonce here is what ties the reads
   // below to the counter, so any create/select/end re-runs them.
@@ -331,9 +332,10 @@ export default function SpacePage() {
     setOpenGame(id);
     setSection("games");
     setGameId(id);
-    // First AVAILABLE tab: with no session that's Sessions, not the page builder for a page that
-    // isn't there yet.
-    setGameTab(tabsFor(id)[0].key);
+    // First available tab, or — with nothing running — the sessions view, which opens its starter
+    // dialog on arrival. `tabsFor` is empty in that case, so read it defensively rather than
+    // indexing into nothing.
+    setGameTab(tabsFor(id)[0]?.key ?? "sessions");
   }
 
   // Switching to a flat section (Home/Donations/Widgets/Settings) closes any expanded game row.
@@ -403,6 +405,9 @@ export default function SpacePage() {
                 <button type="button" className={`game-row${open ? " open" : ""}`} aria-expanded={open} onClick={() => toggleGame(g.id)}>
                   <GameIcon id={g.id} width={18} height={18} />
                   {g.title}
+                  {/* Not finished for real money — say so where the game is named, not after
+                      someone has set up a run and tried to take a bid with it. */}
+                  {g.comingSoon && <span className="game-soon">Soon</span>}
                   <ChevronDown className="chev" />
                 </button>
                 {open && (
@@ -503,7 +508,7 @@ export default function SpacePage() {
               </div>
 
               <div className={`card chart-card${demoData ? " chart-demo" : ""}`} title={demoData ? "demo numbers" : undefined}>
-                <DonationsChart d={d} periodLabel={period === "7" ? "7 days" : period === "30" ? "30 days" : "All time"} />
+                <DonationsChart d={d} period={period} periodLabel={period === "7" ? "7 days" : period === "30" ? "30 days" : "All time"} />
               </div>
 
               <HomeLive
@@ -551,49 +556,23 @@ export default function SpacePage() {
 
           {section === "games" && gameTab === "page" && liveSessions.length > 0 && (
             <>
-              <div className="main-head">
-                <h1>{game.title}</h1>
-              </div>
-              {game.id === "task" && (
-                <>
-                  <p className="hint" style={{ marginBottom: 8 }}>
-                    Build the task page, then share the link or QR — viewers open it and set you a task.
-                  </p>
-                  <TaskPanel profile={profile} onSave={saveDeferred} />
-                </>
-              )}
-              {game.id === "roulette" && (
-                <>
-                  <p className="hint" style={{ marginBottom: 8 }}>
-                    Build the roulette page, then share the link or QR — viewers open it and suggest a game.
-                  </p>
-                  <RoulettePanel profile={profile} onSave={saveDeferred} />
-                </>
-              )}
-              {game.id === "fundraiser" && (
-                <>
-                  <p className="hint" style={{ marginBottom: 8 }}>
-                    Build the fundraiser page, then share the link or QR — viewers open it and chip in.
-                  </p>
-                  <FundraiserPanel profile={profile} onSave={saveDeferred} />
-                </>
-              )}
-              {game.id === "auction" && (
-                <>
-                  <p className="hint" style={{ marginBottom: 8 }}>
-                    Build the auction page, then share the link or QR — viewers open it and bid their lots.
-                  </p>
-                  <AuctionPanel profile={profile} onSave={saveDeferred} />
-                </>
-              )}
+              {game.id === "task" && <TaskPanel profile={profile} onSave={saveDeferred} />}
+              {game.id === "roulette" && <RoulettePanel profile={profile} onSave={saveDeferred} />}
+              {game.id === "fundraiser" && <FundraiserPanel profile={profile} onSave={saveDeferred} />}
+              {game.id === "auction" && <AuctionPanel profile={profile} onSave={saveDeferred} />}
             </>
           )}
 
           {section === "games" && gameTab !== "page" && (
             <>
-              <div className="main-head">
-                <h1>{game.title}</h1>
-              </div>
+              {/* With nothing running the starter form IS the screen and carries its own heading
+                  ("Start a Fundraiser session"), so a bare game name above it was the same words
+                  twice in a row. Everywhere else the page still needs its title. */}
+              {!(gameTab === "sessions" && liveSessions.length === 0) && (
+                <div className="main-head">
+                  <h1>{game.title}</h1>
+                </div>
+              )}
 
               {gameTab === "sessions" && (
                 <GameSessions
@@ -609,6 +588,13 @@ export default function SpacePage() {
                     setSessionNonce((n) => n + 1);
                     setGameTab("page");
                   }}
+                  // Nothing running: the sidebar sent us here to start something, so open the
+                  // starter straight away rather than showing a page whose only content is the
+                  // button that opens it.
+                  autoOpenStarter={liveSessions.length === 0}
+                  // Ending a run must re-read the session count here too, or the sidebar keeps
+                  // showing Page/Overview for a game that no longer has anything running.
+                  onSessionsChanged={() => setSessionNonce((n) => n + 1)}
                 />
               )}
 

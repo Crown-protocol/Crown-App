@@ -41,7 +41,12 @@ export default function GamesPage() {
                 </span>
                 <div className={gl.caption}>
                   <div className={gl.capHead}>
-                    <span className={gl.title}>{game.title}</span>
+                    <span className={gl.title}>
+                      {game.title}
+                      {/* This page has its own grid rather than <GamesList>, so the badge has to be
+                          placed here too — the shared component's copy never reaches it. */}
+                      {game.comingSoon && <span className="game-soon">Soon</span>}
+                    </span>
                   </div>
                   <p className={gl.tagline}>{game.tagline}</p>
                 </div>
