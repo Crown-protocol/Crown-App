@@ -30,6 +30,16 @@
   font-size: 16px;
   color: var(--text-1);
 }
+/* The live session's name, quiet next to the game title: "Roulette · Friday run". Truncates rather
+   than pushing the status pill off the row when a maker gives a long name. */
+.cardSession {
+  min-width: 0;
+  font-size: 14px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .stat {
   font-size: 15px;
   color: var(--text-2);

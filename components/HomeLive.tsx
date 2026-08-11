@@ -6,7 +6,7 @@ import { readRound, readRoundMeta } from "@/lib/data/roulette";
 import { readStatus, raisedTotal, withFundraiserDefaults } from "@/lib/data/fundraiser";
 import { readTasks } from "@/lib/data/tasks";
 import { readLots, readAuctionMeta, auctionTotals, lotSum } from "@/lib/data/auction";
-import { firstActiveScope } from "@/lib/data/gameSessions";
+import { firstActiveScope, firstActiveSession } from "@/lib/data/gameSessions";
 import { pullScope } from "@/lib/data/gameSync";
 import type { GameId } from "@/lib/data/games";
 import type { Profile } from "@/lib/data/types";
@@ -14,10 +14,10 @@ import { usd } from "@/lib/money";
 import styles from "./HomeLive.module.css";
 
 interface Live {
-  roulette: { pot: number; count: number } | null;
-  fundraiser: { pledge: string; goal: number; raised: number; state: string } | null;
-  tasks: { active: number; pending: number; texts: string[] } | null;
-  auction: { state: string; top: number; pending: number; lots: number; topText: string } | null;
+  roulette: { pot: number; count: number; session: string | null } | null;
+  fundraiser: { pledge: string; goal: number; raised: number; state: string; session: string | null } | null;
+  tasks: { active: number; pending: number; texts: string[]; session: string | null } | null;
+  auction: { state: string; top: number; pending: number; lots: number; topText: string; session: string | null } | null;
 }
 
 // The games that are running right now, surfaced on Home so the streamer sees them without
@@ -35,10 +35,17 @@ export function HomeLive({ profile, onOpen }: { profile: Profile; onOpen: (g: Ga
     const tkScope = firstActiveScope(handle, "task");
     const auScope = firstActiveScope(handle, "auction");
 
+    // The live session's own name, per game — shown on each card so the streamer knows WHICH run is
+    // live (they can have several named runs). null when sessions were never used (legacy handle).
+    const rlName = firstActiveSession(handle, "roulette")?.name ?? null;
+    const frName = firstActiveSession(handle, "fundraiser")?.name ?? null;
+    const tkName = firstActiveSession(handle, "task")?.name ?? null;
+    const auName = firstActiveSession(handle, "auction")?.name ?? null;
+
     const load = () => {
       const round = readRound(rlScope);
       const meta = readRoundMeta(rlScope);
-      const roulette = round.length > 0 && !meta?.winner ? { pot: round.reduce((s, r) => s + r.pool, 0), count: round.length } : null;
+      const roulette = round.length > 0 && !meta?.winner ? { pot: round.reduce((s, r) => s + r.pool, 0), count: round.length, session: rlName } : null;
 
       const st = readStatus(frScope);
       const fr = withFundraiserDefaults(profile);
@@ -47,7 +54,7 @@ export function HomeLive({ profile, onOpen }: { profile: Profile; onOpen: (g: Ga
       // account would otherwise show a fundraiser at $0 as if it were live. Delivering is always
       // real (something was accepted); collecting counts only once a backer has actually chipped in.
       const frLive = st.state === "delivering" || (st.state === "collecting" && raised > 0);
-      const fundraiser = frLive ? { pledge: fr.pledge, goal: fr.goal, raised, state: st.state } : null;
+      const fundraiser = frLive ? { pledge: fr.pledge, goal: fr.goal, raised, state: st.state, session: frName } : null;
 
       const open = readTasks(tkScope).filter((t) => t.state === "pending" || t.state === "active");
       const tasks = open.length
@@ -55,6 +62,7 @@ export function HomeLive({ profile, onOpen }: { profile: Profile; onOpen: (g: Ga
             active: open.filter((t) => t.state === "active").length,
             pending: open.filter((t) => t.state === "pending").length,
             texts: open.slice(0, 2).map((t) => t.text),
+            session: tkName,
           }
         : null;
 
@@ -62,7 +70,7 @@ export function HomeLive({ profile, onOpen }: { profile: Profile; onOpen: (g: Ga
       const at = auctionTotals(readLots(auScope));
       const auction =
         am && am.state !== "settled" && am.state !== "refunded" && am.state !== "cancelled" && (at.accepted > 0 || at.pending > 0)
-          ? { state: am.state, top: at.top ? lotSum(at.top) : 0, pending: at.pending, lots: at.accepted, topText: at.top?.text ?? "" }
+          ? { state: am.state, top: at.top ? lotSum(at.top) : 0, pending: at.pending, lots: at.accepted, topText: at.top?.text ?? "", session: auName }
           : null;
 
       setLive({ roulette, fundraiser, tasks, auction });
@@ -116,6 +124,7 @@ export function HomeLive({ profile, onOpen }: { profile: Profile; onOpen: (g: Ga
             <div className={styles.cardHead}>
               <GameIcon id="roulette" width={18} height={18} />
               <span className={styles.cardTitle}>Roulette</span>
+              {live.roulette.session && <span className={styles.cardSession}>· {live.roulette.session}</span>}
               <span className="pill ok" style={{ marginLeft: "auto" }}>
                 <span className="dot" />
                 Round open
@@ -136,6 +145,7 @@ export function HomeLive({ profile, onOpen }: { profile: Profile; onOpen: (g: Ga
             <div className={styles.cardHead}>
               <GameIcon id="fundraiser" width={18} height={18} />
               <span className={styles.cardTitle}>Fundraiser</span>
+              {live.fundraiser.session && <span className={styles.cardSession}>· {live.fundraiser.session}</span>}
               <span className={`pill ${live.fundraiser.state === "delivering" ? "attn" : "ok"}`} style={{ marginLeft: "auto" }}>
                 <span className="dot" />
                 {live.fundraiser.state === "delivering" ? "Delivering" : "Collecting"}
@@ -161,6 +171,7 @@ export function HomeLive({ profile, onOpen }: { profile: Profile; onOpen: (g: Ga
             <div className={styles.cardHead}>
               <GameIcon id="task" width={18} height={18} />
               <span className={styles.cardTitle}>Tasks</span>
+              {live.tasks.session && <span className={styles.cardSession}>· {live.tasks.session}</span>}
               <span className={`pill ${live.tasks.pending ? "attn" : "ok"}`} style={{ marginLeft: "auto" }}>
                 <span className="dot" />
                 {live.tasks.pending ? `${live.tasks.pending} awaiting` : `${live.tasks.active} running`}
@@ -187,6 +198,7 @@ export function HomeLive({ profile, onOpen }: { profile: Profile; onOpen: (g: Ga
             <div className={styles.cardHead}>
               <GameIcon id="auction" width={18} height={18} />
               <span className={styles.cardTitle}>Auction</span>
+              {live.auction.session && <span className={styles.cardSession}>· {live.auction.session}</span>}
               <span className={`pill ${live.auction.pending ? "attn" : "ok"}`} style={{ marginLeft: "auto" }}>
                 <span className="dot" />
                 {live.auction.state === "bidding"

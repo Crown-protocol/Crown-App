@@ -187,3 +187,10 @@ export function firstActiveScope(handle: string, gameId: GameId): string {
   if (sessions.length === 0) return handle;
   return activeSessions(handle, gameId)[0]?.scope ?? handle;
 }
+
+// The first live session itself (for surfaces that want to SHOW its name, e.g. Home's "Live now").
+// null when sessions were never used (the legacy bare-handle path has no session to name).
+export function firstActiveSession(handle: string, gameId: GameId): GameSession | null {
+  if (readSessions(handle, gameId).length === 0) return null;
+  return activeSessions(handle, gameId)[0] ?? null;
+}

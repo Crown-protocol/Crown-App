@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Chart } from "@/components/Chart";
 import { GameIcon, NavIcon } from "@/components/icons";
 import { money } from "@/components/ops";
-import { DONATION_SOURCES, splitByGame, type DashboardPeriod, type DonationSource } from "@/lib/data/mock";
+import { DONATION_SOURCES, splitByGame, type DashboardPeriod, type DashboardPeriodKey, type DonationSource } from "@/lib/data/mock";
 
 const SOURCE_LABEL: Record<DonationSource, string> = {
   direct: "Regular",
@@ -17,7 +17,7 @@ const SOURCE_LABEL: Record<DonationSource, string> = {
 // "Donations by day", filterable by source right on the chart (like the admin panel's growth
 // chart): pick one game, a few, or all, and the headline number is what those made over the
 // period chosen at the top of Home. Replaces the old static "Donations by game" bar list.
-export function DonationsChart({ d, periodLabel }: { d: DashboardPeriod; periodLabel: string }) {
+export function DonationsChart({ d, periodLabel, period }: { d: DashboardPeriod; periodLabel: string; period: DashboardPeriodKey }) {
   const [selected, setSelected] = useState<Set<DonationSource>>(new Set(DONATION_SOURCES));
   const split = useMemo(() => splitByGame(d), [d]);
   const allOn = selected.size === DONATION_SOURCES.length;
@@ -70,6 +70,17 @@ export function DonationsChart({ d, periodLabel }: { d: DashboardPeriod; periodL
   );
 
   return (
-    <Chart title="Donations by day" days={series} peakValue={peakValue} peakLabel={peakLabel} axis={d.axis} labels={d.labels} controls={controls} />
+    <Chart
+      // "All time" buckets by MONTH (12 of them, dashboard.ts), 7/30 days bucket by day — so the
+      // title has to follow the period instead of always claiming days. A chart whose bars are
+      // months under a heading that says "by day" is simply telling the maker the wrong thing.
+      title={period === "all" ? "Donations by month" : "Donations by day"}
+      days={series}
+      peakValue={peakValue}
+      peakLabel={peakLabel}
+      axis={d.axis}
+      labels={d.labels}
+      controls={controls}
+    />
   );
 }
