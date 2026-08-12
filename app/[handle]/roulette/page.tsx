@@ -26,6 +26,8 @@ import { GameRules, rouletteLines } from "@/components/games/GameRules";
 import { MinNote } from "@/components/games/MinNote";
 import { rouletteFloor } from "@/lib/data/floors";
 import { useGameSyncState } from "@/lib/data/gameSync";
+import { useRouletteChain, phaseOf } from "@/lib/data/useRouletteChain";
+import { RouletteChainPanel } from "@/components/games/RouletteChainPanel";
 import { useConfirm } from "@/components/useConfirm";
 import { dangerCopy } from "@/lib/data/dangerous";
 import styles from "./page.module.css";
@@ -87,6 +89,22 @@ export default function RoulettePage({ params }: { params: { handle: string } })
   // The meta (clock/verdict) deliberately does NOT re-read here — the per-second catch-up effect
   // owns it, so an adopted verdict replays the wheel's landing instead of snapping to it.
   const { nonce: syncNonce, synced } = useGameSyncState(scope);
+
+  // A round opened on chain outranks everything below it: it has its own clock
+  // (slots, not this browser's), its own wheel (the chain's, not localStorage's)
+  // and its own verdict (a block nobody picked). When one exists, the mock path
+  // is not a fallback — it is a different game, and showing both would be two
+  // wheels claiming the same money.
+  const chain = useRouletteChain(handle);
+  const chainPhase = chain.round ? phaseOf(chain.round, chain.wheel) : null;
+  const chainStatus =
+    chainPhase === "decided"
+      ? "round decided"
+      : chainPhase === "settling"
+        ? "round closed"
+        : chainPhase === "closing"
+          ? "closing"
+          : "round open";
 
   useEffect(() => {
     if (!scope) return;
@@ -215,17 +233,17 @@ export default function RoulettePage({ params }: { params: { handle: string } })
   // Who's still in, and their knock-out odds (only meaningful in elimination).
   const aliveNow = isElimination ? survivors(round, meta) : round;
   const elimWeights = isElimination ? eliminationWeights(aliveNow) : [];
-  if (!pub) return <main className="page" />;
-  if (!pub.scope) {
+  if (!pub && !chain.round) return <main className="page" />;
+  if (!pub?.scope && !chain.round) {
     return (
       <main className="page">
         <div className="center-note">
-          <h1>{pub.choices.length ? "Pick a session" : "Nothing running right now"}</h1>
-          {pub.choices.length ? (
+          <h1>{pub?.choices.length ? "Pick a session" : "Nothing running right now"}</h1>
+          {pub?.choices.length ? (
             <>
               <p>Several are live at once — choose the one you were invited to.</p>
               <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "center" }}>
-                {pub.choices.map((c) => (
+                {pub.choices?.map((c) => (
                   <a key={c.id} className="btn" href={`?s=${c.id}`}>
                     {c.name}
                   </a>
@@ -339,13 +357,37 @@ export default function RoulettePage({ params }: { params: { handle: string } })
           {mine.avatarEnabled !== false && <Mono name={mine.name} size={56} src={mine.avatarUrl} />}
           <div>
             <div className={styles.name}>{mine.name}</div>
-            <div className={styles.handle}>@{mine.handle} · <span className={styles.live}>round open</span></div>
+            {/* The status has to be the round's, not a decoration: a decided wheel
+                that still says "round open" is the page contradicting itself two
+                inches above the verdict. */}
+            <div className={styles.handle}>
+              @{mine.handle} · <span className={styles.live}>{chainStatus}</span>
+            </div>
           </div>
         </Link>
 
-        {rl.headline.trim() && <h1 className={styles.headline}>{rl.headline}</h1>}
+        {rl.headline.trim() ? (
+          <h1 className={styles.headline}>{rl.headline}</h1>
+        ) : (
+          <h1 className="sr-only">{`Roulette — ${mine.name}`}</h1>
+        )}
         {rl.descriptionEnabled && rl.description && <p className={styles.desc}>{rl.description}</p>}
 
+        {chain.round ? (
+          // The panel brings its own tabs and panel wrapper — it is the same
+          // furniture as the off-chain view below, so a viewer never has to
+          // learn two roulettes.
+          <RouletteChainPanel
+            handle={handle}
+            profile={mine}
+            presets={rl.presets}
+            rep={rep}
+            round={chain.round}
+            wheel={chain.wheel}
+            onStaked={chain.refresh}
+          />
+        ) : (
+        <>
         {/* Tab 1: suggest or back a game (the donation). Tab 2: the wheel itself, live. */}
         <GameTabs
           value={view}
@@ -358,7 +400,21 @@ export default function RoulettePage({ params }: { params: { handle: string } })
         />
 
         <div className={styles.panel}>
-          {view === "rules" && <GameRules lines={rouletteLines(cfg, mine.name, noun)} mine={mine} />}
+          {view === "rules" && (
+            <GameRules
+              lines={rouletteLines(cfg, mine.name, noun)}
+              mine={mine}
+              // The wheel has no escrow, here as on chain: a stake is paid
+              // straight out and never comes back. The default footer promises a
+              // refund path that does not exist on this game.
+              note={
+                <>
+                  The money moves the moment you sign, straight to {mine.name} — there is no escrow on this wheel and
+                  nothing to refund, win or lose.
+                </>
+              }
+            />
+          )}
 
           {view === "wheel" && (
           <div className={styles.wheelCol} style={{ position: "static" }}>
@@ -431,6 +487,14 @@ export default function RoulettePage({ params }: { params: { handle: string } })
                 <div className="footnote">Nothing suggested yet — yours starts the round.</div>
               )}
               <div className={styles.roundFoot}>
+                {/* Said plainly, because the chain-mode wheel next door makes a
+                    stronger promise and a viewer cannot tell them apart by
+                    looking: this clock and this spin are the app's. Rank mode has
+                    no transaction to count and elimination needs a beacon per
+                    knock-out, so neither can be settled by the chain
+                    (`crown-games/roulette/docs/spec.md §Вердикт`). */}
+                <b>This round is off-chain</b> — the clock and the spin are this app&apos;s, not Solana&apos;s. The
+                donations are real either way.{" "}
                 {isElimination
                   ? `Elimination — each spin knocks one out, last ${noun} standing wins. Backing protects: the more it has, the safer it is. Tap a ${noun} to back it.`
                   : `Round: ${cfg.roundMinutes} min · winner gets played for ${cfg.playMinutes} min. Tap a ${noun} to back it.`}
@@ -546,6 +610,8 @@ export default function RoulettePage({ params }: { params: { handle: string } })
           </div>
           )}
         </div>
+        </>
+        )}
 
         <div className={styles.footer}>
           <Logo />

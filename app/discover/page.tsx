@@ -122,6 +122,10 @@ export default function DiscoverPage() {
       <TopNav active="discover" />
 
       <div className={styles.main}>
+        {/* The page is search-first by design and shows no title — but a page
+            with no heading at all leaves a screen reader (and a search engine)
+            with nothing to announce it by. */}
+        <h1 className="sr-only">Discover content makers</h1>
         <div className={styles.searchRow}>
           <div className="search">
             <SearchIcon width={22} height={22} />

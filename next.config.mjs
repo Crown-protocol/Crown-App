@@ -25,9 +25,19 @@ const CSP_APP = [
   // Avatars and page backdrops are user-supplied data: URLs and, for uploads, blobs.
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
-  // The RPC we read the chain from, the wallet SDKs' relays, and Streamlabs. Anything not listed
-  // here cannot be reached from the page, so an injected script has nowhere to send what it takes.
-  "connect-src 'self' https://api.devnet.solana.com https://*.solana.com wss://*.solana.com https://*.reown.com wss://*.reown.com https://*.walletconnect.com wss://*.walletconnect.com https://*.walletconnect.org wss://*.walletconnect.org https://streamlabs.com",
+  // The RPC we read the chain from, the wallet SDKs' relays, Streamlabs — and the
+  // IC gateway the browser reads the game canisters through. Anything not listed
+  // here cannot be reached from the page, so an injected script has nowhere to
+  // send what it takes.
+  //
+  // The IC host is taken from the same env var the client is built with, because
+  // it is not one address: `https://icp-api.io` in production, `http://127.0.0.1:4943`
+  // in front of a local replica. Without it the escrow games look configured and
+  // are not — the pages show their real-escrow copy and every canister read is
+  // refused by the policy, which is the worst of both states and is exactly how
+  // a local run behaved.
+  ["connect-src 'self'", ...(process.env.NEXT_PUBLIC_IC_HOST ? [process.env.NEXT_PUBLIC_IC_HOST] : []),
+    "https://api.devnet.solana.com https://*.solana.com wss://*.solana.com https://*.reown.com wss://*.reown.com https://*.walletconnect.com wss://*.walletconnect.com https://*.walletconnect.org wss://*.walletconnect.org https://streamlabs.com"].join(" "),
   // Wallet extensions and WalletConnect open their own frames for approval.
   "frame-src 'self' https://*.reown.com https://*.walletconnect.com https://*.walletconnect.org",
   "object-src 'none'",

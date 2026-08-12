@@ -159,17 +159,38 @@ export async function materializeCollection(input: MaterializeInput): Promise<Ma
       ["nonce", input.nonce],
       ["witness", hex(proof.witness)],
     ])}`;
-    const res = await canister.create_collection(text);
-    return { ok: isAdvanced(res), tag: resultTag(res) };
+    try {
+      const res = await canister.create_collection(text);
+      return { ok: isAdvanced(res), tag: resultTag(res) };
+    } catch (e) {
+      // The game's anonymous boundary does not *answer* a witness it cannot walk
+      // — it refuses the ingress before execution, so this arrives as a thrown
+      // rejection rather than as a `BadBirthProof` variant. Both mean the same
+      // thing and both are fixed by the same paid push; catching it here is what
+      // turns a 500 in front of a donor whose money already moved into the retry
+      // that was always meant to happen.
+      const why = e instanceof Error ? e.message : String(e);
+      return { ok: false, tag: /reject/i.test(why) ? "BadBirthProof" : "CallFailed", detail: why.slice(0, 200) };
+    }
   };
 
-  let out = await attempt();
-  // A witness the game cannot walk means its cached root predates this birth —
-  // the one refusal that a paid push actually fixes, so it is worth exactly one
-  // retry and no more.
-  if (!out.ok && out.tag === "BadBirthProof") {
+  // Push first, then take the witness — and be ready to do it again.
+  //
+  // The witness the index hands out reconstructs against its root **as of now**,
+  // and that root keeps moving: the mirror indexer folds settlements in the
+  // background, so a witness taken a moment after a push can already belong to a
+  // newer root than the one the game cached. The game then refuses it, the
+  // caller pushes, takes a fresh witness — and can lose the same race again.
+  // Pushing before each attempt shrinks the window to a single call, and three
+  // attempts make losing it three times in a row the only way to fail. A push
+  // costs `root_price` cycles; a donor whose money is in an escrow attached to
+  // no collection costs a great deal more.
+  let out: MaterializeOutcome = { ok: false, tag: "NotAttempted" };
+  for (let i = 0; i < 3; i++) {
     const pushed = await pushRoot("fundraiser" as GameName);
-    if (pushed.ok) out = await attempt();
+    if (!pushed.ok && i === 0) return { ok: false, tag: "RootPushFailed", detail: pushed.detail };
+    out = await attempt();
+    if (out.ok || out.tag === "AlreadyExists" || out.tag === "NoBirth") break;
   }
   if (out.ok || out.tag === "AlreadyExists") await markMaterialized(input.collectionHex);
   return out.tag === "AlreadyExists" ? { ok: true, tag: out.tag } : out;

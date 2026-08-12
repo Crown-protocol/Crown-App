@@ -9,6 +9,7 @@ import { TASK_MAX, WIDGET_LABEL, MAX_DONATE_PRESETS, withPageDefaults } from "@/
 import { DesignTab } from "@/components/DesignTab";
 import type { PageWidget, Profile, Social } from "@/lib/data/types";
 import styles from "./PageBuilder.module.css";
+import { copyLabel, copyText, type CopyResult } from "@/lib/copy";
 
 type Tab = "page" | "design";
 type Device = "phone" | "desktop";
@@ -17,7 +18,7 @@ export function PageBuilder({ profile, onSave }: { profile: Profile; onSave: (p:
   const p = withPageDefaults(profile);
   const [tab, setTab] = useState<Tab>("page");
   const [device, setDevice] = useState<Device>("phone");
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<CopyResult | null>(null);
   const [qrOpen, setQrOpen] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [openWidget, setOpenWidget] = useState<PageWidget["kind"] | null>(null);
@@ -84,11 +85,8 @@ export function PageBuilder({ profile, onSave }: { profile: Profile; onSave: (p:
   }
 
   async function copyLink() {
-    try {
-      await navigator.clipboard.writeText(link);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
-    } catch {}
+    setCopied(await copyText(link));
+    setTimeout(() => setCopied(null), 1600);
   }
 
   return (
@@ -265,7 +263,7 @@ export function PageBuilder({ profile, onSave }: { profile: Profile; onSave: (p:
             </a>
             {/* href stays a relative /@handle so it works regardless of host; the text shows the full URL */}
             <button type="button" className="btn-outline" onClick={copyLink} aria-label="Copy link">
-              <CopyIcon /> {copied ? "Copied!" : "Copy"}
+              <CopyIcon /> {copied ? copyLabel(copied) : "Copy"}
             </button>
             <button type="button" className="btn-outline" onClick={() => setQrOpen((v) => !v)}>
               <QrIcon /> QR code

@@ -39,6 +39,7 @@ import { FloorBump, useFloorClamp } from "@/components/games/MinNote";
 import { useConfirm } from "@/components/useConfirm";
 import { dangerCopy } from "@/lib/data/dangerous";
 import s from "./GameSessions.module.css";
+import { copyText } from "@/lib/copy";
 
 // One line that tells the streamer what's inside a session without opening it.
 function summarize(session: GameSession): string {
@@ -318,7 +319,7 @@ export function GameSessions({
                       id="sess-task-min"
                       min={PLATFORM_FLOOR.task}
                       value={task.minAmount}
-                      onCommit={(n) => setTask({ ...task, minAmount: clampTaskMin(n) })}
+                      onCommit={(n, typed) => setTask({ ...task, minAmount: clampTaskMin(n, typed) })}
                     />
                   </div>
                   <FloorBump note={taskMinBump} />
@@ -374,7 +375,7 @@ export function GameSessions({
                       id="sess-roul-min"
                       min={PLATFORM_FLOOR.donationWithWords}
                       value={roul.minDonation}
-                      onCommit={(n) => setRoul({ ...roul, minDonation: clampRoulMin(n) })}
+                      onCommit={(n, typed) => setRoul({ ...roul, minDonation: clampRoulMin(n, typed) })}
                     />
                   </div>
                   <FloorBump note={roulMinBump} />
@@ -500,7 +501,7 @@ export function GameSessions({
                       id="sess-fr-min"
                       min={PLATFORM_FLOOR.fundraiser}
                       value={fund.minContribution}
-                      onCommit={(n) => setFund({ ...fund, minContribution: clampFundMin(n) })}
+                      onCommit={(n, typed) => setFund({ ...fund, minContribution: clampFundMin(n, typed) })}
                     />
                   </div>
                   <FloorBump note={fundMinBump} />
@@ -607,7 +608,7 @@ export function GameSessions({
                   type="button"
                   onClick={async () => {
                     try {
-                      await navigator.clipboard.writeText(`${origin}/@${handle}/${gameId}?s=${session.id}`);
+                      await copyText(`${origin}/@${handle}/${gameId}?s=${session.id}`);
                     } catch {}
                   }}
                   title="Copy this session's public link"

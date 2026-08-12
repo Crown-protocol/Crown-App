@@ -35,9 +35,16 @@ export function MinNote({ floor, amount, className }: { floor: Floor; amount?: n
  */
 export function useFloorClamp(floorAmount: number, note: string) {
   const [bumped, setBumped] = useState(false);
-  const clamp = (n: number) => {
+  /**
+   * `typed` is what the person actually put in, which is not always what arrives
+   * here: `NumberInput` clamps to its own `min` first. Comparing the arrived
+   * value against the floor therefore always agreed with it, and the notice
+   * below never appeared — the clamp was real and silent, which is the one
+   * combination that reads as the field ignoring you.
+   */
+  const clamp = (n: number, typed: number = n) => {
     const raised = Math.max(floorAmount, n);
-    setBumped(raised !== n);
+    setBumped(typed < floorAmount);
     return raised;
   };
   return { clamp, bumpNote: bumped ? note : null };

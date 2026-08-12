@@ -7,6 +7,7 @@ import { GAMES, type GameId } from "@/lib/data/games";
 import { Widget as WidgetMockup } from "@/components/ObsWidgets";
 import { ObsGuideModal } from "@/components/ObsGuideModal";
 import styles from "./WidgetsPanel.module.css";
+import { copyLabel, copyText, type CopyResult } from "@/lib/copy";
 
 // ---- Card preview -------------------------------------------------------------------------------
 
@@ -97,14 +98,13 @@ function OverlayCard({ handle, kind, label, desc }: { handle: string; kind: Over
   const url = `${origin || "https://cheer.tv"}/overlay/@${handle}/${kind}${qs ? `?${qs}` : ""}`;
 
   const [copied, flashCopied] = useFlash();
+  const [how, setHow] = useState<CopyResult | null>(null);
   // What OBS should be told in its Width/Height fields — wrong values crop the widget silently.
   const [w, h] = OBS_SIZE[kind] ?? [800, 260];
 
   async function copy() {
-    try {
-      await navigator.clipboard.writeText(url);
-      flashCopied();
-    } catch {}
+    setHow(await copyText(url));
+    flashCopied();
   }
 
   return (
@@ -117,7 +117,7 @@ function OverlayCard({ handle, kind, label, desc }: { handle: string; kind: Over
         {/* The link IS the copy button — one obvious target instead of a row of buttons around it.
             The size rides along as a quiet note: it's information, not an action. */}
         <button type="button" className={styles.urlRow} onClick={copy} title="Click to copy — paste into a Browser Source">
-          <span className={styles.url}>{copied ? "Copied" : url.replace(/^https?:\/\//, "")}</span>
+          <span className={styles.url}>{copied ? copyLabel(how) : url.replace(/^https?:\/\//, "")}</span>
           <span className={styles.sizeNote}>
             {w}×{h}
           </span>

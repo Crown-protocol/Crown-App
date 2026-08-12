@@ -27,6 +27,7 @@ import { useGameSyncState } from "@/lib/data/gameSync";
 import { backgroundStyle, backgroundInk } from "@/lib/data/pagebuilder";
 import { useIsWide } from "@/lib/data/useIsWide";
 import styles from "./page.module.css";
+import { copyLabel, copyText, type CopyResult } from "@/lib/copy";
 
 type SendState = "idle" | "sending" | "done";
 
@@ -71,7 +72,7 @@ export default function FundraiserPage({ params }: { params: { handle: string } 
   const [amount, setAmount] = useState<number | null>(null);
   const [custom, setCustom] = useState("");
   const [send, setSend] = useState<SendState>("idle");
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<CopyResult | null>(null);
 
   // Shared game state: other viewers' chip-ins land in `collected` via the nonce dep.
   const { nonce: syncNonce, synced } = useGameSyncState(scope);
@@ -184,11 +185,15 @@ export default function FundraiserPage({ params }: { params: { handle: string } 
       }
       // No deadline is passed: an escrow has to outlive the collection's own
       // window, and that window anchors on the FIRST contribution's birth slot —
-      // a figure only the canister knows. The flow reads it there.
+      // a figure only the canister knows. The flow reads it there. The window's
+      // LENGTH, though, is this page's rule and the recipient signed it, so it
+      // travels with the contribution: the first one has no open collection to
+      // read it from.
       const res = await fundingChipIn(chain.wallet, {
         collectionHex: frStatus.chainCollection,
         recipient: mine!.address,
         dollars: finalAmount,
+        durationSeconds: cfg.fundingDays * 86_400,
       });
       if (!res.ok) {
         setChainErr(res.error);
@@ -215,11 +220,8 @@ export default function FundraiserPage({ params }: { params: { handle: string } 
   }
 
   async function copyAddress() {
-    try {
-      await navigator.clipboard.writeText(mine!.address);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
-    } catch {}
+    setCopied(await copyText(mine!.address));
+    setTimeout(() => setCopied(null), 1600);
   }
 
   return (
@@ -234,7 +236,11 @@ export default function FundraiserPage({ params }: { params: { handle: string } 
           </div>
         </Link>
 
-        {fr.pledge.trim() && <h1 className={styles.pledge}>{fr.pledge}</h1>}
+        {fr.pledge.trim() ? (
+          <h1 className={styles.pledge}>{fr.pledge}</h1>
+        ) : (
+          <h1 className="sr-only">{`Fundraiser — ${mine.name}`}</h1>
+        )}
         {fr.descriptionEnabled && fr.description && <p className={styles.desc}>{fr.description}</p>}
         <p className={styles.refundNote}>Delivered — the money is theirs. Not delivered — everyone gets it back.</p>
 
@@ -365,7 +371,7 @@ export default function FundraiserPage({ params }: { params: { handle: string } 
           {mine.address && (
             <button type="button" className={styles.addr} onClick={copyAddress} title="Copy payout address">
               <span className="num">{mine.address.slice(0, 6)}…{mine.address.slice(-4)}</span>
-              <CopyIcon /> {copied ? "Copied!" : ""}
+              <CopyIcon /> {copyLabel(copied)}
             </button>
           )}
         </div>

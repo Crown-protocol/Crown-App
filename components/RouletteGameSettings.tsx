@@ -97,13 +97,15 @@ export function RouletteGameSettings({ profile, onSave }: { profile: Profile; on
               id="roul-min"
               min={PLATFORM_FLOOR.donationWithWords}
               value={cfg.minDonation}
-              onCommit={(n) => patch({ minDonation: clampMin(n) })}
+              onCommit={(n, typed) => patch({ minDonation: clampMin(n, typed) })}
             />
-            {/* The network refuses anything below this, and it refuses it AFTER the
-                money has moved — so the knob stops here rather than letting a page
-                advertise a minimum that cannot be honoured. */}
-            <FloorBump note={minBump} />
           </div>
+          {/* The network refuses anything below this, and it refuses it AFTER the
+              money has moved — so the knob stops here rather than letting a page
+              advertise a minimum that cannot be honoured. Under the field, not
+              inside it: `.affix` is a flex row, and a notice in there squeezes
+              the input the moment it appears. */}
+          <FloorBump note={minBump} />
         </div>
       </section>
 

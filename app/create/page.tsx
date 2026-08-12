@@ -80,12 +80,25 @@ export default function CreatePage() {
   // Base58 Solana pubkey (32 bytes) — the payout address format of the Cheer backend.
   const manualValid = isValidAddress(manualAddr);
 
+  /** Why "Next" is off, in the words of what is missing — or "" when it is on. */
+  function nextBlocker(): string {
+    if (step === 1) {
+      if (!name.trim()) return "A name is needed to continue.";
+      if (!cleanHandle) return "Pick a link for your page to continue.";
+      if (reserved) return "That link is taken — pick another.";
+    }
+    if (step === 2 && !canNext2) return "One of the links is not a profile URL on its platform.";
+    if (step === 3 && !canFinish) return "A payout address is needed to continue.";
+    return "";
+  }
+
   function resolvedAddress(): string {
     if (walletMode === "manual") return manualAddr.trim() || "";
     return wallet.address || "";
   }
 
   const addr = resolvedAddress();
+
   // A real, well-formed destination is required before finishing (a bad/empty address would make the
   // streamer's own /@handle 404 and route donations nowhere).
   // A REAL payout address also needs the wallet's signature: the server refuses an unsigned page
@@ -94,6 +107,8 @@ export default function CreatePage() {
   const manualNeedsWallet = walletMode === "manual" && manualValid && !wallet.connected;
   const canFinish =
     walletMode === "manual" ? manualValid && !manualNeedsWallet : isValidAddress(wallet.address ?? "");
+
+  const nextBlockedBy = nextBlocker();
 
   // Every step change goes through here so `dir` and `step` always agree.
   function go(to: number) {
@@ -366,18 +381,28 @@ export default function CreatePage() {
               </button>
             )}
             {step < 4 ? (
-              <button
-                className="btn"
-                type="button"
-                disabled={(step === 1 && !canNext1) || (step === 2 && !canNext2) || (step === 3 && !canFinish)}
-                onClick={() => go(step + 1)}
-              >
-                Next
-              </button>
+              <>
+                {/* A dead "Next" with nothing beside it is the worst state this
+                    wizard can be in: the visitor is stopped and not told by
+                    what. The reason is spelled out next to the button rather
+                    than left to be inferred from a field that looks fine. */}
+                {nextBlockedBy && <span className={styles.navNote}>{nextBlockedBy}</span>}
+                <button
+                  className="btn"
+                  type="button"
+                  disabled={!!nextBlockedBy || publishing}
+                  onClick={() => go(step + 1)}
+                >
+                  Next
+                </button>
+              </>
             ) : (
-              <button className="btn" type="button" disabled={!canFinish || publishing} onClick={() => void finish()}>
-                {publishing ? "Publishing…" : "Done"}
-              </button>
+              <>
+                {!canFinish && <span className={styles.navNote}>A payout address is needed to publish.</span>}
+                <button className="btn" type="button" disabled={!canFinish || publishing} onClick={() => void finish()}>
+                  {publishing ? "Publishing…" : "Done"}
+                </button>
+              </>
             )}
           </div>
         </div>

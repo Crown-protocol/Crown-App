@@ -23,5 +23,9 @@ export function useWallet() {
     hasWallet: w.detected.length > 0,
     detected: w.detected,
     sendTransaction: w.sendTransaction,
+    // Opening a roulette round is a signature over bytes, not a transaction: the
+    // announcement is what a donor plays under, and the recipient's signature is
+    // what makes it theirs. Nothing moves, and nothing is paid.
+    signMessage: w.signMessage,
   };
 }

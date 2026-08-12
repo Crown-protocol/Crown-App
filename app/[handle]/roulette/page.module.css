@@ -397,3 +397,30 @@
 .sOut .sFill {
   background: var(--line-strong);
 }
+
+/* Never in the running, as opposed to knocked out of it: dimmed the same way,
+   but not struck through — a line through a name means it lost, and this one
+   never played. */
+.sLate {
+  opacity: 0.42;
+  cursor: default;
+  animation-name: sugRiseOut;
+}
+.sLate .sFill {
+  background: var(--line-strong);
+}
+
+/* The one line chain-mode adds: the way out to the proof. It sits under the
+   round rather than beside the rules, because it is the answer to "why should I
+   believe the spin" and that question is asked while looking at the round. */
+.verifyLink {
+  display: block;
+  text-align: center;
+  font-size: 13px;
+  color: var(--accent);
+  text-decoration: none;
+  padding: 2px 0 6px;
+}
+.verifyLink:hover {
+  text-decoration: underline;
+}

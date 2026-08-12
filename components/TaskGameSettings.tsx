@@ -57,13 +57,15 @@ export function TaskGameSettings({ profile, onSave }: { profile: Profile; onSave
               id="task-min"
               min={PLATFORM_FLOOR.task}
               value={cfg.minAmount}
-              onCommit={(n) => patch({ minAmount: clampMin(n) })}
+              onCommit={(n, typed) => patch({ minAmount: clampMin(n, typed) })}
             />
-            {/* The network refuses anything below this, and it refuses it AFTER the
-                money has moved — so the knob stops here rather than letting a page
-                advertise a minimum that cannot be honoured. */}
-            <FloorBump note={minBump} />
           </div>
+          {/* The network refuses anything below this, and it refuses it AFTER the
+              money has moved — so the knob stops here rather than letting a page
+              advertise a minimum that cannot be honoured. Under the field, not
+              inside it: `.affix` is a flex row, and a notice in there squeezes
+              the input the moment it appears. */}
+          <FloorBump note={minBump} />
         </div>
 
         <div className="field">

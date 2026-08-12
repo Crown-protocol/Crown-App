@@ -12,8 +12,9 @@ import {
   TASKS_PRINCIPAL,
   VOTING_PERIOD,
   isValidAddress,
+  fundingCreatedAt,
 } from "./config";
-import { fromHex, hex, toMinorUnits } from "./solana";
+import { connection, fromHex, hex, toMinorUnits } from "./solana";
 import { buildCreateEscrowTx, buildClaimTx, escrowPda, twoOutcomeSalt } from "./escrow";
 import { fetchBirthProof, fetchReputationProof } from "./icp";
 import {
@@ -382,7 +383,24 @@ export async function fundingCreateCollection(
  */
 export async function fundingChipIn(
   wallet: FlowWallet,
-  input: { collectionHex: string; recipient: string; dollars: number }
+  input: {
+    collectionHex: string;
+    recipient: string;
+    dollars: number;
+    /**
+     * The collection's funding window, in seconds, as the recipient signed it.
+     *
+     * Needed only for the FIRST contribution — the one that opens the collection
+     * — and needed absolutely: the canister measures the escrow's deadline
+     * against `created_at + duration + voting_period + margin`, where `duration`
+     * is the signed one. Without it this flow used `0`, produced an escrow that
+     * expires long before the collection's own window, and the boundary refused
+     * to open the collection at all. Since only the first contribution can open
+     * one, every fundraiser was unopenable and the donor's money sat in an
+     * escrow attached to nothing.
+     */
+    durationSeconds?: number;
+  }
 ): Promise<FlowResult<{ escrow: string; txSig: string; deadline: number }>> {
   try {
     if (!gamePrincipals.fundraiser()) return { ok: false, error: NOT_LIVE };
@@ -404,8 +422,19 @@ export async function fundingChipIn(
     // the verdict it is waiting for.
     const open = await canister.get_collection(input.collectionHex);
     const nowSec = BigInt(Math.floor(Date.now() / 1000));
-    const anchor = open.length ? open[0].created_at : nowSec;
-    const duration = open.length ? open[0].duration : 0n;
+    // The anchor has to be the canister's, not ours. It dates an unopened
+    // collection from this contribution's birth slot through its own
+    // slot→unix constants, and that reading runs ahead of wall time (see
+    // `fundingCreatedAt`). Taking the later of the two is what keeps the escrow
+    // outliving the window the canister will measure.
+    const bySlot = BigInt(fundingCreatedAt(await connection().getSlot("finalized")));
+    const anchor = open.length ? open[0].created_at : (bySlot > nowSec ? bySlot : nowSec);
+    // Open collection → its own window. Not open yet → the window the recipient
+    // signed, which this contribution is about to commit them to.
+    const duration = open.length ? open[0].duration : BigInt(Math.max(0, Math.floor(input.durationSeconds ?? 0)));
+    if (!open.length && duration === 0n) {
+      return { ok: false, error: "This fundraiser has no window set — the page cannot take the first contribution." };
+    }
     const votingPeriod = open.length ? open[0].voting_period : BigInt(VOTING_PERIOD);
     const deadline = anchor + duration + votingPeriod + BigInt(DEADLINE_MARGIN) + 3600n;
 

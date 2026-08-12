@@ -10,7 +10,8 @@
     "bot": "node --env-file=bot/.env bot/bot.mjs",
     "verify:chain": "node scripts/verify-chain.mjs",
     "verify:games": "node scripts/verify-games.mjs",
-    "verify:db": "node scripts/verify-db.mjs"
+    "verify:db": "node scripts/verify-db.mjs",
+    "verify:ui": "node scripts/verify-ui.mjs"
   },
   "dependencies": {
     "@dfinity/agent": "^3.4.3",
@@ -36,6 +37,7 @@
     "@types/react-dom": "18.3.0",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.15",
+    "playwright": "^1.62.1",
     "typescript": "5.6.2"
   }
 }

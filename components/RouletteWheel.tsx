@@ -11,17 +11,29 @@ import styles from "./RouletteWheel.module.css";
 // primary buttons: one purple splash, everything else calm.
 const FILLS = ["#322F40", "#1E1D26", "#3A3550", "#262430", "#2D2B3A"];
 
+/**
+ * A suggestion as the wheel draws it.
+ *
+ * `share` overrides the pool when the size of a slice is not its share of the
+ * money: on an elimination round the spin picks who LEAVES, and the chance of
+ * leaving falls as the pool rises. Drawing that wheel by pool would show the
+ * best-backed slice as the biggest target — the exact opposite of the truth.
+ */
+export type WheelSlice = RouletteSuggestion & { share?: number };
+
 interface Slice {
-  s: RouletteSuggestion;
+  s: WheelSlice;
   start: number; // degrees from the pointer (top), clockwise
   angle: number;
 }
 
-function computeSlices(round: RouletteSuggestion[]): { slices: Slice[]; total: number } {
+function computeSlices(round: WheelSlice[]): { slices: Slice[]; total: number } {
+  const weight = (r: WheelSlice) => r.share ?? r.pool;
+  const spread = round.reduce((sum, r) => sum + weight(r), 0);
   const total = round.reduce((sum, r) => sum + r.pool, 0);
   let acc = 0;
   const slices = round.map((s) => {
-    const angle = total ? (s.pool / total) * 360 : 0;
+    const angle = spread ? (weight(s) / spread) * 360 : 0;
     const slice = { s, start: acc, angle };
     acc += angle;
     return slice;
@@ -62,7 +74,7 @@ export function RouletteWheel({
   compact = false,
   onSliceClick,
 }: {
-  round: RouletteSuggestion[];
+  round: WheelSlice[];
   spinToId?: string | null;
   spinNonce?: number;
   onLanded?: (id: string) => void;
@@ -168,7 +180,11 @@ export function RouletteWheel({
           {!compact &&
             slices
               // Radial labels need angular room only for the font's height — ~12° is safe.
-              .filter((sl) => sl.angle >= 12)
+              // A wheel down to its last slice is labelled outside this group instead:
+              // a full-circle label rides the wheel's rotation and ends up upside
+              // down, which is how the winner of an elimination round was being
+              // announced.
+              .filter((sl) => sl.angle >= 12 && slices.length > 1)
               .map((sl) => {
                 const mid = sl.start + sl.angle / 2;
                 const [lx, ly] = polar(57, mid);
@@ -188,6 +204,14 @@ export function RouletteWheel({
                 );
               })}
         </g>
+
+        {/* The last one standing, named upright: outside the rotating group, so
+            the wheel can keep whatever angle its final spin left it at. */}
+        {!compact && slices.length === 1 && (
+          <text x="100" y="62" textAnchor="middle" className={`${styles.label} ${styles.labelLead}`}>
+            {trunc(slices[0].s.title)}
+          </text>
+        )}
 
         {/* the rim: a hairline + a soft accent halo just outside it */}
         <circle cx="100" cy="100" r="96.5" className={styles.rim} />

@@ -74,6 +74,14 @@ export interface DonateInput {
   message?: string;
   slug?: string; // set when donating on a campaign page — only that campaign's total is bumped
   source?: GameId | "direct"; // which mini-game settled this money; defaults to a plain donation
+  /**
+   * An SPL-memo to ride along with the donation. Only the roulette uses it: a
+   * stake is an ordinary donation plus a memo binding it to `(round, variant)`,
+   * and that binding has to be ON CHAIN or the wheel would be only as honest as
+   * this app. Everything else about the donation is unchanged, which is why this
+   * is a parameter here rather than a second donation path.
+   */
+  memo?: string;
 }
 
 // A block on the streamer's public page that can be toggled on/off and reordered.

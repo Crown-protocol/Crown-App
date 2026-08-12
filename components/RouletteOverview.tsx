@@ -8,6 +8,8 @@ import { RouletteWheel } from "@/components/RouletteWheel";
 import { rouletteRules } from "@/lib/data/gameConfig";
 import { readRound, ensureRound, setRoundWinner, newRound, readRoundMeta, appendHistory, survivors, eliminationWeights, eliminate, type RoundMeta } from "@/lib/data/roulette";
 import { useGameSync } from "@/lib/data/gameSync";
+import { useRouletteChain } from "@/lib/data/useRouletteChain";
+import { RouletteChainCabinet } from "@/components/games/RouletteChainCabinet";
 import { pickWeighted, roundRand, type RouletteSuggestion } from "@/lib/data/roulette-mock";
 import type { Profile } from "@/lib/data/types";
 
@@ -21,12 +23,26 @@ function fmtLeft(ms: number): string {
 // the spec gives the content maker — spin early (the maker's call) or open a fresh round. The
 // round itself (suggestions, clock, verdict) lives in the shared mock storage, so this and
 // the public page stay in step.
-export function RouletteOverview({ profile, scope, shareQuery = "" }: { profile: Profile; scope?: string; shareQuery?: string }) {
+export function RouletteOverview({
+  profile,
+  scope,
+  shareQuery = "",
+  hasSession = true,
+}: {
+  profile: Profile;
+  scope?: string;
+  shareQuery?: string;
+  /** Whether an off-chain session exists. A chain round needs none. */
+  hasSession?: boolean;
+}) {
   const handle = scope ?? profile.handle;
   // Shared game state: pulls the server copy into localStorage; the 1s tick below re-reads it.
   useGameSync(handle);
   // This round's rules — the ones the session was opened with, not whatever the profile says today.
   const cfg = rouletteRules(profile, handle);
+  // A round on chain replaces this whole panel rather than sitting beside it:
+  // two wheels on one page would be two clocks over the same money.
+  const chain = useRouletteChain(profile.handle);
 
   const [round, setRound] = useState<RouletteSuggestion[]>([]);
   const [meta, setMeta] = useState<RoundMeta | null>(null);
@@ -170,10 +186,43 @@ export function RouletteOverview({ profile, scope, shareQuery = "" }: { profile:
     recordedFor.current = null;
   }
 
+  if (chain.round) {
+    return (
+      <RouletteChainCabinet
+        profile={profile}
+        cfg={cfg}
+        round={chain.round}
+        wheel={chain.wheel}
+        onOpened={chain.refresh}
+      />
+    );
+  }
+
+  // No chain round and no session: this is the maker's first look at the game,
+  // and the only thing worth offering is the one that needs nothing first.
+  if (!hasSession) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <RouletteChainCabinet profile={profile} cfg={cfg} round={null} wheel={null} onOpened={chain.refresh} />
+        <div className="footnote" style={{ textAlign: "center" }}>
+          Prefer the off-chain wheel — free entries, knock-out rounds, a clock this app keeps? Start a session under
+          Sessions instead.
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="card" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <RouletteChainCabinet profile={profile} cfg={cfg} round={null} wheel={null} onOpened={chain.refresh} />
       <div className="footnote">
-        Viewers suggest a game by donating toward it — slice size is the pool's share, and the share is the odds.
+        Viewers suggest a game by donating toward it — slice size is the pool&apos;s share, and the share is the odds.
+        {" "}
+        {/* The two modes below are NOT settled by the chain, and saying so is the
+            same obligation the spec puts on the wheel itself: rank has no
+            transaction to count, and elimination needs a beacon per knock-out
+            (`crown-games/roulette/docs/spec.md §Вердикт`). */}
+        <b>This wheel is off-chain</b> — its clock and its spin are this app&apos;s, not the chain&apos;s.
       </div>
 
       {empty ? (

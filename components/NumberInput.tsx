@@ -16,7 +16,17 @@ export function NumberInput({
   ...rest
 }: {
   value: number;
-  onCommit: (n: number) => void;
+  /**
+   * The kept value, plus what was actually typed.
+   *
+   * The field clamps to `min` before anyone downstream sees the number, which
+   * left the cabinet's floor notice unreachable: it compared the value it got
+   * against the floor, and that value had already been raised. Handing over the
+   * raw figure as well is what lets a caller say "we raised this" — and saying
+   * it is the whole point of having a floor in the interface rather than only in
+   * the canister.
+   */
+  onCommit: (n: number, typed: number) => void;
   min?: number;
   max?: number;
   id?: string;
@@ -34,7 +44,7 @@ export function NumberInput({
     focused.current = false;
     const n = Math.round(Number(draft));
     const clamped = Number.isFinite(n) ? Math.min(max ?? Infinity, Math.max(min, n)) : min;
-    onCommit(clamped);
+    onCommit(clamped, Number.isFinite(n) ? n : min);
     setDraft(String(clamped));
   }
 

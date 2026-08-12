@@ -203,7 +203,11 @@ export default function TaskPage({ params }: { params: { handle: string } }) {
 
         {/* No stand-in headline: the pitch is required in the builder, and inventing one here
             made an unfinished page look finished (the preview showed words nobody wrote). */}
-        {tp.headline.trim() && <h1 className={styles.headline}>{tp.headline}</h1>}
+        {tp.headline.trim() ? (
+          <h1 className={styles.headline}>{tp.headline}</h1>
+        ) : (
+          <h1 className="sr-only">{`Tasks — ${mine.name}`}</h1>
+        )}
         {tp.descriptionEnabled && tp.description && <p className={styles.desc}>{tp.description}</p>}
 
         {/* Tab 1: set a task. Tab 2: what other viewers have already set, and where each stands. */}

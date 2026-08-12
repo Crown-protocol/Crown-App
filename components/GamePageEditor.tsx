@@ -22,6 +22,7 @@ import { activeSessions, getCurrentSession, pullSessions, type GameSession } fro
 import type { GameId } from "@/lib/data/games";
 import type { PageDesign, PageWidget, Profile, Social } from "@/lib/data/types";
 import styles from "./PageBuilder.module.css";
+import { copyLabel, copyText, type CopyResult } from "@/lib/copy";
 
 // ── The one builder behind all four mini-games ──────────────────────────────────────────────
 // Task, Roulette, Fundraiser and Auction used to be four near-identical 330-line copies of this
@@ -97,7 +98,7 @@ export function GamePageEditor({
 }) {
   const [tab, setTab] = useState<GameEditorTab>("page");
   const [device, setDevice] = useState<Device>("phone");
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<CopyResult | null>(null);
   const [qrOpen, setQrOpen] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [formOpen, setFormOpen] = useState(false);
@@ -226,11 +227,8 @@ export function GamePageEditor({
   }
 
   async function copyLink() {
-    try {
-      await navigator.clipboard.writeText(link);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
-    } catch {}
+    setCopied(await copyText(link));
+    setTimeout(() => setCopied(null), 1600);
   }
 
   const TABS: { key: GameEditorTab; label: string }[] = [
@@ -563,7 +561,7 @@ export function GamePageEditor({
               <span className="num">{link}</span>
             </a>
             <button type="button" className="btn-outline" onClick={copyLink} aria-label="Copy link">
-              <CopyIcon /> {copied ? "Copied!" : "Copy"}
+              <CopyIcon /> {copied ? copyLabel(copied) : "Copy"}
             </button>
             <button type="button" className="btn-outline" onClick={() => setQrOpen((v) => !v)}>
               <QrIcon /> QR code

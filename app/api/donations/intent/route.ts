@@ -4,7 +4,7 @@ import { PublicKey } from "@solana/web3.js";
 import { saveIntent } from "@/lib/server/store";
 import { allow } from "@/lib/server/ratelimit";
 import { AUTH_WINDOW_SECONDS } from "@/lib/chain/authMessage";
-import { paidOurFee } from "@/lib/server/submitter";
+import { feeVerdict } from "@/lib/server/submitter";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -92,7 +92,14 @@ export async function POST(req: NextRequest) {
   // the thing an attacker uses.
   //
   // Read from the chain, so it is the transaction that decides and not the caller.
-  if (!(await paidOurFee(signature))) {
+  const verdict = await feeVerdict(signature);
+  if (verdict === "too-early") {
+    // Not a refusal: the cluster has not finalized this transaction yet. Said
+    // with its own status so the client knows to come back rather than dropping
+    // the words the donor signed for.
+    return NextResponse.json({ error: "not finalized yet", retry: true }, { status: 425 });
+  }
+  if (verdict === "unpaid") {
     return NextResponse.json(
       { error: "this donation didn't include the service fee, so it can't carry a name or message" },
       { status: 402 }

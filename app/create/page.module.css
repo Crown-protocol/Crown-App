@@ -448,3 +448,14 @@
     right: -6px;
   }
 }
+
+/* The reason a step cannot be left, sitting where the eye already is: next to the
+   button it explains. Muted, one line, never a red alarm — nothing is wrong yet,
+   something is merely missing. */
+.navNote {
+  font-size: 13px;
+  color: var(--text-3);
+  align-self: center;
+  text-align: right;
+  max-width: 32ch;
+}

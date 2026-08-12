@@ -259,6 +259,53 @@ const MIGRATIONS: string[][] = [
     )`,
     `CREATE INDEX IF NOT EXISTS idx_collection_recipient ON collection_intents(recipient)`,
   ],
+  // v9 — the roulette: a round is a signed announcement, and the titles behind
+  // the slices.
+  //
+  // Neither table is an authority, and that is the point of the game. The round
+  // row holds the canonical announcement bytes plus the recipient's signature
+  // over them, so anyone can re-verify it without us; `round_hex` is their hash,
+  // so a row that disagrees with its own id cannot be stored. The entry row holds
+  // a title, and `entry_hex` is its hash under the round — a wrong preimage
+  // simply fails to hash, which is why this table needs no signature at all.
+  //
+  // What we can do is fail to answer. We cannot lie: the wheel is tallied from
+  // the chain, and the verdict is computed over keys, never over these words
+  // (`crown-games/roulette/docs/spec.md §Тексты`).
+  [
+    `CREATE TABLE IF NOT EXISTS roulette_rounds (
+      round_hex TEXT PRIMARY KEY,
+      handle TEXT NOT NULL,
+      chain TEXT NOT NULL,
+      recipient TEXT NOT NULL,
+      announcement TEXT NOT NULL,
+      pubkey TEXT NOT NULL,
+      signature TEXT NOT NULL,
+      open_slot INTEGER NOT NULL,
+      close_slot INTEGER NOT NULL,
+      created_at INTEGER NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_roulette_rounds_handle ON roulette_rounds(handle, close_slot)`,
+    `CREATE TABLE IF NOT EXISTS roulette_entries (
+      round_hex TEXT NOT NULL,
+      entry_hex TEXT NOT NULL,
+      title TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (round_hex, entry_hex)
+    )`,
+  ],
+  // v10 — the maker can hide a title.
+  //
+  // A column and nothing else, because hiding is a **display** decision and
+  // cannot be anything more: the verdict is computed over `entry_hex`, so a
+  // hidden slice keeps its key, its pool and its odds and can win while hidden.
+  // That is a property of the derivation, not a promise of this table.
+  //
+  // What it is not is secrecy. `entry_hex = sha256(domain ‖ round ‖ title)`, so
+  // whoever wrote the title still has it, and anyone who guesses it can confirm
+  // the guess against the chain. This hides a word from our surfaces; it does
+  // not unpublish it.
+  [`ALTER TABLE roulette_entries ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0`],
 ];
 
 let client: Client | null = null;

@@ -70,13 +70,15 @@ export function FundraiserGameSettings({ profile, onSave }: { profile: Profile; 
               id="fr-min"
               min={PLATFORM_FLOOR.fundraiser}
               value={cfg.minContribution}
-              onCommit={(n) => patch({ minContribution: clampMin(n) })}
+              onCommit={(n, typed) => patch({ minContribution: clampMin(n, typed) })}
             />
-            {/* The network refuses anything below this, and it refuses it AFTER the
-                money has moved — so the knob stops here rather than letting a page
-                advertise a minimum that cannot be honoured. */}
-            <FloorBump note={minBump} />
           </div>
+          {/* The network refuses anything below this, and it refuses it AFTER the
+              money has moved — so the knob stops here rather than letting a page
+              advertise a minimum that cannot be honoured. Under the field, not
+              inside it: `.affix` is a flex row, and a notice in there squeezes
+              the input the moment it appears. */}
+          <FloorBump note={minBump} />
         </div>
 
         <div className="toggle-row">

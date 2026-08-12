@@ -185,6 +185,10 @@ export default function SpacePage() {
   useEffect(() => {
     if (section !== "games") return;
     if (gameTab === "sessions") return;
+    // The roulette is exempt for the same reason its tab list is: its Overview
+    // stands on its own, and bouncing a maker back to Sessions would put the
+    // chain round behind a door it does not use.
+    if (gameId === "roulette") return;
     if (activeSessions(profile?.handle ?? "", gameId).length === 0) setGameTab("sessions");
     // sessionNonce is the dependency that matters: it bumps on every create/select/end.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -286,8 +290,12 @@ export default function SpacePage() {
   // about — the builder previews a page that doesn't exist yet and the overview counts an empty
   // set — so the only honest door is Sessions, where you start one. They appear the moment a
   // session does.
+  // With no session there is nothing to control, so a game shows only Sessions —
+  // except the roulette, whose Overview is where a round on chain is opened and
+  // watched. A chain round is not a session and never becomes one; hiding the
+  // tab made the whole chain path unreachable from the cabinet.
   const tabsFor = (id: GameId) =>
-    activeSessions(profile.handle, id).length > 0
+    activeSessions(profile.handle, id).length > 0 || id === "roulette"
       ? GAME_TABS[id]
       : GAME_TABS[id].filter((t) => t.key === "sessions");
 
@@ -593,7 +601,11 @@ export default function SpacePage() {
                   onSwitch={() => setSessionNonce((n) => n + 1)}
                 />
               )}
-              {gameTab === "overview" && liveSessions.length === 0 && !currentSession && (
+              {/* The roulette owns its own empty state: a chain round is not a
+                  session and must not be reachable only through one. Sending a
+                  maker to "create a session" first would gate the whole chain
+                  feature behind a concept it does not use. */}
+              {gameTab === "overview" && liveSessions.length === 0 && !currentSession && game.id !== "roulette" && (
                 <div className="blank-state">
                   <span className="blank-mark" aria-hidden>
                     <GameIcon id={game.id} width={26} height={26} />
@@ -613,7 +625,14 @@ export default function SpacePage() {
 
               {game.id === "fundraiser" && gameTab === "overview" && (liveSessions.length > 0 || currentSession) && <FundraiserOverview profile={profile} scope={gameScope} />}
 
-              {game.id === "roulette" && gameTab === "overview" && (liveSessions.length > 0 || currentSession) && <RouletteOverview profile={profile} scope={gameScope} shareQuery={shareQuery} />}
+              {game.id === "roulette" && gameTab === "overview" && (
+                <RouletteOverview
+                  profile={profile}
+                  scope={gameScope}
+                  shareQuery={shareQuery}
+                  hasSession={liveSessions.length > 0 || !!currentSession}
+                />
+              )}
             </>
           )}
 

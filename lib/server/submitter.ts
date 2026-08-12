@@ -92,6 +92,21 @@ export async function paidOurFee(signature: string): Promise<boolean> {
   return out.ok;
 }
 
+/**
+ * The same question, with "not yet" kept apart from "no".
+ *
+ * A donation's name is offered the moment the wallet confirms, which is ~13s
+ * before the cluster finalizes — so "I cannot see this transaction yet" is the
+ * ordinary case, and answering it with "you paid no fee" (the other `false`)
+ * threw away the donor's name for good. The caller can retry the first and must
+ * not retry the second.
+ */
+export async function feeVerdict(signature: string): Promise<"paid" | "unpaid" | "too-early"> {
+  const out = await isOursToPay(signature);
+  if (out.ok) return "paid";
+  return /No finalized transaction|could not be read/i.test(out.reason) ? "too-early" : "unpaid";
+}
+
 export type IngestStatus =
   | "applied" // folded (or already folded) — terminal, the good one
   | "pending" // retriable: not finalized yet, or waiting out the backoff

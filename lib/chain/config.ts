@@ -85,6 +85,29 @@ export const MAX_DURATION_FUNDING = 7_776_000; // 90 days
 // conditional-funding's verdict parameters — part of the `collection_id`
 // preimage, so the client must derive the id with the very same numbers.
 export const APPROVAL_THRESHOLD = 5_000; // strict majority, bps
+
+// ──────────────────────────────────────────────────────────────────
+// The funding canister's slot→time anchor (`conditional-funding/config/testnet.toml`).
+//
+// Mirrored here for one reason: `conditional-funding` dates a collection by the
+// FIRST contribution's **birth slot**, converted with these three numbers — not
+// by the IC's clock (which is what `conditional-tasks` uses). A client that sizes
+// the escrow's deadline against its own `Date.now()` is measuring from a
+// different clock than the canister will, and the two drift: 400ms is nominal
+// and devnet's real slot time is a hair slower, so after a few million slots the
+// canister's `created_at` sits DAYS ahead of wall time. The first contribution
+// then arrives with a deadline the canister reads as too tight, `create_collection`
+// is refused at the boundary, and the donor's money sits in an escrow attached to
+// a collection that was never opened. Found exactly that way on devnet.
+// ──────────────────────────────────────────────────────────────────
+export const FUNDING_GENESIS_SLOT = 479_731_554;
+export const FUNDING_GENESIS_UNIX = 1_785_326_212;
+export const FUNDING_SLOT_MS = 400;
+
+/** The funding canister's own reading of the clock, from a slot. */
+export function fundingCreatedAt(slot: number): number {
+  return FUNDING_GENESIS_UNIX + Math.floor(((slot - FUNDING_GENESIS_SLOT) * FUNDING_SLOT_MS) / 1000);
+}
 export const QUORUM_WEIGHT = 150_000n;
 
 // A vote below this weight is not admitted at the boundary (`logic::MIN_VOTE_WEIGHT`).

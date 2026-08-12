@@ -9,6 +9,7 @@ import { clearProof } from "@/lib/data/proveOwnership";
 import { PhantomIcon, SolflareIcon, WalletConnectIcon } from "@/components/WalletIcons";
 import { WalletModal } from "@/components/WalletModal";
 import styles from "./WalletConnect.module.css";
+import { copyLabel, copyText, type CopyResult } from "@/lib/copy";
 
 // The header's wallet control. Disconnected → opens the Connect Wallet modal (WalletModal). Connected
 // → an account pill that drops a small menu (copy address, explorer, disconnect). Reuses the one
@@ -41,7 +42,7 @@ export function WalletConnect() {
   const rep = useMyReputation();
   const [modalOpen, setModalOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<CopyResult | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -62,11 +63,8 @@ export function WalletConnect() {
 
   async function copyAddress() {
     if (!address) return;
-    try {
-      await navigator.clipboard.writeText(address);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {}
+    setCopied(await copyText(address));
+    setTimeout(() => setCopied(null), 1500);
   }
 
   // ---- connected: account pill + menu ----
@@ -125,8 +123,8 @@ export function WalletConnect() {
             </Link>
 
             <button type="button" className={styles.menuItem} onClick={copyAddress}>
-              {copied ? <CheckGlyph /> : <CopyGlyph />}
-              {copied ? "Copied" : "Copy address"}
+              {copied === "copied" ? <CheckGlyph /> : <CopyGlyph />}
+              {copied ? copyLabel(copied) : "Copy address"}
             </button>
             <a
               className={styles.menuItem}

@@ -99,9 +99,16 @@ check("texts: readable", (await j(`/api/texts?handle=${H}&game=task`)).body?.tex
 const SIG = "VERIFYDB" + run;
 // Words are the paid half of the product: the server reads the transaction and
 // refuses a caption for a donation that never sent us the fee. A synthetic
-// signature has paid nothing, so 402 IS the pass here — and the check is worth
-// keeping precisely because it is what stops the fee being optional in practice.
-check("intent: refused when the donation paid no fee (402)", (await post("/api/donations/intent", intentBody(DONOR_KP, SIG, { handle: H, name: "Max", message: "gg" }))).status === 402);
+// signature is one the cluster has never finalized, and that now answers 425
+// ("not finalized yet — come back"), because the same reply on a real donation
+// is the ordinary case: names are offered ~13s before finality, and answering
+// them with 402 threw the donor's words away for good. What must never happen
+// is a caption being STORED for a donation nobody paid a fee on — so the pass
+// here is "refused", either way, and never 2xx.
+{
+  const r = await post("/api/donations/intent", intentBody(DONOR_KP, SIG, { handle: H, name: "Max", message: "gg" }));
+  check("intent: a caption is refused until the fee is on chain (402/425)", r.status === 402 || r.status === 425, r.status);
+}
 // The caption is the donor's to write: without a proof from the paying wallet, anyone who saw the
 // public tx signature could attach their own name and message to someone else's donation.
 check("intent: refused without proof", (await post("/api/donations/intent", { signature: SIG + "X", handle: H, name: "Impostor" })).status === 401);
@@ -148,6 +155,134 @@ if (ins.status === 403) {
   const centsFeed = await j(`/api/feed?handle=${H}&limit=200`);
   const centsRow = centsFeed.body?.donations?.find((d) => d.signature === CENTS_SIG);
   check("a sub-dollar donation keeps its cents end to end", centsRow?.gross === 980_000, JSON.stringify({ inserted: centsIns.body, found: centsRow }).slice(0, 200));
+}
+
+// ── 3b. Roulette: a round is its own proof, a title is its own hash
+//
+// Neither table is an authority, and these checks are how that is kept true. The
+// round row must hash to its id and verify under the owner's key; the entry row
+// must hash to the slice it claims. Everything else about the wheel comes from
+// the chain, so what is guarded here is exactly the part we store.
+{
+  const RL = await import("../lib/chain/roulette.ts");
+  const chain = Uint8Array.from(createHash("sha256").update("crown-chain:v1:devnet").digest());
+  const announcement = {
+    chain,
+    recipient: OWNER.publicKey.toBytes(),
+    nonce: BigInt("0x" + run),
+    openSlot: 1_000n,
+    closeSlot: 1_500n,
+    minGross: 245_000n,
+    playMinutes: 60n,
+    stageSlots: 0n,
+    topic: new TextEncoder().encode("game"),
+  };
+  const bytes = RL.encodeAnnouncement(announcement);
+  const roundHex = RL.rlHex(await RL.deriveRoundId(announcement));
+  const sign = (kp, b) => Buffer.from(nacl.sign.detached(b, kp.secretKey)).toString("base64");
+  const roundBody = (over = {}) => ({
+    roundHex,
+    handle: H,
+    chain: "devnet",
+    announcement: RL.rlHex(bytes),
+    pubkey: OWNER.publicKey.toBase58(),
+    signature: sign(OWNER, bytes),
+    ...over,
+  });
+
+  // The id is the hash of the bytes, so a row disagreeing with its own id is not
+  // a policy violation — it is arithmetically impossible to store.
+  check(
+    "roulette: announcement that does not hash to its id REJECTED",
+    (await post("/api/roulette/round", roundBody({ roundHex: "0".repeat(64) }))).body?.error === "id-mismatch"
+  );
+  check(
+    "roulette: signature by a stranger REJECTED",
+    (await post("/api/roulette/round", roundBody({ signature: sign(STRANGER, bytes) }))).body?.error === "bad-signature"
+  );
+  // The cluster label is what every screen reads; the chain key is what the rules
+  // commit. A row saying "devnet" over mainnet bytes would be a lie nobody looks
+  // for, because the two are read by different people.
+  check(
+    "roulette: a cluster label that contradicts the signed bytes REJECTED",
+    (await post("/api/roulette/round", roundBody({ chain: "mainnet" }))).body?.error === "chain-mismatch"
+  );
+  // A valid signature by the wrong person: the bytes verify, but not as this page.
+  const strangerBytes = RL.encodeAnnouncement({ ...announcement, recipient: STRANGER.publicKey.toBytes() });
+  check(
+    "roulette: another wallet cannot hang a wheel on this page",
+    (
+      await post(
+        "/api/roulette/round",
+        roundBody({
+          roundHex: RL.rlHex(await RL.deriveRoundId({ ...announcement, recipient: STRANGER.publicKey.toBytes() })),
+          announcement: RL.rlHex(strangerBytes),
+          pubkey: STRANGER.publicKey.toBase58(),
+          signature: sign(STRANGER, strangerBytes),
+        })
+      )
+    ).status === 403
+  );
+
+  check("roulette: owner-signed round ok", (await post("/api/roulette/round", roundBody())).body?.ok === true);
+  check("roulette: a round is immutable (second write 409)", (await post("/api/roulette/round", roundBody())).status === 409);
+
+  const stored = (await j(`/api/roulette/round?id=${roundHex}`)).body?.round;
+  check(
+    "roulette: the round reads back byte-for-byte",
+    stored?.announcement === RL.rlHex(bytes) && stored?.closeSlot === 1500,
+    stored
+  );
+
+  // A title is accepted only if it hashes to the slice it names — which is what
+  // makes the table safe to leave unsigned and open to anyone.
+  const title = "Warcraft III";
+  const entryHex = RL.rlHex(await RL.deriveEntryKey(Uint8Array.from(Buffer.from(roundHex, "hex")), new TextEncoder().encode(title)));
+  check(
+    "roulette: a title that does not hash to its slice REJECTED",
+    (await post("/api/roulette/entry", { roundHex, entryHex, title: "Elden Ring" })).status === 400
+  );
+  check("roulette: the real title ok", (await post("/api/roulette/entry", { roundHex, entryHex, title })).body?.ok === true);
+  check(
+    "roulette: titles read back by slice",
+    (await j(`/api/roulette/entry?round=${roundHex}`)).body?.titles?.[entryHex] === title
+  );
+
+  // Hiding a title. The load-bearing check is the third one: a hidden title must
+  // be ABSENT from the public read, not blanked in it — a component that forgets
+  // to check a flag cannot leak a word that was never sent.
+  const patch = (body, headers = {}) =>
+    j("/api/roulette/entry", { method: "PATCH", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
+  const hideBody = { roundHex, entryHex, hidden: true };
+  check("roulette: hiding a title needs the page owner", (await patch(hideBody)).status === 403);
+  check(
+    "roulette: a stranger cannot hide a title",
+    (await patch(hideBody, signHeaders(STRANGER, "roulette-hide", H, hideBody))).status === 403
+  );
+  check(
+    "roulette: the owner can hide it",
+    (await patch(hideBody, signHeaders(OWNER, "roulette-hide", H, hideBody))).body?.ok === true
+  );
+
+  const pub = (await j(`/api/roulette/entry?round=${roundHex}`)).body;
+  check(
+    "roulette: a hidden title is absent from the public read, not blanked",
+    pub?.titles?.[entryHex] === undefined && pub?.hidden?.includes(entryHex),
+    JSON.stringify(pub)
+  );
+  const ownerView = (await j(`/api/roulette/entry?round=${roundHex}&owner=1`, { headers: signHeaders(OWNER, "roulette-hide", H, null) })).body;
+  check("roulette: the owner still sees what they hid", ownerView?.titles?.[entryHex] === title, JSON.stringify(ownerView));
+  check(
+    "roulette: the owner view is not public",
+    (await j(`/api/roulette/entry?round=${roundHex}&owner=1`)).status === 403
+  );
+
+  const showBody = { roundHex, entryHex, hidden: false };
+  check(
+    "roulette: hiding is reversible",
+    (await patch(showBody, signHeaders(OWNER, "roulette-hide", H, showBody))).body?.ok === true &&
+      (await j(`/api/roulette/entry?round=${roundHex}`)).body?.titles?.[entryHex] === title
+  );
 }
 
 // ── 4. Delete: unsigned refused on owned, owner allowed

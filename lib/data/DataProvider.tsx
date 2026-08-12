@@ -1,9 +1,10 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey, TransactionInstruction } from "@solana/web3.js";
 import { isSplitterConfigured, isIndexConfigured, isValidAddress, USDC_DECIMALS } from "@/lib/chain/config";
 import { buildDirectDonateTx } from "@/lib/chain/direct";
+import { MEMO_PROGRAM } from "@/lib/chain/rouletteTx";
 import { toMinorUnits } from "@/lib/chain/solana";
 import { fetchReputation } from "@/lib/chain/icp";
 import { useSolanaWallet } from "@/lib/chain/wallet";
@@ -258,6 +259,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const { tx, split } = buildDirectDonateTx(new PublicKey(donor), new PublicKey(streamer.address), gross, {
         withFee: wantsWords,
       });
+      // The roulette's one addition to a donation: a memo binding it to a round
+      // and a slice. It has to be on chain — a wheel tallied from our own
+      // database would be exactly as honest as we are, which is the thing this
+      // game is built not to require. The index dispatches on program id, so a
+      // foreign program's instruction never reaches a decoder and costs the book
+      // nothing (`crown-games/roulette/docs/spec.md §Не-отрицательность`).
+      if (input.memo) {
+        tx.add(
+          new TransactionInstruction({
+            programId: MEMO_PROGRAM,
+            data: Buffer.from(input.memo, "utf8"),
+            keys: [],
+          })
+        );
+      }
       const txHash = await wallet.sendTransaction(tx);
       // Reputation is earned on `net`, never on `gross` — the book sees only what
       // went through the splitter, and the fee deliberately went around it (routing
@@ -300,10 +316,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           const msg = new TextEncoder().encode(human + `cheer-app:intent:${txHash.toLowerCase()}:${ts}:-`);
           const sig = await wallet.signMessage(msg);
           if (!sig) return;
-          await fetch("/api/donations/intent", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
+          // Offered until the cluster can see it: the wallet confirms a
+          // transaction ~13s before it finalizes, and the server can only check
+          // the fee on a finalized one. Firing this once meant the donor's name
+          // and message were dropped on almost every donation — the words they
+          // signed a message for, gone because the chain had not caught up yet.
+          const body = JSON.stringify({
               signature: txHash,
               handle: input.handle,
               name: input.name,
@@ -313,8 +331,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
               ts,
               proof: btoa(String.fromCharCode(...sig)),
               preamble: human,
-            }),
           });
+          for (let attempt = 0; attempt < 8; attempt++) {
+            const res = await fetch("/api/donations/intent", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body,
+            });
+            if (res.status !== 425) break; // stored, or refused for a reason waiting cannot fix
+            await new Promise((r) => setTimeout(r, 5_000));
+          }
         } catch {
           // Offline, or the wallet can't sign messages — the donation stands, just uncaptioned.
         }

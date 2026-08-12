@@ -57,9 +57,26 @@ export function TaskOverview({ profile, scope }: { profile: Profile; scope?: str
 
   // Complete: the escrow settles — money to the streamer, reputation to the viewer, a feed
   // entry with source "task" — and the row disappears from this queue.
+  //
+  // Except on a chain-born task, where "done" is not the creator's to declare:
+  // saying it starts the voting window, the verdict decides, and only then can
+  // the money be released — by the button that lives on THIS ROW. Removing the
+  // row here (which is what a mock task does, because its money moved instantly)
+  // took that button off the screen with it, and the escrow had no way left to
+  // be claimed from the interface at all. So the row stays until the money has
+  // actually moved.
   function complete(t: GameTask) {
-    // "Done" on a chain-born task = ready: the streamer claims delivery, the vote decides.
-    if (t.task && chain.live && chain.wallet) void taskAction(chain.wallet, t.task, "ready");
+    if (t.task && chain.live && chain.wallet) {
+      // A page that does not require approval never sent `accept`, and the
+      // canister will not take `ready` from `Created`. Sending both, in order,
+      // is what makes "Mark done" mean the same thing on both kinds of page.
+      void (async () => {
+        const w = chain.wallet!;
+        await taskAction(w, t.task!, "accept").catch(() => null);
+        await taskAction(w, t.task!, "ready");
+      })();
+      return; // the row stays; `ChainState` below follows it to the verdict
+    }
     // Nothing is written to the feed here. A task's money reaches the creator
     // through the escrow's own settlement, and the feed mirrors that settlement
     // when it lands — inventing a row now would show money that has not moved.
@@ -89,54 +106,95 @@ export function TaskOverview({ profile, scope }: { profile: Profile; scope?: str
         <div className="empty-log">No tasks yet — share your task page so viewers can set you one.</div>
       ) : (
         <div className={styles.list}>
-          {shown.map((t) => {
-            const pill = STATE_PILL[t.state];
-            // `done` rows are filtered out of `shown` above, so a resolved (dimmed) row here is a refund.
-            const resolved = t.state === "refunded";
-            return (
-              <div key={t.id} className={`${styles.row}${resolved ? ` ${styles.rowDone}` : ""}`}>
-                <Mono name={t.from} size={40} />
-                <div className={styles.rowMain}>
-                  <div className={styles.rowTop}>
-                    <span className={styles.who}>{t.from}</span>
-                    <span className={styles.when}>
-                      {t.when}
-                      {t.durationHours ? ` · ${t.durationHours}h window` : ""}
-                    </span>
-                  </div>
-                  <div className={styles.text}>{t.text}</div>
-                  {t.state === "pending" && (
-                    <div className={styles.actions}>
-                      <button type="button" className="btn" onClick={() => act(t.id, "active")}>
-                        Approve
-                      </button>
-                      <button type="button" className="btn-outline" onClick={() => act(t.id, "refunded")}>
-                        Decline
-                      </button>
-                    </div>
-                  )}
-                  {t.state === "active" && (
-                    <div className={styles.actions}>
-                      <button type="button" className="btn" onClick={() => complete(t)}>
-                        Mark done
-                      </button>
-                      <button type="button" className="btn-outline" onClick={() => act(t.id, "refunded")}>
-                        Refund
-                      </button>
-                    </div>
-                  )}
-                </div>
-                <div className={styles.side}>
-                  <span className={styles.amount}>
-                    {usd(t.amount)}
-                  </span>
-                  <ChainState task={t} recipient={profile.address} wallet={chain.wallet} fallback={pill} />
-                </div>
-              </div>
-            );
-          })}
+          {shown.map((t) => (
+            <TaskRow
+              key={t.id}
+              t={t}
+              recipient={profile.address}
+              wallet={chain.wallet}
+              onAct={act}
+              onComplete={complete}
+            />
+          ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * One task in the queue.
+ *
+ * The canister's state is read here rather than only inside the pill, because
+ * the buttons need it too: once the recipient has said "done", the task belongs
+ * to the voting window and nothing the creator presses can move it. Leaving
+ * "Mark done" and "Refund" on screen there offered two controls that do nothing
+ * — and a control that does nothing is worse than no control.
+ */
+function TaskRow({
+  t,
+  recipient,
+  wallet,
+  onAct,
+  onComplete,
+}: {
+  t: GameTask;
+  recipient: string;
+  wallet: ReturnType<typeof useGameChain>["wallet"];
+  onAct: (id: string, state: TaskState) => void;
+  onComplete: (t: GameTask) => void;
+}) {
+  const { state, live } = useTaskState(t.task);
+  const pill = STATE_PILL[t.state];
+  // `done` rows are filtered out by the caller, so a resolved (dimmed) row here is a refund.
+  const resolved = t.state === "refunded";
+  // Which controls to offer is the CANISTER's answer on a chain task, not the
+  // queue's. The two disagree routinely — a page that does not require approval
+  // starts its row "active" while the canister still says `Created`, and every
+  // task on such a page was therefore never accepted on chain: `ready` bounced
+  // off the state machine, the money could only ever be refunded at the
+  // deadline, and nothing on screen said why.
+  const onChain = !!t.task && live && state !== null;
+  const canApprove = onChain ? state === "Created" : t.state === "pending";
+  const canFinish = onChain ? state === "Accepted" : t.state === "active";
+
+  return (
+    <div className={`${styles.row}${resolved ? ` ${styles.rowDone}` : ""}`}>
+      <Mono name={t.from} size={40} />
+      <div className={styles.rowMain}>
+        <div className={styles.rowTop}>
+          <span className={styles.who}>{t.from}</span>
+          <span className={styles.when}>
+            {t.when}
+            {t.durationHours ? ` · ${t.durationHours}h window` : ""}
+          </span>
+        </div>
+        <div className={styles.text}>{t.text}</div>
+        {canApprove && (
+          <div className={styles.actions}>
+            <button type="button" className="btn" onClick={() => onAct(t.id, "active")}>
+              Approve
+            </button>
+            <button type="button" className="btn-outline" onClick={() => onAct(t.id, "refunded")}>
+              Decline
+            </button>
+          </div>
+        )}
+        {canFinish && (
+          <div className={styles.actions}>
+            <button type="button" className="btn" onClick={() => onComplete(t)}>
+              Mark done
+            </button>
+            <button type="button" className="btn-outline" onClick={() => onAct(t.id, "refunded")}>
+              Refund
+            </button>
+          </div>
+        )}
+      </div>
+      <div className={styles.side}>
+        <span className={styles.amount}>{usd(t.amount)}</span>
+        <ChainState task={t} state={state} live={live} recipient={recipient} wallet={wallet} fallback={pill} />
+      </div>
     </div>
   );
 }
@@ -150,16 +208,19 @@ export function TaskOverview({ profile, scope }: { profile: Profile; scope?: str
 // whoever has this screen open rather than reserved for the creator.
 function ChainState({
   task,
+  state,
+  live,
   recipient,
   wallet,
   fallback,
 }: {
   task: GameTask;
+  state: ReturnType<typeof useTaskState>["state"];
+  live: boolean;
   recipient: string;
   wallet: ReturnType<typeof useGameChain>["wallet"];
   fallback: { tone: string; label: string };
 }) {
-  const { state, live } = useTaskState(task.task);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
 

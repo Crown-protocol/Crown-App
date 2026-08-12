@@ -90,7 +90,24 @@ export function fundraiserLines(cfg: FundraiserConfig, name: string): Line[] {
 }
 
 
-export function GameRules({ lines, mine }: { lines: Line[]; mine?: Profile | null }) {
+export function GameRules({
+  lines,
+  mine,
+  note,
+}: {
+  lines: Line[];
+  mine?: Profile | null;
+  /**
+   * Replaces the escrow footer for a game that has none.
+   *
+   * The default below is true of every escrow game and **false** of the chain
+   * roulette, where the money is gone at the moment of signing and there is
+   * nothing to refund. Printing it there would be the single most misleading
+   * sentence on the page — a promise of a protection that does not exist — so
+   * the footer is a parameter rather than a constant.
+   */
+  note?: React.ReactNode;
+}) {
   return (
     <div className={styles.wrap}>
       <dl className={styles.list}>
@@ -104,8 +121,13 @@ export function GameRules({ lines, mine }: { lines: Line[]; mine?: Profile | nul
       {/* The one thing that isn't the maker's choice, said once at the bottom: the money is on a
           public chain either way, so "trust me" is never part of the deal. */}
       <p className={styles.note}>
-        Every payment here runs through Cheer&apos;s escrow on Solana{mine?.name ? ` — ${mine.name} sets the terms above, not what happens to the money` : ""}.
-        Refunds are yours to claim; nobody has to release them for you.
+        {note ?? (
+          <>
+            Every payment here runs through Cheer&apos;s escrow on Solana
+            {mine?.name ? ` — ${mine.name} sets the terms above, not what happens to the money` : ""}. Refunds are
+            yours to claim; nobody has to release them for you.
+          </>
+        )}
       </p>
     </div>
   );

@@ -14,6 +14,7 @@ import { useProfile } from "@/lib/data/ProfileProvider";
 import pageBuilderStyles from "@/components/PageBuilder.module.css";
 import styles from "./SettingsPanel.module.css";
 import type { Profile, Social } from "@/lib/data/types";
+import { copyLabel, copyText, type CopyResult } from "@/lib/copy";
 
 // Which top-level pieces of the page a settings edit can touch — the confirm bar counts THESE
 // (a changed field group = 1 change), not keystrokes.
@@ -51,7 +52,7 @@ export function SettingsPanel({
   const fileRef = useRef<HTMLInputElement>(null);
   const [confirm, setConfirm] = useState<"logout" | "delete" | null>(null);
   const [retrying, setRetrying] = useState(false);
-  const [copied, setCopied] = useState<"link" | "payout" | null>(null);
+  const [copied, setCopied] = useState<{ what: "link" | "payout"; how: CopyResult } | null>(null);
   const [qrOpen, setQrOpen] = useState(false);
   const [qr, setQr] = useState("");
 
@@ -117,11 +118,8 @@ export function SettingsPanel({
 
   async function copy(what: "link" | "payout", text: string) {
     if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(what);
-      setTimeout(() => setCopied(null), 1600);
-    } catch {}
+    setCopied({ what, how: await copyText(text) });
+    setTimeout(() => setCopied(null), 1600);
   }
 
   const MAX_AVATAR_BYTES = 4 * 1024 * 1024; // avatars are baked into the profile as a data URL — cap it
@@ -194,7 +192,7 @@ export function SettingsPanel({
             <div className={styles.linkRow}>
               <span className={styles.linkText}>{pageLabel}</span>
               <button type="button" className={styles.linkBtn} onClick={() => copy("link", pageUrl)}>
-                <CopyIcon /> {copied === "link" ? "Copied!" : "Copy"}
+                <CopyIcon /> {copied?.what === "link" ? copyLabel(copied.how) : "Copy"}
               </button>
               <a className={styles.linkBtn} href={`/@${profile.handle}`} target="_blank" rel="noreferrer">
                 Open
@@ -313,7 +311,7 @@ export function SettingsPanel({
               aria-label="Copy payout address"
               style={{ flex: "none", gap: 6 }}
             >
-              <CopyIcon /> {copied === "payout" ? "Copied!" : "Copy"}
+              <CopyIcon /> {copied?.what === "payout" ? copyLabel(copied.how) : "Copy"}
             </button>
           </div>
           {/* live validation — the one place a typo costs real money */}

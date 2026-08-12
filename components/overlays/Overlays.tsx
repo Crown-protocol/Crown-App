@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Mono } from "@/components/Mono";
 import { CheerMark, GameIcon } from "@/components/icons";
-import { RouletteWheel } from "@/components/RouletteWheel";
+import { RouletteWheel, type WheelSlice } from "@/components/RouletteWheel";
 import { FundraiserFill } from "@/components/FundraiserFill";
 import { useCountUp, useChangeNonce, useFlip } from "./fx";
 import { useDonationStream } from "@/lib/data/useDonationStream";
@@ -11,6 +11,9 @@ import { usd } from "@/lib/money";
 import { DEMO_GOAL, DEMO_GOAL_START, DEMO_FUNDRAISER_GOAL, OVERLAY_TIERS } from "@/lib/data/overlays";
 import { readRound, readRoundMeta } from "@/lib/data/roulette";
 import { MOCK_ROUND, pickWeighted, type RouletteSuggestion } from "@/lib/data/roulette-mock";
+import { useRouletteChain } from "@/lib/data/useRouletteChain";
+import { eliminationWeights, rlFromHex, shortKey } from "@/lib/chain/roulette";
+import { USDC_DECIMALS } from "@/lib/chain/config";
 import { readTasks, type GameTask } from "@/lib/data/tasks";
 import { raisedTotal, withFundraiserDefaults } from "@/lib/data/fundraiser";
 import { usePublicProfile } from "@/lib/data/usePublicProfile";
@@ -301,7 +304,12 @@ export function GoalOverlay({
         </div>
         <div className={styles.goalTrackWrap}>
           {hit && (
-            <span key={hit.n} className={`${styles.goalChip} num`} style={{ left: `${Math.min(96, Math.max(4, pct))}%` }}>
+            // Both this and the milestone flash below are siblings keyed by a
+            // counter, and both counters start at 1 — so on the first donation
+            // that also crosses a notch React saw two children with the same
+            // key and was free to drop one of them. The prefixes keep the two
+            // counters in separate namespaces.
+            <span key={`hit-${hit.n}`} className={`${styles.goalChip} num`} style={{ left: `${Math.min(96, Math.max(4, pct))}%` }}>
               +{usd(hit.amount)}
             </span>
           )}
@@ -311,7 +319,7 @@ export function GoalOverlay({
               <span key={m} className={styles.goalNotch} style={{ left: `${m}%` }} />
             ))}
           </div>
-          {notchFlash > 0 && <span key={notchFlash} className={styles.goalTrackFlash} />}
+          {notchFlash > 0 && <span key={`flash-${notchFlash}`} className={styles.goalTrackFlash} />}
         </div>
         {credit && (
           <div className={styles.goalCredit}>
@@ -395,7 +403,7 @@ const ROU_SPIN_AT_MS = 45000;
 const ROU_HOLD_MS = 6000;
 
 export function RouletteOverlay({ handle, demo }: Common) {
-  const [round, setRound] = useState<RouletteSuggestion[]>([]);
+  const [round, setRound] = useState<WheelSlice[]>([]);
   const [winner, setWinner] = useState<{ id: string; title: string } | null>(null);
   const [landed, setLanded] = useState(false); // the winner line reveals only via onLanded
   const [spin, setSpin] = useState<{ id: string | null; nonce: number }>({ id: null, nonce: 0 });
@@ -403,9 +411,100 @@ export function RouletteOverlay({ handle, demo }: Common) {
   const roundRef = useRef(round);
   roundRef.current = round;
 
-  // Real path: poll the store; spin the wheel the first time a verdict appears.
+  // A round on chain owns the overlay outright. Until this existed, a maker
+  // running a chain wheel had the MOCK wheel on stream — no slices, no winner,
+  // the one screen their viewers actually watch showing a different game.
+  //
+  // Nothing below changes shape: the chain's slices are mapped into the same
+  // rows the mock produced, so the wheel, the pot and the winner line are the
+  // same components with the same animations. Hidden names arrive already
+  // blanked (the endpoint sends a key, never the word), so moderation reaches
+  // the stream for free.
+  const chain = useRouletteChain(demo ? null : handle);
+  const onChain = !!chain.round;
+
+  // An elimination round spins once per knock-out, and the slice that is leaving
+  // has to still be on the wheel when it does — same reason as on the page, with
+  // the stakes higher: this is the copy on stream.
+  const [pendingOut, setPendingOut] = useState<string | null>(null);
+  const seenStages = useRef<number | null>(null);
+  // The pot is the round's, not the wheel's. On elimination the wheel shows who
+  // is still in, and summing that would announce a pot shrinking every time
+  // somebody went out — money that was donated and did not leave.
+  const [chainPot, setChainPot] = useState<number | null>(null);
+
   useEffect(() => {
-    if (demo) return;
+    if (demo || !chain.round) return;
+    const elim = (chain.wheel?.stageSlots ?? 0) > 0;
+    const slices = (chain.wheel?.slices ?? []).filter(
+      (s) => !elim || (!s.out && !s.late) || s.key === pendingOut
+    );
+    // On elimination a slice's size is its chance of LEAVING, so the biggest
+    // slice on the overlay is the one in trouble — never the leader.
+    const shares = elim
+      ? eliminationWeights(slices.map((s) => ({ key: new Uint8Array(32), weight: BigInt(s.weight) })))
+      : null;
+    const next: WheelSlice[] = slices.map((s, i) => ({
+      id: s.key,
+      title: s.title ?? shortKey(rlFromHex(s.key) ?? new Uint8Array(32)),
+      genre: "Other",
+      pool: Number(BigInt(s.weight)) / 10 ** USDC_DECIMALS,
+      ...(shares ? { share: Number(shares[i] / 1_000_000_000n) } : {}),
+      backers: 0,
+      suggestedBy: "",
+    }));
+    setRound((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+    setChainPot(Number(BigInt(chain.wheel?.total ?? "0")) / 10 ** USDC_DECIMALS);
+
+    // Each knock-out gets its spin; a round adopted mid-series does not replay
+    // the ones that already happened.
+    const stages = chain.wheel?.stages ?? [];
+    let justSpun = false;
+    if (elim) {
+      if (seenStages.current === null) seenStages.current = stages.length;
+      else if (stages.length > seenStages.current) {
+        seenStages.current = stages.length;
+        justSpun = true;
+        const out = stages[stages.length - 1].out;
+        setPendingOut(out);
+        setLanded(false);
+        setSpin((sp) => ({ id: out, nonce: sp.nonce + 1 }));
+      }
+    }
+
+    const w = chain.wheel?.winner ?? null;
+    // On elimination the final knock-out IS the verdict: its spin is already
+    // running, and a second spin onto the survivor would show the wheel deciding
+    // twice.
+    if (w && elim && spunFor.current !== w) {
+      spunFor.current = w;
+      const row = next.find((r) => r.id === w);
+      setWinner(row ? { id: row.id, title: row.title } : null);
+      // Watching it happen: the knock-out spin is running and reveals the line
+      // when it lands. Opened afterwards: park it, revealed.
+      if (!justSpun && !pendingOut) setLanded(true);
+    } else if (w && spunFor.current !== w) {
+      const first = spunFor.current === null && !roundRef.current.length;
+      spunFor.current = w;
+      const row = next.find((r) => r.id === w);
+      setWinner(row ? { id: row.id, title: row.title } : null);
+      // Opened after the verdict: park it. Watching when it landed: spin.
+      if (first) setLanded(true);
+      else {
+        setLanded(false);
+        setSpin((s) => ({ id: w, nonce: s.nonce + 1 }));
+      }
+    } else if (!w && spunFor.current) {
+      spunFor.current = null;
+      setWinner(null);
+      setLanded(false);
+    }
+  }, [demo, chain.round, chain.wheel, pendingOut]);
+
+  // Real path, off-chain: poll the store; spin the wheel the first time a
+  // verdict appears.
+  useEffect(() => {
+    if (demo || onChain) return;
     let first = true;
     const load = () => {
       const scope = firstActiveScope(handle, "roulette");
@@ -434,7 +533,10 @@ export function RouletteOverlay({ handle, demo }: Common) {
     load();
     const t = setInterval(load, 1500);
     return () => clearInterval(t);
-  }, [handle, demo]);
+    // `onChain` belongs here: a maker who opens a chain round mid-stream must
+    // see this poller stand down, not keep overwriting the chain's slices with
+    // localStorage's.
+  }, [handle, demo, onChain]);
 
   // Demo loop, entirely in component state (never touches the stores or the channel):
   // pools grow every ~3.5s, auto-spin at ~45s, hold the winner 6s, reset.
@@ -481,8 +583,14 @@ export function RouletteOverlay({ handle, demo }: Common) {
   }, [demo]);
 
   const total = round.reduce((s, r) => s + r.pool, 0);
-  const shownPot = useCountUp(total, 500);
-  const rows = useMemo(() => [...round].sort((a, b) => b.pool - a.pool).slice(0, 3), [round]);
+  const shownPot = useCountUp(chainPot ?? total, 500);
+  // Sorted by whatever the wheel is about to do: by share of the pot on a single
+  // spin, and by who is closest to going out on an elimination round.
+  const spread = round.reduce((s, r) => s + (r.share ?? r.pool), 0);
+  const rows = useMemo(
+    () => [...round].sort((a, b) => (b.share ?? b.pool) - (a.share ?? a.pool)).slice(0, 3),
+    [round]
+  );
 
   return (
     <div className={`${styles.stage} ${styles.stageLeft}`}>
@@ -490,7 +598,11 @@ export function RouletteOverlay({ handle, demo }: Common) {
         <div className={styles.gameHead}>
           <GameIcon id="roulette" width={16} height={16} />
           Roulette
-          <span className={`${styles.gamePot} num`}>${Math.round(shownPot)} pot</span>
+          {/* Cents below ten dollars: a real wheel starts at a quarter, and a
+              pot with money in it must never render as "$0". */}
+          <span className={`${styles.gamePot} num`}>
+            ${shownPot >= 10 ? Math.round(shownPot) : shownPot.toFixed(2)} pot
+          </span>
         </div>
         <div className={styles.rouSplit}>
           {/* `landed` toggles off before every new spin, so the glow fade replays per verdict */}
@@ -502,7 +614,10 @@ export function RouletteOverlay({ handle, demo }: Common) {
               spinToId={spin.id}
               spinNonce={spin.nonce}
               winnerId={winner?.id ?? null}
-              onLanded={() => setLanded(true)}
+              onLanded={() => {
+                setLanded(true);
+                setPendingOut(null);
+              }}
             />
           </div>
           <div className={styles.rouRows}>
@@ -517,7 +632,12 @@ export function RouletteOverlay({ handle, demo }: Common) {
               <div className={styles.gameSub}>no games on the wheel yet</div>
             ) : (
               rows.map((r) => (
-                <RouRow key={r.id} title={r.title} pool={r.pool} pct={total > 0 ? Math.round((r.pool / total) * 100) : 0} />
+                <RouRow
+                  key={r.id}
+                  title={r.title}
+                  pool={r.pool}
+                  pct={spread > 0 ? Math.round(((r.share ?? r.pool) / spread) * 100) : 0}
+                />
               ))
             )}
           </div>
