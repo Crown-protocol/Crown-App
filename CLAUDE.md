@@ -71,6 +71,15 @@
   `overrideProvider` на `api.devnet.solana.com` и `updateApiKeys` с заглушкой — иначе индекс не
   прочитает devnet и `ingest` вечно `pending`), и `CHEER_SESSION_SECRET` в `.env.local` (без него
   прод-сервер не выдаёт сессию кабинета — 503, и раунд/сбор открыть некому).
+- **Задеплоенный байткод — тоже константа, и он тоже сверяется.** `verify:chain` сравнивает байты
+  программы two-outcome на devnet с локальной сборкой `crown-factory/target/deploy/two_outcome.so`
+  (нет сборки — громкий SKIPPED). Проверка появилась не из аккуратности: программа на devnet была
+  задеплоена **за десять дней до** коммита, который вшил `fee_bps`/`fee_wallet` в сообщение вердикта,
+  поэтому канистра подписывала 91 байт, а программа сравнивала их с 57 ожидаемыми — каждый клейм падал
+  `VerdictMismatch`, а всё остальное было зелёным: программа задеплоена, исполняема и разбирает наши
+  инструкции. Знал об этом только путь выдачи денег, и только когда деньги уже в эскроу. Апгрейд —
+  `cargo build-sbf` **версией из CI** (`AGAVE_VERSION`) и `solana program deploy --program-id <адрес>
+  --upgrade-authority ~/.config/solana/id.json`.
 - Проверки после изменений: `npx tsc --noEmit` (0 ошибок), `npm run verify:chain`, `npm run verify:games`,
   `npm run verify:db` и `npm run verify:ui` (последним двум нужен поднятый сервер). Один сервер,
   только `localhost:3000`.

@@ -244,6 +244,46 @@ const splitterInfo = await rpc("getAccountInfo", [APP_SPLITTER, { encoding: "bas
 check("splitter deployed & executable on devnet", !!splitterInfo?.value?.executable);
 const factInfo = await rpc("getAccountInfo", [APP_FACTORY, { encoding: "base64" }]);
 check("two-outcome factory deployed & executable", !!factInfo?.value?.executable);
+// ── The bytes on chain are the bytes of the source next door ──────────────
+//
+// Every other check here compares a NUMBER we copied against the number our
+// neighbour keeps. None of them can see the one drift that actually bit: the
+// two-outcome program on devnet was deployed ten days before the commit that
+// bound `fee_bps`/`fee_wallet` into the verdict message, so the canister signed
+// 91 bytes and the program compared them against the 57 it still expected. Every
+// claim failed with `VerdictMismatch` — a refusal that names no field — and
+// nothing anywhere went red, because the program was deployed, executable, and
+// decoded every instruction we build. Only the settlement path knew, and only
+// once money was already in escrow.
+//
+// So this compares the deployed bytecode with a local build of the source. It is
+// the honest form of the question "is what runs the thing we wrote".
+{
+  const local = new URL("../../crown-factory/target/deploy/two_outcome.so", import.meta.url);
+  let built = null;
+  try {
+    built = readFileSync(local);
+  } catch {
+    /* no sibling clone, or nothing built there yet */
+  }
+  if (!built) {
+    skip("two-outcome on devnet is the build of its source", "crown-factory/target/deploy/two_outcome.so — run `cargo build-sbf` there");
+  } else {
+    // An upgradeable program's ELF lives in its ProgramData account, past a
+    // 45-byte header (tag + slot + optional authority).
+    const LOADER = new PublicKey("BPFLoaderUpgradeab1e11111111111111111111111");
+    const programData = PublicKey.findProgramAddressSync([new PublicKey(APP_FACTORY).toBytes()], LOADER)[0].toBase58();
+    const acc = await rpc("getAccountInfo", [programData, { encoding: "base64" }]);
+    const raw = acc?.value?.data?.[0] ? Buffer.from(acc.value.data[0], "base64") : null;
+    const onChain = raw ? raw.subarray(45, 45 + built.length) : null;
+    check(
+      "two-outcome on devnet is the build of its source",
+      !!onChain && onChain.equals(built),
+      onChain ? `deployed bytes differ from crown-factory/target/deploy/two_outcome.so (${onChain.length} vs ${built.length})` : "no program data account"
+    );
+  }
+}
+
 const mintInfo = await rpc("getAccountInfo", [APP_USDC, { encoding: "jsonParsed" }]);
 const dec = mintInfo?.value?.data?.parsed?.info?.decimals;
 check("USDC mint exists with 6 decimals", dec === 6, String(dec));

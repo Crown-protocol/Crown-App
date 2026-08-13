@@ -122,19 +122,24 @@ async function connect(p) {
  * rather than by a list of words that will always be one game behind.
  */
 async function confirmIt(p) {
-  // A dialog is open when there is a Cancel; the affirmative is the last button
-  // on the page that is not it, because the dialog renders last. Matching on
-  // wording ("Pay", "Chip in", "Back it · $1") meant the list was always one
-  // game behind — and a confirmation that is never clicked looks exactly like a
-  // payment that silently did nothing.
-  const cancel = p.getByRole("button", { name: /^cancel$/i });
+  // Inside the dialog when there is one, and only then anywhere else.
+  //
+  // The affirmative is worded per game ("Pay $1", "Chip in $1", "Back it · $1"),
+  // so it is found by elimination rather than by a list of words that will always
+  // be one game behind. But elimination has to be SCOPED: "the last button on the
+  // page that is not Cancel" once landed on the cabinet's "End session" after a
+  // confirmation had already closed, which ended a live run instead of confirming
+  // anything. A destructive click is not an acceptable failure mode for a helper
+  // whose whole job is pressing the safe one.
+  const dialog = p.locator("[role=dialog]").last();
+  const scope = (await dialog.count()) ? dialog : null;
+  const cancel = (scope ?? p).getByRole("button", { name: /^cancel$/i });
   if (!(await cancel.count())) return false;
-  const all = p.getByRole("button");
-  const n = await all.count();
-  for (let i = n - 1; i >= 0; i--) {
-    const t = (await all.nth(i).innerText().catch(() => "")).trim();
+  const buttons = (scope ?? p).getByRole("button");
+  for (let i = (await buttons.count()) - 1; i >= 0; i--) {
+    const t = (await buttons.nth(i).innerText().catch(() => "")).trim();
     if (t && !/^cancel$/i.test(t)) {
-      await all.nth(i).click().catch(() => {});
+      await buttons.nth(i).click().catch(() => {});
       return true;
     }
   }
